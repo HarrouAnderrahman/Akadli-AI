@@ -32,6 +32,8 @@ export interface OrderPayload {
   current_commune: string;
   current_address_note: string;
   constraints: OrderConstraints;
+  source?: 'manual' | 'shopify' | string;
+  raw_order?: unknown;
 }
 
 export function orderPayloadToStandardizedDzOrder(order: OrderPayload): StandardizedDzOrder {
@@ -51,6 +53,30 @@ export function orderPayloadToStandardizedDzOrder(order: OrderPayload): Standard
       allowedWilayas: order.constraints.allowed_wilayas as WilayaCode[],
       allowedCommunes: order.constraints.allowed_communes
     }
+  };
+}
+
+export function standardizedDzOrderToOrderPayload(
+  stdOrder: StandardizedDzOrder,
+  source: string = 'shopify'
+): OrderPayload {
+  return {
+    order_id: stdOrder.orderId,
+    store_name: stdOrder.storeName,
+    customer_name: stdOrder.customerName,
+    customer_phone: stdOrder.customerPhone,
+    item_name: stdOrder.itemName,
+    price_da: stdOrder.priceDa,
+    current_size: stdOrder.currentSize,
+    current_wilaya: stdOrder.currentWilaya,
+    current_commune: stdOrder.currentCommune,
+    current_address_note: stdOrder.currentAddressNote || '',
+    constraints: {
+      allowed_sizes: stdOrder.constraints.allowedSizes,
+      allowed_wilayas: stdOrder.constraints.allowedWilayas,
+      allowed_communes: stdOrder.constraints.allowedCommunes
+    },
+    source
   };
 }
 
@@ -116,9 +142,23 @@ export type WSMessageType =
   | 'AUDIO_CHUNK'
   | 'TRANSCRIPT_UPDATE'
   | 'ORDER_FINALIZED'
+  | 'SHOPIFY_WEBHOOK_RECEIVED'
+  | 'SHOPIFY_MUTATION_RESULT'
   | 'ERROR'
   | 'PING'
   | 'PONG';
+
+export interface ShopifyMutationData {
+  orderId: string;
+  decision: StandardizedFinalizedOrderDecision;
+  mutationResult: {
+    success: boolean;
+    externalStatus: string;
+    rawResponse?: unknown;
+  };
+  liveStore?: string;
+  timestamp: number;
+}
 
 export interface WSMessage<T = any> {
   type: WSMessageType;

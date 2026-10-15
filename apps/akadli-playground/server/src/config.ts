@@ -30,6 +30,18 @@ export const config = {
   get openAiApiKey(): string {
     return (process.env.OPENAI_API_KEY || '').trim();
   },
+  get shopifyShopDomain(): string {
+    return (process.env.SHOPIFY_SHOP_DOMAIN || '').trim();
+  },
+  get shopifyAccessToken(): string {
+    return (process.env.SHOPIFY_ACCESS_TOKEN || '').trim();
+  },
+  get shopifyWebhookSecret(): string {
+    return (process.env.SHOPIFY_WEBHOOK_SECRET || '').trim();
+  },
+  get shopifyApiVersion(): string {
+    return (process.env.SHOPIFY_API_VERSION || '2025-01').trim();
+  },
 };
 
 export function getLocalIpAddress(): string {

@@ -2,6 +2,12 @@ import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import cors from 'cors';
+import { createHmac } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ShopifyProvider } from '@akadli/provider-shopify';
+import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { config, getLocalIpAddress } from './config.js';
 import {
   CallState,
@@ -10,6 +16,10 @@ import {
   TranscriptTurn,
   VoiceConfig,
   WSMessage,
+  StandardizedFinalizedOrderDecision,
+  WilayaCode,
+  ShopifyMutationData,
+  standardizedDzOrderToOrderPayload,
 } from '../../shared/types.js';
 import { VoiceEngineAdapter } from './engines/VoiceEngineAdapter.js';
 import { ElevenAgentsAdapter } from './engines/ElevenAgentsAdapter.js';
@@ -21,7 +31,33 @@ import {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getShopifyFixture(filename: string): string {
+  const candidatePaths = [
+    path.resolve(__dirname, '../../../../packages/provider-shopify/fixtures', filename),
+    path.resolve(__dirname, '../../../../../packages/provider-shopify/fixtures', filename),
+    path.resolve(process.cwd(), 'packages/provider-shopify/fixtures', filename),
+    path.resolve(process.cwd(), '../../packages/provider-shopify/fixtures', filename),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf-8');
+    }
+  }
+  throw new Error(`Shopify fixture "${filename}" not found in candidate paths.`);
+}
+
+const shopifyProvider = new ShopifyProvider();
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -79,6 +115,9 @@ app.get('/api/status', (req, res) => {
     phoneConnected: phoneSocket !== null && phoneSocket.readyState === WebSocket.OPEN,
     callState: currentCallState,
     defaultAgentId: config.elevenLabsAgentId,
+    shopifyConfigured: Boolean(config.shopifyShopDomain && config.shopifyAccessToken),
+    shopifyDomain: config.shopifyShopDomain || null,
+    shopifyApiVersion: config.shopifyApiVersion,
   });
 });
 
@@ -89,6 +128,149 @@ app.get('/api/lan-ip', (req, res) => {
     adminUrl: `https://${ip}:${config.port}/admin`,
     phoneUrl: `https://${ip}:${config.port}/phone`,
   });
+});
+
+// Real Shopify Webhook Ingress (orders/create)
+app.post('/api/webhooks/shopify', async (req, res) => {
+  try {
+    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
+    const headers = req.headers as Record<string, string>;
+
+    // 1. Cryptographically verify HMAC-SHA256 signature if secret is configured
+    if (config.shopifyWebhookSecret) {
+      const isValid = await shopifyProvider.verifyWebhook(
+        headers,
+        rawBody,
+        config.shopifyWebhookSecret
+      );
+      if (!isValid) {
+        console.warn('[Shopify Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
+        return res.status(401).json({
+          error: 'Invalid Shopify HMAC-SHA256 signature',
+        });
+      }
+    } else {
+      console.log(
+        '[Shopify Webhook] SHOPIFY_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
+      );
+    }
+
+    // 2. Parse payload into canonical StandardizedDzOrder
+    const standardizedOrder = await shopifyProvider.parseWebhookOrder(req.body);
+    console.log(
+      `[Shopify Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
+    );
+
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'shopify');
+    orderPayload.raw_order = req.body;
+
+    // 3. Broadcast webhook receipt to admin dashboard
+    broadcastToAdmins({
+      type: 'SHOPIFY_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: req.body,
+      },
+    });
+
+    // 4. Trigger incoming call on connected phone receiver
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        message: 'Shopify order ingested and mobile receiver is ringing',
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'Shopify order ingested into state, but no mobile phone client is connected',
+      });
+    }
+  } catch (err: any) {
+    console.error('[Shopify Webhook Error]:', err);
+    res.status(400).json({ error: err.message || 'Failed to process Shopify webhook' });
+  }
+});
+
+// Local Fixture Simulation Endpoint
+app.post('/api/webhooks/shopify/simulate', async (req, res) => {
+  try {
+    const fixtureType =
+      req.body?.fixture === 'cod-form'
+        ? 'webhook-order-cod-form.json'
+        : 'webhook-order-created.json';
+    const rawFixtureBody = getShopifyFixture(fixtureType);
+    const parsedPayload = JSON.parse(rawFixtureBody);
+
+    const secret = config.shopifyWebhookSecret || 'simulated_secret_key';
+    const computedHmac = createHmac('sha256', secret)
+      .update(Buffer.from(rawFixtureBody, 'utf8'))
+      .digest('base64');
+
+    const headers: Record<string, string> = {
+      'x-shopify-hmac-sha256': computedHmac,
+      'x-shopify-topic': 'orders/create',
+      'x-shopify-shop-domain': config.shopifyShopDomain || 'dz-fashion.myshopify.com',
+      'content-type': 'application/json',
+    };
+
+    // Verify signature through provider
+    const isSignatureValid = await shopifyProvider.verifyWebhook(
+      headers,
+      rawFixtureBody,
+      secret
+    );
+
+    // Parse into canonical order
+    const standardizedOrder = await shopifyProvider.parseWebhookOrder(parsedPayload);
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'shopify');
+    orderPayload.raw_order = parsedPayload;
+
+    console.log(
+      `[Shopify Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
+    );
+
+    broadcastToAdmins({
+      type: 'SHOPIFY_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: parsedPayload,
+        simulated: true,
+        fixture: fixtureType,
+      },
+    });
+
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'Shopify order simulated and loaded, but phone client is offline',
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    }
+  } catch (err: any) {
+    console.error('[Shopify Simulate Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/trigger-call', (req, res) => {
@@ -261,7 +443,7 @@ async function handleCallAnswered() {
   }
 }
 
-function handleOrderFinalized(decision: FinalizeOrderDecision) {
+async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   setCallState('finalizing');
 
   const finalizedMsg: WSMessage = {
@@ -274,6 +456,92 @@ function handleOrderFinalized(decision: FinalizeOrderDecision) {
 
   broadcastToAdmins(finalizedMsg);
   sendToPhone(finalizedMsg);
+
+  // Normalize final wilaya and commune via @akadli/dz-geo
+  let finalWilayaCode: WilayaCode | undefined = undefined;
+  let finalCommuneClean: string | undefined = undefined;
+
+  if (decision.final_wilaya) {
+    try {
+      const normW = normalizeWilaya(decision.final_wilaya);
+      finalWilayaCode = normW.code as WilayaCode;
+      if (decision.final_commune) {
+        const normC = normalizeCommune(decision.final_commune, normW.code);
+        finalCommuneClean = normC.canonicalCommune;
+      }
+    } catch {
+      finalWilayaCode = decision.final_wilaya as WilayaCode;
+      finalCommuneClean = decision.final_commune;
+    }
+  }
+
+  const standardizedDecision: StandardizedFinalizedOrderDecision = {
+    orderId: currentOrder?.order_id || decision.order_id,
+    status: decision.status,
+    finalSize: decision.final_size || undefined,
+    finalWilaya: finalWilayaCode,
+    finalCommune: finalCommuneClean || decision.final_commune || undefined,
+    finalAddressNote: decision.final_address_note || undefined,
+    reasonOrNotes: decision.reason_or_notes || '',
+  };
+
+  // Live Outbound Shopify Admin API Mutation
+  const isShopifyOrder =
+    currentOrder?.source === 'shopify' ||
+    Boolean(config.shopifyShopDomain && config.shopifyAccessToken);
+
+  if (isShopifyOrder && config.shopifyShopDomain && config.shopifyAccessToken && currentOrder) {
+    console.log(
+      `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} on store "${config.shopifyShopDomain}"...`
+    );
+    try {
+      const credentials = {
+        shopDomain: config.shopifyShopDomain,
+        accessToken: config.shopifyAccessToken,
+        apiVersion: config.shopifyApiVersion || '2025-01',
+        cancelOnRefused: 'true',
+      };
+
+      const mutationResult = await shopifyProvider.applyOrderDecision(
+        currentOrder.order_id,
+        standardizedDecision,
+        credentials
+      );
+
+      console.log(`[Shopify Live Mutation Result]:`, mutationResult);
+
+      const shopifyMutationMsg: WSMessage<ShopifyMutationData> = {
+        type: 'SHOPIFY_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult,
+          liveStore: config.shopifyShopDomain,
+          timestamp: Date.now(),
+        },
+      };
+
+      broadcastToAdmins(shopifyMutationMsg);
+      sendToPhone(shopifyMutationMsg);
+    } catch (err: any) {
+      console.error('[Shopify Mutation Error]:', err);
+      const failureMsg: WSMessage<ShopifyMutationData> = {
+        type: 'SHOPIFY_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: false,
+            externalStatus: 'MUTATION_EXCEPTION',
+            rawResponse: { error: err.message },
+          },
+          liveStore: config.shopifyShopDomain,
+          timestamp: Date.now(),
+        },
+      };
+      broadcastToAdmins(failureMsg);
+    }
+  }
 
   // Auto hangup after 2.5 seconds per spec
   setTimeout(() => {
@@ -406,12 +674,6 @@ wss.on('connection', (ws: WebSocket, req) => {
 });
 
 // Serve static client assets if built
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
 
 if (fs.existsSync(clientDistPath)) {

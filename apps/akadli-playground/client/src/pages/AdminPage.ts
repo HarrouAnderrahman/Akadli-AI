@@ -5,6 +5,7 @@ import {
   TranscriptTurn,
   VoiceConfig,
   WSMessage,
+  ShopifyMutationData,
 } from '../../../shared/types.js';
 import {
   getAllWilayas,
@@ -61,6 +62,9 @@ export class AdminPage {
   private activeTab: 'form' | 'json' = 'form';
   private callDurationSeconds = 0;
   private callTimerInterval: number | null = null;
+  private shopifyConfigured = false;
+  private shopifyDomain: string | null = null;
+  private shopifyMutationResult: ShopifyMutationData | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -92,6 +96,9 @@ export class AdminPage {
             agentInput.value = this.defaultAgentId;
           }
         }
+        this.shopifyConfigured = Boolean(data.shopifyConfigured);
+        this.shopifyDomain = data.shopifyDomain || null;
+        this.updateShopifyStatusUi();
       }
     } catch (e) {}
   }
@@ -138,6 +145,7 @@ export class AdminPage {
         this.currentCallState = 'ringing';
         this.transcripts = [];
         this.finalizedDecision = null;
+        this.shopifyMutationResult = null;
         this.stopTimer();
         this.updateStatusBadge();
         this.renderTranscripts();
@@ -168,6 +176,21 @@ export class AdminPage {
         }
         this.stopTimer();
         this.updateStatusBadge();
+        this.renderDecisionSummary();
+        break;
+      }
+
+      case 'SHOPIFY_WEBHOOK_RECEIVED': {
+        if (msg.data?.order) {
+          this.order = msg.data.order;
+          this.updateFormFieldsFromOrder();
+          this.updateOrderSyncBadge();
+        }
+        break;
+      }
+
+      case 'SHOPIFY_MUTATION_RESULT': {
+        this.shopifyMutationResult = msg.data;
         this.renderDecisionSummary();
         break;
       }
@@ -229,6 +252,12 @@ export class AdminPage {
           </div>
 
           <div class="flex items-center gap-3">
+            <!-- Shopify Connection Status -->
+            <div id="shopify-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+              <span class="text-[11px] text-zinc-400">Shopify Sandbox</span>
+            </div>
+
             <!-- Connection Status -->
             <div id="phone-status-pill" class="flex items-center gap-2 text-xs text-zinc-400">
               <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
@@ -273,12 +302,31 @@ export class AdminPage {
                   <span>End</span>
                 </button>
               </div>
+
+              <!-- Shopify Webhook Simulation -->
+              <div class="pt-3 border-t border-zinc-800/60 space-y-2">
+                <div class="flex items-center justify-between text-[11px] text-zinc-400">
+                  <span>Simulate Shopify Webhook</span>
+                  <span class="font-mono text-[10px] text-zinc-500">fixtures/*.json</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button id="simulate-shopify-standard-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate standard Shopify order created webhook">
+                    <span>Standard Order</span>
+                  </button>
+                  <button id="simulate-shopify-codform-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate Shopify COD form note attributes webhook">
+                    <span>COD Form Note</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Order Configuration Card -->
             <div class="flex-1 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 flex flex-col gap-4">
               <div class="flex items-center justify-between border-b border-zinc-800/60 pb-3">
-                <span class="text-xs font-semibold text-zinc-200">Order Information</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-zinc-200">Order Information</span>
+                  <span id="order-sync-badge" class="text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400">Local Order</span>
+                </div>
                 
                 <div class="flex items-center gap-2">
                   <!-- Mode Switcher: Form vs JSON -->
@@ -420,6 +468,8 @@ export class AdminPage {
 
     this.attachEventListeners();
     this.updateStatusBadge();
+    this.updateShopifyStatusUi();
+    this.updateOrderSyncBadge();
   }
 
   private renderWilayaOptions(): string {
@@ -583,6 +633,15 @@ export class AdminPage {
     // Hangup
     this.container.querySelector('#hangup-call-btn')?.addEventListener('click', () => {
       fetch('/api/hangup', { method: 'POST' });
+    });
+
+    // Shopify webhook simulations
+    this.container.querySelector('#simulate-shopify-standard-btn')?.addEventListener('click', () => {
+      this.handleSimulateShopifyWebhook('standard');
+    });
+
+    this.container.querySelector('#simulate-shopify-codform-btn')?.addEventListener('click', () => {
+      this.handleSimulateShopifyWebhook('cod-form');
     });
   }
 
@@ -784,6 +843,42 @@ export class AdminPage {
       ? `<span class="text-zinc-300 text-[11px] flex items-center gap-1">${iconCheck('w-3 h-3 text-emerald-400')} ${loc.matchedCommuneName} (${loc.matchedWilayaName})</span>`
       : `<span class="text-rose-400 text-[11px]">${loc.error || 'Location Warning'}</span>`;
 
+    let shopifyMutationHtml = '';
+    if (this.shopifyMutationResult) {
+      const res = this.shopifyMutationResult;
+      const mut = res.mutationResult;
+      const isSuccess = mut.success;
+      const statusBadge = isSuccess
+        ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">UPDATED</span>'
+        : '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-rose-400">MUTATION FAILED</span>';
+
+      const storeLabel = res.liveStore ? `${res.liveStore} (#${res.orderId})` : `#${res.orderId}`;
+
+      shopifyMutationHtml = `
+        <div class="mt-3 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-zinc-200">Shopify Admin API</span>
+              <span class="text-zinc-500 font-mono text-[11px]">${storeLabel}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>External Status: <code class="text-zinc-200">${mut.externalStatus}</code></span>
+            <span class="text-zinc-500 font-mono text-[10px]">${new Date(res.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details class="cursor-pointer pt-0.5">
+            <summary class="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono select-none">API Mutation Details</summary>
+            <pre class="mt-1 p-2 rounded bg-zinc-900 border border-zinc-800/80 text-[10px] font-mono text-zinc-400 overflow-x-auto">${JSON.stringify(
+              mut.rawResponse ?? mut,
+              null,
+              2
+            )}</pre>
+          </details>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
@@ -815,6 +910,8 @@ export class AdminPage {
             : ''
         }
 
+        ${shopifyMutationHtml}
+
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
           <pre class="mt-1.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 overflow-x-auto">${JSON.stringify(
@@ -825,5 +922,80 @@ export class AdminPage {
         </details>
       </div>
     `;
+  }
+
+  private updateShopifyStatusUi() {
+    const pill = this.container.querySelector('#shopify-status-pill') as HTMLElement | null;
+    if (!pill) return;
+    if (this.shopifyConfigured && this.shopifyDomain) {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 bg-emerald-500/10';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span class="font-mono text-[11px]">${this.shopifyDomain}</span>`;
+      pill.title = 'Live Shopify Admin API Connected';
+    } else {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-zinc-400 px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span><span class="text-[11px]">Shopify Sandbox</span>`;
+      pill.title = 'Shopify credentials not configured (Webhook test & local sandbox mode)';
+    }
+  }
+
+  private updateOrderSyncBadge() {
+    const badge = this.container.querySelector('#order-sync-badge');
+    if (!badge) return;
+    if (this.order.source === 'shopify') {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-emerald-500/20 bg-emerald-500/10 text-emerald-400';
+      badge.textContent = `Shopify: #${this.order.order_id}`;
+    } else {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400';
+      badge.textContent = 'Local Order';
+    }
+  }
+
+  private updateFormFieldsFromOrder() {
+    const nameInp = this.container.querySelector('#field-customer-name') as HTMLInputElement | null;
+    const phoneInp = this.container.querySelector('#field-customer-phone') as HTMLInputElement | null;
+    const itemInp = this.container.querySelector('#field-item-name') as HTMLInputElement | null;
+    const sizeInp = this.container.querySelector('#field-item-size') as HTMLInputElement | null;
+    const priceInp = this.container.querySelector('#field-price') as HTMLInputElement | null;
+    const storeInp = this.container.querySelector('#field-store-name') as HTMLInputElement | null;
+    const noteInp = this.container.querySelector('#field-address-note') as HTMLInputElement | null;
+    const wilayaSelect = this.container.querySelector('#field-wilaya-select') as HTMLSelectElement | null;
+    const communeSelect = this.container.querySelector('#field-commune-select') as HTMLSelectElement | null;
+
+    if (nameInp) nameInp.value = this.order.customer_name;
+    if (phoneInp) phoneInp.value = this.order.customer_phone;
+    if (itemInp) itemInp.value = this.order.item_name;
+    if (sizeInp) sizeInp.value = this.order.current_size;
+    if (priceInp) priceInp.value = String(this.order.price_da);
+    if (storeInp) storeInp.value = this.order.store_name;
+    if (noteInp) noteInp.value = this.order.current_address_note || '';
+
+    if (wilayaSelect) {
+      wilayaSelect.innerHTML = this.renderWilayaOptions();
+    }
+    if (communeSelect) {
+      communeSelect.innerHTML = this.renderCommuneOptions();
+    }
+
+    this.syncFormToJson();
+  }
+
+  private async handleSimulateShopifyWebhook(fixture: 'standard' | 'cod-form') {
+    try {
+      const res = await fetch('/api/webhooks/shopify/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixture }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to simulate Shopify webhook');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
   }
 }

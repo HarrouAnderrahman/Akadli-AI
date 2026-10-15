@@ -119,3 +119,43 @@ Mobile browsers require **HTTPS** (or `localhost`) to grant microphone permissio
    - Modify size/address: *"Badelha taille L w b3athha l Bou Saada"* (Agent validates `Bou Saada` in Wilaya `68`, triggers `MODIFIED`).
    - Refuse: *"Batalat, ma bghitch"* (Agent logs cancellation reason, triggers `REFUSED`).
 4. Watch the real-time transcript stream on your desktop `/admin` screen and view the formatted `FinalizedOrderDecision` payload upon hangup.
+
+---
+
+## Live Shopify Integration & Webhook Testing
+
+`akadli-playground` includes built-in support for testing `@akadli/provider-shopify` against real Shopify stores or local fixture webhooks:
+
+### 1. Configure Shopify Credentials (Optional for Live Store Mutation)
+Add to `apps/akadli-playground/.env`:
+```env
+SHOPIFY_SHOP_DOMAIN=your-store.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxxxxxx
+SHOPIFY_WEBHOOK_SECRET=your_webhook_signing_secret
+SHOPIFY_API_VERSION=2025-01
+```
+
+### 2. Ingesting Real Webhooks from Shopify
+- Expose the local backend (port `3001`) via a reverse tunnel (e.g., `cloudflared tunnel` or `ngrok`).
+- In the Shopify Admin, navigate to **Settings -> Notifications -> Webhooks** and create a webhook:
+  - Event: `Order creation`
+  - Format: `JSON`
+  - URL: `https://your-tunnel-domain/api/webhooks/shopify`
+- When a customer places an order on Shopify:
+  1. The raw payload is verified via HMAC-SHA256 signature using `ShopifyProvider.verifyWebhook()`.
+  2. The Algerian address is extracted from `shipping_address` or Algerian COD form `note_attributes` (e.g. *EasySell*, *Releasit*) and normalized to 2026 Wilayas and Communes.
+  3. The order is broadcast to `/admin` and rings the connected mobile phone `/phone` immediately.
+
+### 3. Local Fixture Simulation (No Tunnel Required)
+On the `/admin` dashboard under **Call Dispatch -> Simulate Shopify Webhook**:
+- Click **"Standard Order"**: Generates a valid HMAC signature for `webhook-order-created.json` (`Alger 16`) and triggers the call flow.
+- Click **"COD Form Note"**: Simulates an Algerian COD app payload `webhook-order-cod-form.json` (`Wilaya 60 - Barika`) parsed from `note_attributes`.
+
+### 4. Live Shopify Admin API Mutation
+When a call concludes and the agent finalizes the order (`ORDER_FINALIZED`):
+- If `SHOPIFY_SHOP_DOMAIN` and `SHOPIFY_ACCESS_TOKEN` are configured, `ShopifyProvider.applyOrderDecision` automatically updates the live Shopify order:
+  - **CONFIRMED**: Tags order with `dz-confirmed` and appends call notes.
+  - **MODIFIED**: Updates customer `shipping_address` (Wilaya, Commune, Address line), tags with `dz-modified`, and notes size change requests.
+  - **REFUSED**: Tags with `dz-refused` and cancels the order via `POST /admin/api/2025-01/orders/{id}/cancel.json`.
+- The live REST API response is rendered directly in the `/admin` decision card with status, timestamp, and raw JSON payload details.
+

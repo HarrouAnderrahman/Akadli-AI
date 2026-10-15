@@ -29,6 +29,9 @@ importers:
       '@akadli/dz-geo':
         specifier: workspace:*
         version: link:../../packages/dz-geo
+      '@akadli/provider-shopify':
+        specifier: workspace:*
+        version: link:../../packages/provider-shopify
       '@elevenlabs/client':
         specifier: ^1.28.0
         version: 1.28.0(@types/dom-mediacapture-record@1.0.22)
