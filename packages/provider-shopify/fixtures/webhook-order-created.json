@@ -1,0 +1,54 @@
+{
+  "id": 1029384756,
+  "name": "#1001",
+  "shop_name": "DzFashion Store",
+  "currency": "DZD",
+  "total_price": "4500.00",
+  "financial_status": "pending",
+  "fulfillment_status": null,
+  "gateway": "Cash on Delivery (COD)",
+  "created_at": "2026-10-15T20:30:00+01:00",
+  "tags": "cod, dz",
+  "line_items": [
+    {
+      "id": 8839201928,
+      "title": "Chaussures de Sport Orthopédiques",
+      "variant_title": "42",
+      "quantity": 1,
+      "price": "4500.00",
+      "sku": "CH-SPORT-42"
+    }
+  ],
+  "shipping_address": {
+    "first_name": "Karim",
+    "last_name": "Mansouri",
+    "name": "Karim Mansouri",
+    "phone": "0550123456",
+    "province": "13 - Tlemcen",
+    "province_code": "13",
+    "city": "Maghnia",
+    "address1": "Rue de la paix, près de la poste",
+    "address2": null,
+    "country": "Algeria",
+    "country_code": "DZ"
+  },
+  "billing_address": {
+    "first_name": "Karim",
+    "last_name": "Mansouri",
+    "name": "Karim Mansouri",
+    "phone": "0550123456",
+    "province": "13 - Tlemcen",
+    "city": "Maghnia",
+    "address1": "Rue de la paix, près de la poste",
+    "country": "Algeria",
+    "country_code": "DZ"
+  },
+  "customer": {
+    "id": 772819029,
+    "first_name": "Karim",
+    "last_name": "Mansouri",
+    "email": "karim.mansouri@example.com",
+    "phone": "+213550123456"
+  },
+  "note_attributes": []
+}

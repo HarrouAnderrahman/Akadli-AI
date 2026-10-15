@@ -1,0 +1,58 @@
+{
+  "id": 2049583721,
+  "name": "#1002",
+  "shop_name": "DzFashion Store",
+  "currency": "DZD",
+  "total_price": "6800.00",
+  "financial_status": "pending",
+  "fulfillment_status": null,
+  "gateway": "Cash on Delivery",
+  "created_at": "2026-10-15T21:00:00+01:00",
+  "tags": "cod-app-order",
+  "line_items": [
+    {
+      "id": 9948201931,
+      "title": "Robe Traditionnelle Kabyle",
+      "variant_title": "L",
+      "quantity": 1,
+      "price": "6800.00",
+      "sku": "ROBE-KAB-L"
+    }
+  ],
+  "shipping_address": {
+    "first_name": "Client",
+    "last_name": "COD",
+    "name": "Client COD",
+    "phone": null,
+    "province": null,
+    "city": null,
+    "address1": null,
+    "address2": null,
+    "country": "Algeria",
+    "country_code": "DZ"
+  },
+  "billing_address": null,
+  "customer": null,
+  "note_attributes": [
+    {
+      "name": "Nom",
+      "value": "Karim Benali"
+    },
+    {
+      "name": "Téléphone",
+      "value": "0550123456"
+    },
+    {
+      "name": "Wilaya",
+      "value": "60 - Barika"
+    },
+    {
+      "name": "Commune",
+      "value": "Barika"
+    },
+    {
+      "name": "Adresse",
+      "value": "Centre ville en face de la mosquée"
+    }
+  ]
+}
