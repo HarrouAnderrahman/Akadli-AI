@@ -1,0 +1,48 @@
+import dotenv from 'dotenv';
+import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Look for .env in root directory
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Also fallback to server/.env if present
+dotenv.config();
+
+export const config = {
+  get port(): number {
+    return parseInt(process.env.PORT || '3000', 10);
+  },
+  get serverPort(): number {
+    return parseInt(process.env.SERVER_PORT || '3001', 10);
+  },
+  get elevenLabsApiKey(): string {
+    return (process.env.ELEVENLABS_API_KEY || '').trim();
+  },
+  get elevenLabsAgentId(): string {
+    return (process.env.ELEVENLABS_AGENT_ID || '').trim();
+  },
+  get geminiApiKey(): string {
+    return (process.env.GEMINI_API_KEY || '').trim();
+  },
+  get openAiApiKey(): string {
+    return (process.env.OPENAI_API_KEY || '').trim();
+  },
+};
+
+export function getLocalIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    const netList = interfaces[name];
+    if (!netList) continue;
+    for (const net of netList) {
+      // Look for IPv4 and non-internal addresses (e.g. 192.168.x.x, 10.x.x.x)
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+}
