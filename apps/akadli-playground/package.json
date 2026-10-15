@@ -1,5 +1,5 @@
 {
-  "name": "@dz-voice/voice-simulator",
+  "name": "@dz-voice/akadli-playground",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "build": "npm run build:client && npm run build:server",
     "start": "node server/dist/server/src/index.js",
     "typecheck": "tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
-    "lint": "echo 'Voice simulator lint passed'",
-    "test": "echo 'Voice simulator tests passed'"
+    "lint": "echo 'Playground lint passed'",
+    "test": "echo 'Playground tests passed'"
   },
   "dependencies": {
     "@dz-voice/adapter-contract": "workspace:*",

@@ -372,7 +372,7 @@ export class PhonePage {
       <div class="min-h-screen bg-black text-zinc-100 flex flex-col justify-between p-6 max-w-sm mx-auto select-none font-sans">
         <!-- Top Status Bar -->
         <header class="w-full flex items-center justify-between text-xs text-zinc-500 pt-2 pb-4">
-          <span class="font-medium text-zinc-400">Akadli-AI Receiver</span>
+          <span class="font-medium text-zinc-400">Akadli-Playground (Local Voice & Webhook Sandbox)</span>
           <div class="flex items-center gap-1.5">
             <span class="w-1.5 h-1.5 rounded-full ${
               this.currentCallState === 'standby'

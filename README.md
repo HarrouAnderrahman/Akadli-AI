@@ -11,7 +11,7 @@ Built as a high-performance **Turborepo + pnpm** monorepo designed for determini
 ```text
 akadli-ai/
 ├── apps/
-│   └── voice-simulator/             # Local WebRTC testing harness (/admin and /phone mobile receiver)
+│   └── akadli-playground/           # Local WebRTC testing harness (/admin and /phone mobile receiver)
 ├── packages/
 │   ├── adapter-contract/             # Canonical Zod schemas & TypeScript interfaces (Zero external dependencies)
 │   ├── dz-geo/                       # 69 Wilayas (2026), 1,708 Communes & +213 phone normalizer
@@ -44,8 +44,8 @@ akadli-ai/
 - **Dynamic Variable Injection**: Constructs `dynamicVariables` for ElevenAgents (`allowed_sizes_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`, `price_da`) to prevent hallucinations.
 - **Server Tool Handler**: Processes `finalize_order_decision` tool invocations, normalizes any customer modifications, validates them against constraints, and dispatches to the store provider.
 
-### 4. `apps/voice-simulator`
-- Full-fidelity local WebRTC simulator for development:
+### 4. `apps/akadli-playground`
+- Full-fidelity local WebRTC simulator for development (sandbox testbed):
   - `/admin`: Control dashboard to load sample orders, configure agent credentials, and trigger calls.
   - `/phone`: Simulated mobile phone receiver connecting to ElevenLabs Conversational WebRTC with custom ringtone and Darja audio playback.
 
@@ -79,7 +79,7 @@ pnpm test
 
 ### Launch Voice Simulator
 ```bash
-cd apps/voice-simulator
+cd apps/akadli-playground
 cp .env.example .env # Add your ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID
 pnpm dev
 ```

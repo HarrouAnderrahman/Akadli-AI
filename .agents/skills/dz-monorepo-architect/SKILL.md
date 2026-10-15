@@ -23,7 +23,7 @@ Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, in
 ├── turbo.json
 ├── tsconfig.base.json
 ├── apps/
-│   └── voice-simulator/             # WebRTC simulator (/admin and /phone UI)
+│   └── akadli-playground/           # WebRTC sandbox (/admin and /phone UI)
 └── packages/
     ├── adapter-contract/             # @dz-voice/adapter-contract (Zero-dependency Zod + TS contracts)
     ├── dz-geo/                       # @dz-voice/dz-geo (69 Wilayas, 1708 Communes, +213 phone normalizer, WILAYAS_58 compat)
