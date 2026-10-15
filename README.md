@@ -1,10 +1,10 @@
-# Akadli-AI (أكدلي) 🇩🇿
+# Akadli-AI (أكدلي)
 
 **Akadli-AI** is an autonomous, conversational AI voice confirmation engine specifically engineered for Algerian Cash-on-Delivery (COD) e-commerce. It automates high-churn, call-center outbound confirmation calls using ElevenLabs Conversational AI (ElevenAgents) in Algerian Darja, French, and Modern Standard Arabic.
 
 ---
 
-## 🏛️ Architecture & Monorepo Structure
+## Architecture & Monorepo Structure
 
 Built as a high-performance **Turborepo + pnpm** monorepo designed for deterministic multi-provider integrations:
 
@@ -23,7 +23,7 @@ akadli-ai/
 
 ---
 
-## 📦 Packages Overview
+## Packages Overview
 
 ### 1. `@akadli/adapter-contract`
 - Strict zero-dependency contract library defining:
@@ -51,7 +51,7 @@ akadli-ai/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js >= 20.0.0
@@ -88,5 +88,5 @@ pnpm dev
 
 ---
 
-## 🛡️ License
+## License
 Private & Proprietary - Akadli-AI.

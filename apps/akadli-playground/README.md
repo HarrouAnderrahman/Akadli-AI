@@ -1,11 +1,11 @@
-# 🎮 Akadli-Playground: Local Voice & Webhook Sandbox
+# Akadli-Playground: Local Voice & Webhook Sandbox
 
 > [!IMPORTANT]
 > **Optional Local Testing Sandbox Only**: `akadli-playground` is a local development and evaluation testbed. It is **not** required for production server deployments, which consume the core library packages in `packages/*` (`@akadli/core`, `@akadli/dz-geo`, `@akadli/adapter-contract`, and `@akadli/provider-*`).
 
 ---
 
-## 🌟 What is Akadli-Playground?
+## What is Akadli-Playground?
 
 `akadli-playground` provides an end-to-end local simulation environment for pairing developers and contributors to test:
 - Inbound mock Algerian COD orders from e-commerce providers.
@@ -16,7 +16,7 @@
 
 ---
 
-## 🏗️ Sandbox Architecture
+## Sandbox Architecture
 
 ```text
 apps/akadli-playground/
@@ -51,7 +51,7 @@ apps/akadli-playground/
 
 ---
 
-## 🚀 Step-by-Step Contributor Guide
+## Step-by-Step Contributor Guide
 
 ### 1. Configure Environment Credentials
 
@@ -83,17 +83,17 @@ pnpm dev
 The terminal will log your local and Wi-Fi LAN IP addresses:
 ```text
 =======================================================
-🚀 Akadli-Playground Sandbox Server Running!
-📡 Local LAN IP:    192.168.1.50
-🔌 Backend API/WS:  http://192.168.1.50:3001
-💻 Admin Dashboard: https://192.168.1.50:3000/admin
-📱 Mobile Receiver: https://192.168.1.50:3000/phone
+Akadli-Playground Sandbox Server Running!
+Local LAN IP:    192.168.1.50
+Backend API/WS:  http://192.168.1.50:3001
+Admin Dashboard: https://192.168.1.50:3000/admin
+Mobile Receiver: https://192.168.1.50:3000/phone
 =======================================================
 ```
 
 ---
 
-## 📱 Testing Outbound Confirmation Calls
+## Testing Outbound Confirmation Calls
 
 Mobile browsers require **HTTPS** (or `localhost`) to grant microphone permissions for WebRTC audio streaming. `akadli-playground` automatically generates self-signed SSL certificates via `@vitejs/plugin-basic-ssl` so you can connect your actual mobile smartphone over Wi-Fi!
 
