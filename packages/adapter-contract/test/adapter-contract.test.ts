@@ -12,17 +12,18 @@ import {
 
 describe("@dz-voice/adapter-contract", () => {
   describe("WilayaCodeSchema", () => {
-    it("should accept zero-padded codes 01 through 58", () => {
-      expect(WILAYA_CODES).toHaveLength(58);
+    it("should accept zero-padded codes 01 through 69", () => {
+      expect(WILAYA_CODES).toHaveLength(69);
       expect(WilayaCodeSchema.parse("01")).toBe("01");
       expect(WilayaCodeSchema.parse("16")).toBe("16");
       expect(WilayaCodeSchema.parse("58")).toBe("58");
+      expect(WilayaCodeSchema.parse("69")).toBe("69");
     });
 
     it("should reject invalid, unpadded, or out-of-range wilaya codes", () => {
       expect(() => WilayaCodeSchema.parse("1")).toThrow();
       expect(() => WilayaCodeSchema.parse("00")).toThrow();
-      expect(() => WilayaCodeSchema.parse("59")).toThrow();
+      expect(() => WilayaCodeSchema.parse("70")).toThrow();
       expect(() => WilayaCodeSchema.parse("Alger")).toThrow();
       expect(() => WilayaCodeSchema.parse(16 as any)).toThrow();
     });
