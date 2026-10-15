@@ -426,7 +426,7 @@ const PORT = config.serverPort;
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIpAddress();
   console.log(`=======================================================`);
-  console.log(`🚀 Algerian Voice Agent Server Running!`);
+  console.log(`🚀 Akadli-AI Voice Simulator Server Running!`);
   console.log(`📡 Local LAN IP:    ${ip}`);
   console.log(`🔌 Backend API/WS:  http://${ip}:${PORT}`);
   console.log(`💻 Admin Dashboard: https://${ip}:${config.port}/admin`);

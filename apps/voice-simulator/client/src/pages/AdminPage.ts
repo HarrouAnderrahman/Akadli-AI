@@ -223,7 +223,7 @@ export class AdminPage {
         <!-- Top Bar: Minimal, quiet, high utility -->
         <header class="h-12 border-b border-zinc-800/80 px-6 flex items-center justify-between bg-zinc-950">
           <div class="flex items-center gap-3">
-            <span class="text-xs font-semibold tracking-tight text-white">Voice Agent</span>
+            <span class="text-xs font-semibold tracking-tight text-white">Akadli-AI</span>
             <span class="text-zinc-600 text-xs font-mono">/</span>
             <span class="text-xs text-zinc-400">Order Confirmation</span>
           </div>
