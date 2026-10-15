@@ -1,17 +1,17 @@
 ---
 name: dz-monorepo-architect
-description: Initialize, scaffold, or update the Turborepo + pnpm workspace monorepo, shared @dz-voice/core ElevenAgents engine, or @dz-voice/adapter-contract interfaces. Trigger when setting up the workspace, modifying voice contracts, or adding shared packages (e.g., "scaffold the dz-voice monorepo", "update StandardizedDzOrder contract", "add a shared workspace package").
+description: Initialize, scaffold, or update the Turborepo + pnpm workspace monorepo, shared @akadli/core ElevenAgents engine, or @akadli/adapter-contract interfaces. Trigger when setting up the workspace, modifying voice contracts, or adding shared packages (e.g., "scaffold the Akadli-AI monorepo", "update StandardizedDzOrder contract", "add a shared workspace package").
 ---
 
 # dz-monorepo-architect
 
-Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, including root configuration files, the `@dz-voice/adapter-contract` package, the `@dz-voice/dz-geo` normalizer package (69 Wilayas & 1,708 Communes), and the `@dz-voice/core` ElevenAgents orchestration engine.
+Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, including root configuration files, the `@akadli/adapter-contract` package, the `@akadli/dz-geo` normalizer package (69 Wilayas & 1,708 Communes), and the `@akadli/core` ElevenAgents orchestration engine.
 
 ## When to Use
 
 - Initializing or auditing the root monorepo configuration (`pnpm-workspace.yaml`, `turbo.json`, `tsconfig.base.json`, `package.json`)
-- Creating or updating shared TypeScript interfaces and Zod schemas in `@dz-voice/adapter-contract`
-- Building or updating the ElevenAgents voice session orchestrator and dynamic variable builder in `@dz-voice/core`
+- Creating or updating shared TypeScript interfaces and Zod schemas in `@akadli/adapter-contract`
+- Building or updating the ElevenAgents voice session orchestrator and dynamic variable builder in `@akadli/core`
 - Adding a new shared library or provider workspace under `packages/` or `apps/`
 
 ## Target Monorepo Layout
@@ -25,10 +25,10 @@ Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, in
 ├── apps/
 │   └── akadli-playground/           # WebRTC sandbox (/admin and /phone UI)
 └── packages/
-    ├── adapter-contract/             # @dz-voice/adapter-contract (Zero-dependency Zod + TS contracts)
-    ├── dz-geo/                       # @dz-voice/dz-geo (69 Wilayas, 1708 Communes, +213 phone normalizer, WILAYAS_58 compat)
-    ├── core/                         # @dz-voice/core (ElevenAgents outbound call + tool call handler)
-    └── provider-<name>/              # @dz-voice/provider-<name> (Shopify, YouCan, WooCommerce, Tassyir, etc.)
+    ├── adapter-contract/             # @akadli/adapter-contract (Zero-dependency Zod + TS contracts)
+    ├── dz-geo/                       # @akadli/dz-geo (69 Wilayas, 1708 Communes, +213 phone normalizer, WILAYAS_58 compat)
+    ├── core/                         # @akadli/core (ElevenAgents outbound call + tool call handler)
+    └── provider-<name>/              # @akadli/provider-<name> (Shopify, YouCan, WooCommerce, Tassyir, etc.)
 ```
 
 ## Decision Tree: Workspace Operations
@@ -37,11 +37,11 @@ Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, in
    - Follow **Step 1** to create `pnpm-workspace.yaml`, `turbo.json`, `tsconfig.base.json`, and root `package.json`.
 2. **Are you defining or modifying order schemas, decision payloads, or provider interfaces?**
    - Load `{{SKILL_PATH}}/references/adapter-contract.md` and follow **Step 2** to update `packages/adapter-contract/`.
-   - Never add platform-specific SDKs to `@dz-voice/adapter-contract`; keep `zod` as its sole runtime dependency.
+   - Never add platform-specific SDKs to `@akadli/adapter-contract`; keep `zod` as its sole runtime dependency.
 3. **Are you modifying ElevenAgents outbound call triggers or the `finalize_order_decision` webhook tool?**
    - Follow **Step 3** to update `packages/core/` while preserving strict dynamic variable injection (`allowed_sizes_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`).
 4. **Are you adding a new e-commerce provider package?**
-   - Ensure `@dz-voice/adapter-contract` and `@dz-voice/dz-geo` exist first, then hand off implementation details to `dz-ecommerce-provider-builder`.
+   - Ensure `@akadli/adapter-contract` and `@akadli/dz-geo` exist first, then hand off implementation details to `dz-ecommerce-provider-builder`.
 
 ## Step-by-Step Instructions
 
@@ -84,10 +84,10 @@ packages:
    - `"lint": "turbo run lint"`
    - `"test": "turbo run test"`
 
-### Step 2: Implement `@dz-voice/adapter-contract`
+### Step 2: Implement `@akadli/adapter-contract`
 
 1. Read the complete schemas and TypeScript contracts in `{{SKILL_PATH}}/references/adapter-contract.md`.
-2. Scaffold `{{WORKSPACE_PATH}}/packages/adapter-contract/package.json` with name `"@dz-voice/adapter-contract"`, exporting `./src/index.ts` (or compiled `./dist/index.js` + `./dist/index.d.ts`).
+2. Scaffold `{{WORKSPACE_PATH}}/packages/adapter-contract/package.json` with name `"@akadli/adapter-contract"`, exporting `./src/index.ts` (or compiled `./dist/index.js` + `./dist/index.d.ts`).
 3. Implement `src/index.ts` using the exact schemas from `{{SKILL_PATH}}/references/adapter-contract.md`:
    - `WilayaCodeSchema`: Literal union or regex enforcing Algerian Wilaya codes `"01"` through `"69"`.
    - `DzPhoneSchema`: Validates Algerian mobile (`05/06/07XXXXXXXX`) or E.164 (`+213[567]XXXXXXXX`).
@@ -95,9 +95,9 @@ packages:
    - `FinalizedOrderDecisionSchema` and `FinalizedOrderDecision`: Canonical voice agent output (`orderId`, `status` as `"CONFIRMED" | "REFUSED" | "MODIFIED"`, `finalSize`, `finalWilaya`, `finalCommune`, `finalAddressNote`, `reasonOrNotes`).
    - `IEcommerceProvider`: Standard interface with `verifyWebhook`, `parseWebhookOrder`, and `applyOrderDecision`.
 
-### Step 3: Implement `@dz-voice/core` (ElevenAgents Engine)
+### Step 3: Implement `@akadli/core` (ElevenAgents Engine)
 
-1. Configure `{{WORKSPACE_PATH}}/packages/core/package.json` with dependencies on `"@dz-voice/adapter-contract": "workspace:*"` and `"@dz-voice/dz-geo": "workspace:*"`.
+1. Configure `{{WORKSPACE_PATH}}/packages/core/package.json` with dependencies on `"@akadli/adapter-contract": "workspace:*"` and `"@akadli/dz-geo": "workspace:*"`.
 2. Implement `buildElevenAgentsDynamicVariables(order: StandardizedDzOrder)` in `packages/core/src/dynamic-variables.ts`:
    - Convert `order.customerPhone` to E.164 (`+213...`) for outbound SIP/Twilio dialing.
    - Format `price_da` as an integer string in Algerian Dinars (DZD).
@@ -117,6 +117,6 @@ Run the bundled verification script before finishing any architectural change:
 
 ## Gotchas
 
-- **Circular Dependencies**: `@dz-voice/adapter-contract` must never import from `@dz-voice/core`, `@dz-voice/dz-geo`, or any `@dz-voice/provider-*` package. Dependency flow is strictly `provider-* -> (adapter-contract + dz-geo) <- core`.
+- **Circular Dependencies**: `@akadli/adapter-contract` must never import from `@akadli/core`, `@akadli/dz-geo`, or any `@akadli/provider-*` package. Dependency flow is strictly `provider-* -> (adapter-contract + dz-geo) <- core`.
 - **Wilaya Code Zero-Padding**: Always store `currentWilaya` and `finalWilaya` as 2-character zero-padded strings (`"01"` for Adrar, `"09"` for Blida, `"16"` for Alger, `"58"` for In Guezzam, `"68"` for Bou Saada, `"69"` for El Abiodh Sidi Cheikh), never raw integers (`1`, `9`), because integers strip leading zeros in JSON and break courier APIs (Yalidine, Ecotrack, ZR Express).
-- **Phone Formatting Split**: E-commerce stores and Algerian couriers typically require local 10-digit numbers (`0550123456`), while ElevenAgents telephony requires E.164 (`+213550123456`). Store normalized phones consistently and use `@dz-voice/dz-geo` helpers when crossing boundary APIs.
+- **Phone Formatting Split**: E-commerce stores and Algerian couriers typically require local 10-digit numbers (`0550123456`), while ElevenAgents telephony requires E.164 (`+213550123456`). Store normalized phones consistently and use `@akadli/dz-geo` helpers when crossing boundary APIs.

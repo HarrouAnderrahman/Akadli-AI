@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 1 || -z "${1:-}" ]]; then
-  echo "Usage: $0 <package-filter> (e.g., @dz-voice/provider-youcan)" >&2
+  echo "Usage: $0 <package-filter> (e.g., @akadli/provider-youcan)" >&2
   exit 1
 fi
 

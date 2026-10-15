@@ -11,7 +11,7 @@ import {
   WILAYAS_ALL
 } from "../src/index.js";
 
-describe("@dz-voice/dz-geo", () => {
+describe("@akadli/dz-geo", () => {
   describe("Phone Normalization (normalizeDzPhone)", () => {
     it("should normalize local 10-digit mobile numbers", () => {
       expect(normalizeDzPhone("0550123456")).toBe("0550123456");

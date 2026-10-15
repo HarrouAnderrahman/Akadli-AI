@@ -5,7 +5,7 @@ description: Manage Git branches, run pre-commit verification gates (typecheck, 
 
 # git-tdd-atomic-workflow
 
-Enforce branch isolation, Test-Driven Development (Vitest + Mock Service Worker), deterministic pre-commit verification gates (`typecheck`, `lint`, `test`), and atomic Conventional Commits across the `dz-voice-confirm` monorepo.
+Enforce branch isolation, Test-Driven Development (Vitest + Mock Service Worker), deterministic pre-commit verification gates (`typecheck`, `lint`, `test`), and atomic Conventional Commits across the `Akadli-AI` monorepo.
 
 ## When to Use
 
@@ -25,7 +25,7 @@ Enforce branch isolation, Test-Driven Development (Vitest + Mock Service Worker)
    - **NO** -> Load `{{SKILL_PATH}}/references/msw-vitest-templates.md` and implement all 5 test cases before running the verification gate.
    - **YES** -> Proceed to **Step 3**.
 3. **Running the Pre-Commit Verification Gate:**
-   - Execute `{{SKILL_PATH}}/scripts/verify-package.sh <package-name>` (e.g., `@dz-voice/provider-youcan`).
+   - Execute `{{SKILL_PATH}}/scripts/verify-package.sh <package-name>` (e.g., `@akadli/provider-youcan`).
    - **Exit code != 0?** -> **DO NOT COMMIT.** Inspect the failing `typecheck`, `lint`, or `vitest` output, fix the root cause in source or test files, and re-run `{{SKILL_PATH}}/scripts/verify-package.sh <package-name>` until it exits `0`.
    - **Exit code == 0?** -> Proceed to **Step 4** to stage specific files and commit.
 
@@ -50,7 +50,7 @@ Allowed branch prefixes:
 
 ### Step 2: Mandatory Test-First Suite (Vitest + MSW)
 
-Every provider package (`@dz-voice/provider-<name>`) must include a `vitest` + `msw/node` test suite (`test/provider.test.ts`) using the blueprint in `{{SKILL_PATH}}/references/msw-vitest-templates.md` that verifies all 5 scenarios without making real network calls:
+Every provider package (`@akadli/provider-<name>`) must include a `vitest` + `msw/node` test suite (`test/provider.test.ts`) using the blueprint in `{{SKILL_PATH}}/references/msw-vitest-templates.md` that verifies all 5 scenarios without making real network calls:
 
 1. **Webhook Signature Verification (`verifyWebhook`)**:
    - Returns `true` for a valid cryptographic HMAC/token signature over the raw fixture buffer.
@@ -69,7 +69,7 @@ Every provider package (`@dz-voice/provider-<name>`) must include a `vitest` + `
 Always run the bundled verification script for the target package:
 
 ```bash
-{{SKILL_PATH}}/scripts/verify-package.sh @dz-voice/provider-<name>
+{{SKILL_PATH}}/scripts/verify-package.sh @akadli/provider-<name>
 ```
 
 What `verify-package.sh` executes in strict sequence (`set -euo pipefail`):

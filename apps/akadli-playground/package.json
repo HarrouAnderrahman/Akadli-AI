@@ -1,5 +1,5 @@
 {
-  "name": "@dz-voice/akadli-playground",
+  "name": "@akadli/playground",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,9 +16,9 @@
     "test": "echo 'Playground tests passed'"
   },
   "dependencies": {
-    "@dz-voice/adapter-contract": "workspace:*",
-    "@dz-voice/core": "workspace:*",
-    "@dz-voice/dz-geo": "workspace:*",
+    "@akadli/adapter-contract": "workspace:*",
+    "@akadli/core": "workspace:*",
+    "@akadli/dz-geo": "workspace:*",
     "@elevenlabs/client": "^1.28.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

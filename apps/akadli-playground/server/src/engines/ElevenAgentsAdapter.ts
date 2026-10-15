@@ -9,7 +9,7 @@ import {
   VoiceConfig,
   orderPayloadToStandardizedDzOrder
 } from '../../../shared/types.js';
-import { buildElevenAgentsDynamicVariables } from '@dz-voice/core';
+import { buildElevenAgentsDynamicVariables } from '@akadli/core';
 
 export class ElevenAgentsAdapter implements VoiceEngineAdapter {
   readonly engineType = 'elevenagents';
@@ -72,7 +72,7 @@ export class ElevenAgentsAdapter implements VoiceEngineAdapter {
       );
     }
 
-    // Dynamic variables formatted via @dz-voice/core engine
+    // Dynamic variables formatted via @akadli/core engine
     const standardized = orderPayloadToStandardizedDzOrder(order);
     const dynamicVariables = buildElevenAgentsDynamicVariables(standardized);
 

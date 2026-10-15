@@ -1,6 +1,6 @@
 # Algerian 69 Wilayas (2026 Administrative Division), 1,708 Communes & Phone Normalization Specification
 
-This reference provides the complete 69 Algerian Wilayas lookup table (`"01"` through `"69"`), 1,708 Communes dataset specification, legacy `WILAYAS_58` backward-compatibility subset, messy input normalization algorithms, commune scoping rules, and Algerian phone number regex/normalization implementations for `@dz-voice/dz-geo`.
+This reference provides the complete 69 Algerian Wilayas lookup table (`"01"` through `"69"`), 1,708 Communes dataset specification, legacy `WILAYAS_58` backward-compatibility subset, messy input normalization algorithms, commune scoping rules, and Algerian phone number regex/normalization implementations for `@akadli/dz-geo`.
 
 ---
 
@@ -83,7 +83,7 @@ This reference provides the complete 69 Algerian Wilayas lookup table (`"01"` th
 ## 2. Backward Compatibility Subset (`WILAYAS_58`)
 
 To guarantee smooth interoperability with older shipping carriers (Yalidine, Ecotrack, ZR Express) or ERPs that haven't updated beyond the 58 Wilaya division:
-- `@dz-voice/dz-geo` exports `WILAYAS_ALL` (69 Wilayas) and `WILAYAS_58` (`WILAYAS_69.slice(0, 58)`).
+- `@akadli/dz-geo` exports `WILAYAS_ALL` (69 Wilayas) and `WILAYAS_58` (`WILAYAS_69.slice(0, 58)`).
 - All 1,708 Communes are indexed across all 69 Wilayas.
 
 ---
@@ -91,7 +91,7 @@ To guarantee smooth interoperability with older shipping carriers (Yalidine, Eco
 ## 3. Reference Normalizer Implementation (`packages/dz-geo/src/wilaya.ts`)
 
 ```typescript
-import { WilayaCode, WILAYA_CODES } from "@dz-voice/adapter-contract";
+import { WilayaCode, WILAYA_CODES } from "@akadli/adapter-contract";
 import { WILAYAS_ALL, WILAYAS_MAP } from "./data/wilayas.js";
 import { NormalizedWilayaResult, WilayaRecord } from "./types.js";
 

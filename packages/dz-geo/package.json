@@ -1,5 +1,5 @@
 {
-  "name": "@dz-voice/dz-geo",
+  "name": "@akadli/dz-geo",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dz-voice/adapter-contract": "workspace:*"
+    "@akadli/adapter-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",

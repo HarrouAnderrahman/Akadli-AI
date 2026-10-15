@@ -13,18 +13,18 @@ for required_file in "package.json" "pnpm-workspace.yaml" "turbo.json" "tsconfig
 done
 
 if [[ -d "${WORKSPACE_ROOT}/packages/adapter-contract" ]]; then
-  echo "[dz-monorepo-architect] Typechecking @dz-voice/adapter-contract..."
-  pnpm --dir "${WORKSPACE_ROOT}" --filter "@dz-voice/adapter-contract" typecheck
+  echo "[dz-monorepo-architect] Typechecking @akadli/adapter-contract..."
+  pnpm --dir "${WORKSPACE_ROOT}" --filter "@akadli/adapter-contract" typecheck
 fi
 
 if [[ -d "${WORKSPACE_ROOT}/packages/dz-geo" ]]; then
-  echo "[dz-monorepo-architect] Typechecking @dz-voice/dz-geo..."
-  pnpm --dir "${WORKSPACE_ROOT}" --filter "@dz-voice/dz-geo" typecheck
+  echo "[dz-monorepo-architect] Typechecking @akadli/dz-geo..."
+  pnpm --dir "${WORKSPACE_ROOT}" --filter "@akadli/dz-geo" typecheck
 fi
 
 if [[ -d "${WORKSPACE_ROOT}/packages/core" ]]; then
-  echo "[dz-monorepo-architect] Typechecking @dz-voice/core..."
-  pnpm --dir "${WORKSPACE_ROOT}" --filter "@dz-voice/core" typecheck
+  echo "[dz-monorepo-architect] Typechecking @akadli/core..."
+  pnpm --dir "${WORKSPACE_ROOT}" --filter "@akadli/core" typecheck
 fi
 
 echo "[dz-monorepo-architect] Workspace verification passed."

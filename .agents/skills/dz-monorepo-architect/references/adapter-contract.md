@@ -1,6 +1,6 @@
-# `@dz-voice/adapter-contract` Reference Specification
+# `@akadli/adapter-contract` Reference Specification
 
-This reference contains the canonical, copy-pasteable TypeScript interfaces and Zod validation schemas for `packages/adapter-contract/src/index.ts`. All e-commerce provider packages (`@dz-voice/provider-*`) and the core voice engine (`@dz-voice/core`) must compile against these exact contracts.
+This reference contains the canonical, copy-pasteable TypeScript interfaces and Zod validation schemas for `packages/adapter-contract/src/index.ts`. All e-commerce provider packages (`@akadli/provider-*`) and the core voice engine (`@akadli/core`) must compile against these exact contracts.
 
 ---
 
@@ -135,7 +135,7 @@ export interface IEcommerceProvider {
 
   /**
    * Parses and validates an inbound provider webhook payload into a canonical `StandardizedDzOrder`.
-   * Must normalize customerPhone and currentWilaya ("01"-"69") via `@dz-voice/dz-geo`.
+   * Must normalize customerPhone and currentWilaya ("01"-"69") via `@akadli/dz-geo`.
    */
   parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder>;
 
@@ -155,7 +155,7 @@ export interface IEcommerceProvider {
 
 ## ElevenAgents Server Tool JSON Schema (`finalize_order_decision`)
 
-When configuring the ElevenAgents voice agent in `@dz-voice/core`, register `finalize_order_decision` with the following tool parameters mapped from `StandardizedDzOrder.constraints`:
+When configuring the ElevenAgents voice agent in `@akadli/core`, register `finalize_order_decision` with the following tool parameters mapped from `StandardizedDzOrder.constraints`:
 
 ```json
 {

@@ -5,11 +5,11 @@ description: Normalize, fuzzy-match, or validate Algerian 69 Wilayas, 1708 Commu
 
 # dz-geo-address-normalizer
 
-Normalize, fuzzy-match, and validate Algerian 69 Wilayas (`"01"` through `"69"`), 1708 Communes (with `WILAYAS_58` backward compatibility for legacy couriers), and Algerian phone numbers (`05/06/07XXXXXXXX` and `+213`) inside `@dz-voice/dz-geo` and across provider adapters.
+Normalize, fuzzy-match, and validate Algerian 69 Wilayas (`"01"` through `"69"`), 1708 Communes (with `WILAYAS_58` backward compatibility for legacy couriers), and Algerian phone numbers (`05/06/07XXXXXXXX` and `+213`) inside `@akadli/dz-geo` and across provider adapters.
 
 ## When to Use
 
-- Implementing or updating `@dz-voice/dz-geo` Wilaya, Commune, or phone normalization functions
+- Implementing or updating `@akadli/dz-geo` Wilaya, Commune, or phone normalization functions
 - Mapping messy e-commerce checkout inputs (Arabic, French, Franco-Arabic/Arabizi, or numeric codes) into canonical `"01"`-`"69"` Wilaya codes and `"13 - Tlemcen"` / `"68 - Bou Saada"` display labels
 - Extracting the valid commune constraint list (`allowedCommunes`) for a specific Wilaya so the ElevenAgents `finalize_order_decision` tool cannot hallucinate invalid communes
 - Validating or converting Algerian mobile phone numbers between local 10-digit (`05/06/07XXXXXXXX`) and E.164 (`+213[567]XXXXXXXX`) formats
@@ -66,7 +66,7 @@ Implement `normalizeDzPhone(rawPhone: string, format: "local" | "e164" = "local"
 
 ### Step 4: Verify Geo Dataset & Normalizer
 
-Run the bundled verification script after modifying `@dz-voice/dz-geo`:
+Run the bundled verification script after modifying `@akadli/dz-geo`:
 
 ```bash
 {{SKILL_PATH}}/scripts/verify-geo-data.sh
@@ -76,4 +76,4 @@ Run the bundled verification script after modifying `@dz-voice/dz-geo`:
 
 - **Homonymous Communes Across Wilayas**: Commune names like `"Mansourah"` exist in multiple Wilayas (`"13 - Tlemcen"`, `"34 - Bordj Bou Arreridj"`, `"47 - Ghardaia"`), and `"Bir El Djir"` vs `"Bir Mourad Rais"` belong to different Wilayas. Always scope commune fuzzy matching to the order's `currentWilaya` first.
 - **2026 Administrative Division (69 Wilayas & 1,708 Communes)**: The 2026 administrative reorganization established 69 Wilayas (codes `"01"` to `"69"`) and 1,708 Communes, promoting 11 delegated Wilayas (`"59"` through `"69"`: *Aflou, Barika, El Kantara, Bir El Ater, El Aricha, Ksar Chellala, Ain Oussera, Messad, Ksar El Boukhari, Bou Saada, El Abiodh Sidi Cheikh*).
-- **Backward Compatibility (`WILAYAS_58`)**: For legacy logistics APIs, couriers (Yalidine, Ecotrack, ZR Express), or store plugins that have not yet updated their database enums past 58 Wilayas, `@dz-voice/dz-geo` exports `WILAYAS_58` as a compatibility slice while using `WILAYAS_ALL` (69 Wilayas) across the primary pipeline.
+- **Backward Compatibility (`WILAYAS_58`)**: For legacy logistics APIs, couriers (Yalidine, Ecotrack, ZR Express), or store plugins that have not yet updated their database enums past 58 Wilayas, `@akadli/dz-geo` exports `WILAYAS_58` as a compatibility slice while using `WILAYAS_ALL` (69 Wilayas) across the primary pipeline.

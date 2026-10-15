@@ -1,4 +1,4 @@
-import { WilayaCode } from "@dz-voice/adapter-contract";
+import { WilayaCode } from "@akadli/adapter-contract";
 
 export interface NormalizedWilayaResult {
   code: WilayaCode;

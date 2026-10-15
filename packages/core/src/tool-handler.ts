@@ -4,8 +4,8 @@ import {
   IEcommerceProvider,
   ApplyOrderDecisionResult,
   OrderConstraints
-} from "@dz-voice/adapter-contract";
-import { normalizeWilaya, normalizeCommune, getCommunesForWilaya } from "@dz-voice/dz-geo";
+} from "@akadli/adapter-contract";
+import { normalizeWilaya, normalizeCommune, getCommunesForWilaya } from "@akadli/dz-geo";
 
 export interface FinalizeOrderToolResult {
   success: boolean;

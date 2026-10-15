@@ -1,4 +1,4 @@
-import { WilayaCode } from "@dz-voice/adapter-contract";
+import { WilayaCode } from "@akadli/adapter-contract";
 import { COMMUNES_BY_WILAYA, ARABIC_TO_FRENCH_COMMUNES } from "./data/communes.js";
 import { canonicalizeGeoToken } from "./wilaya.js";
 import { CommuneMatchResult } from "./types.js";

@@ -4,9 +4,9 @@ import {
   buildElevenAgentsDynamicVariables,
   handleFinalizeOrderToolCall
 } from "../src/index.js";
-import { IEcommerceProvider, FinalizedOrderDecision } from "@dz-voice/adapter-contract";
+import { IEcommerceProvider, FinalizedOrderDecision } from "@akadli/adapter-contract";
 
-describe("@dz-voice/core", () => {
+describe("@akadli/core", () => {
   const baseOrderParams = {
     orderId: "ord_dz_999",
     storeName: "Algeria Footwear",

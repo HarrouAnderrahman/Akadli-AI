@@ -3,8 +3,8 @@ import type {
   FinalizedOrderDecision as StandardizedFinalizedOrderDecision,
   WilayaCode,
   OrderConstraints as StandardizedOrderConstraints
-} from "@dz-voice/adapter-contract";
-import type { ElevenAgentsDynamicVariables } from "@dz-voice/core";
+} from "@akadli/adapter-contract";
+import type { ElevenAgentsDynamicVariables } from "@akadli/core";
 
 export type {
   StandardizedDzOrder,

@@ -1,4 +1,4 @@
-import { WilayaCode } from "@dz-voice/adapter-contract";
+import { WilayaCode } from "@akadli/adapter-contract";
 
 /**
  * Communes mapped by all 69 zero-padded Wilaya codes ("01" to "69") for Algeria 2026.

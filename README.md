@@ -25,14 +25,14 @@ akadli-ai/
 
 ## 📦 Packages Overview
 
-### 1. `@dz-voice/adapter-contract`
+### 1. `@akadli/adapter-contract`
 - Strict zero-dependency contract library defining:
   - `StandardizedDzOrder`: Universal normalized order format (`orderId`, `customerPhone`, `currentWilaya`, `constraints`).
   - `FinalizedOrderDecision`: Strict schema for ElevenAgents `finalize_order_decision` tool calls (`CONFIRMED`, `REFUSED`, `MODIFIED`).
   - `IEcommerceProvider`: Standard interface with `verifyWebhook`, `parseWebhookOrder`, and `applyOrderDecision`.
   - `WilayaCodeSchema`: Validates zero-padded 2-digit codes (`"01"` to `"69"`).
 
-### 2. `@dz-voice/dz-geo`
+### 2. `@akadli/dz-geo`
 - Comprehensive 2026 Algerian administrative division dataset:
   - **69 Wilayas** (`"01"` to `"69"`) including the 11 delegated Wilayas (*Aflou, Barika, Bou Saada, El Abiodh Sidi Cheikh, etc.*).
   - **1,708 Communes** with cross-script Arabic to French mappings.
@@ -40,11 +40,11 @@ akadli-ai/
   - **4-Stage Wilaya Normalizer**: Numeric extraction -> Script canonicalization -> Alias & Arabizi dictionary -> Levenshtein fuzzy match.
   - **Algerian Phone Normalizer**: Normalizes any input format into local `05/06/07XXXXXXXX` or international E.164 `+213[567]XXXXXXXX`.
 
-### 3. `@dz-voice/core`
+### 3. `@akadli/core`
 - **Dynamic Variable Injection**: Constructs `dynamicVariables` for ElevenAgents (`allowed_sizes_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`, `price_da`) to prevent hallucinations.
 - **Server Tool Handler**: Processes `finalize_order_decision` tool invocations, normalizes any customer modifications, validates them against constraints, and dispatches to the store provider.
 
-### 4. `apps/akadli-playground`
+### 4. `apps/akadli-playground` (`@akadli/playground`)
 - Full-fidelity local WebRTC simulator for development (sandbox testbed):
   - `/admin`: Control dashboard to load sample orders, configure agent credentials, and trigger calls.
   - `/phone`: Simulated mobile phone receiver connecting to ElevenLabs Conversational WebRTC with custom ringtone and Darja audio playback.

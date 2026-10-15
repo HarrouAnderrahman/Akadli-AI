@@ -1,4 +1,4 @@
-import { WilayaCode, WILAYA_CODES } from "@dz-voice/adapter-contract";
+import { WilayaCode, WILAYA_CODES } from "@akadli/adapter-contract";
 import { WILAYAS_ALL, WILAYAS_MAP } from "./data/wilayas.js";
 import { NormalizedWilayaResult, WilayaRecord } from "./types.js";
 

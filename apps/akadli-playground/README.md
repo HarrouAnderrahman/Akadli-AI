@@ -1,7 +1,7 @@
 # 🎮 Akadli-Playground: Local Voice & Webhook Sandbox
 
 > [!IMPORTANT]
-> **Optional Local Testing Sandbox Only**: `akadli-playground` is a local development and evaluation testbed. It is **not** required for production server deployments, which consume the core library packages in `packages/*` (`@dz-voice/adapter-contract`, `@dz-voice/dz-geo`, `@dz-voice/core`, and `@dz-voice/provider-*`).
+> **Optional Local Testing Sandbox Only**: `akadli-playground` is a local development and evaluation testbed. It is **not** required for production server deployments, which consume the core library packages in `packages/*` (`@akadli/core`, `@akadli/dz-geo`, `@akadli/adapter-contract`, and `@akadli/provider-*`).
 
 ---
 
@@ -46,7 +46,7 @@ apps/akadli-playground/
 │   └── types.ts                # WebSocket protocol and simulator state
 ├── .env.example                # API credentials template
 ├── .env                        # Local untracked credentials (ignored by git)
-└── package.json                # Workspace package "@dz-voice/akadli-playground"
+└── package.json                # Workspace package "@akadli/playground"
 ```
 
 ---
@@ -72,7 +72,7 @@ SERVER_PORT=3001
 
 From the repository root:
 ```bash
-pnpm --filter @dz-voice/akadli-playground dev
+pnpm --filter @akadli/playground dev
 ```
 
 Or from inside `apps/akadli-playground`:

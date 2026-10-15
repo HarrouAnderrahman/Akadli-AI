@@ -136,7 +136,7 @@ export interface IEcommerceProvider {
 
   /**
    * Parses and validates an inbound provider webhook payload into a canonical `StandardizedDzOrder`.
-   * Must normalize customerPhone and currentWilaya ("01"-"58") via `@dz-voice/dz-geo`.
+   * Must normalize customerPhone and currentWilaya ("01"-"69") via `@akadli/dz-geo`.
    */
   parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder>;
 

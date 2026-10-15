@@ -10,7 +10,7 @@ import {
   FinalizedOrderDecision
 } from "../src/index.js";
 
-describe("@dz-voice/adapter-contract", () => {
+describe("@akadli/adapter-contract", () => {
   describe("WilayaCodeSchema", () => {
     it("should accept zero-padded codes 01 through 69", () => {
       expect(WILAYA_CODES).toHaveLength(69);

@@ -20,13 +20,13 @@ importers:
 
   apps/akadli-playground:
     dependencies:
-      '@dz-voice/adapter-contract':
+      '@akadli/adapter-contract':
         specifier: workspace:*
         version: link:../../packages/adapter-contract
-      '@dz-voice/core':
+      '@akadli/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@dz-voice/dz-geo':
+      '@akadli/dz-geo':
         specifier: workspace:*
         version: link:../../packages/dz-geo
       '@elevenlabs/client':
@@ -100,10 +100,10 @@ importers:
 
   packages/core:
     dependencies:
-      '@dz-voice/adapter-contract':
+      '@akadli/adapter-contract':
         specifier: workspace:*
         version: link:../adapter-contract
-      '@dz-voice/dz-geo':
+      '@akadli/dz-geo':
         specifier: workspace:*
         version: link:../dz-geo
     devDependencies:
@@ -119,7 +119,7 @@ importers:
 
   packages/dz-geo:
     dependencies:
-      '@dz-voice/adapter-contract':
+      '@akadli/adapter-contract':
         specifier: workspace:*
         version: link:../adapter-contract
     devDependencies:

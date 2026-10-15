@@ -5,13 +5,13 @@ description: Build, scaffold, or update an e-commerce provider integration packa
 
 # dz-ecommerce-provider-builder
 
-Scaffold, implement, and maintain e-commerce store and COD ERP provider adapters (`packages/provider-<name>`) implementing `IEcommerceProvider` from `@dz-voice/adapter-contract`.
+Scaffold, implement, and maintain e-commerce store and COD ERP provider adapters (`packages/provider-<name>`, named `@akadli/provider-<name>`) implementing `IEcommerceProvider` from `@akadli/adapter-contract`. New provider packages must import from `@akadli/adapter-contract`, `@akadli/dz-geo`, and `@akadli/core`.
 
 ## When to Use
 
-- Scaffolding a new store integration inside `{{WORKSPACE_PATH}}/packages/provider-<name>`
+- Scaffolding a new store integration inside `{{WORKSPACE_PATH}}/packages/provider-<name>` (named `@akadli/provider-<name>`)
 - Implementing webhook signature verification (`verifyWebhook`), order normalization (`parseWebhookOrder`), or post-call mutations (`applyOrderDecision`)
-- Integrating Shopify, YouCan, WooCommerce, Tassyir, Ayor, SetShop, JustSell, or Google Sheets with the `dz-voice-confirm` ecosystem
+- Integrating Shopify, YouCan, WooCommerce, Tassyir, Ayor, SetShop, JustSell, or Google Sheets with the `Akadli-AI` ecosystem
 
 ## Anti-Hallucination Protocol: Spec-First Gate (CRITICAL)
 
@@ -80,17 +80,17 @@ Every provider package must follow this exact directory layout:
 ### Step 3: Implement `parseWebhookOrder`
 
 1. Validate the raw `payload` using a strict Zod schema defined in `src/schemas.ts` that matches `fixtures/webhook-order-created.json`.
-2. Normalize the customer's phone number and Wilaya/Commune using `@dz-voice/dz-geo` (see `dz-geo-address-normalizer` skill):
+2. Normalize the customer's phone number and Wilaya/Commune using `@akadli/dz-geo` (see `dz-geo-address-normalizer` skill):
    - Normalize `customerPhone` to `05/06/07XXXXXXXX` or `+213[567]XXXXXXXX`.
    - Normalize messy Wilaya input (`"Alger"`, `"16"`, `"تلمسان"`, `"بوسعادة"`) to its 2-digit code (`"01"`-`"69"`).
    - Populate `constraints.allowedWilayas` (`"01"`-`"69"`), `constraints.allowedCommunes` (valid communes for `currentWilaya`), and `constraints.allowedSizes` (available product variants or `[currentSize]`).
-3. Validate the final object with `StandardizedDzOrderSchema.parse(...)` from `@dz-voice/adapter-contract`.
+3. Validate the final object with `StandardizedDzOrderSchema.parse(...)` from `@akadli/adapter-contract`.
 
 ### Step 4: Implement `applyOrderDecision`
 
 1. Validate `decision` with `FinalizedOrderDecisionSchema.parse(decision)`.
 2. Execute the mutation according to the platform's pattern (`Pattern A`, `Pattern B`, or `Pattern C` in `{{SKILL_PATH}}/references/provider-patterns.md`):
-   - `CONFIRMED`: Mark order confirmed / append `"dz-voice-confirmed"` tag / trigger courier parcel creation or sheet status update.
+   - `CONFIRMED`: Mark order confirmed / append `"akadli-confirmed"` tag / trigger courier parcel creation or sheet status update.
    - `MODIFIED`: Update shipping province/Wilaya (`finalWilaya`), city/commune (`finalCommune`), address note (`finalAddressNote`), and variant/size (`finalSize`), then mark confirmed.
    - `REFUSED`: Cancel/refuse order and record `decision.reasonOrNotes`.
 3. Implement resilient HTTP error handling in `src/client.ts`:
@@ -99,7 +99,7 @@ Every provider package must follow this exact directory layout:
 
 ### Step 5: Test and Verify
 
-Delegate to `git-tdd-atomic-workflow` to write the 5 mandatory Vitest + MSW tests and run `verify-package.sh @dz-voice/provider-<name>`.
+Delegate to `git-tdd-atomic-workflow` to write the 5 mandatory Vitest + MSW tests and run `verify-package.sh @akadli/provider-<name>`.
 
 ## Gotchas
 

@@ -3,13 +3,13 @@ import {
   StandardizedDzOrderSchema,
   WilayaCode,
   OrderConstraints
-} from "@dz-voice/adapter-contract";
+} from "@akadli/adapter-contract";
 import {
   normalizeDzPhone,
   normalizeWilaya,
   normalizeCommune,
   getCommunesForWilaya
-} from "@dz-voice/dz-geo";
+} from "@akadli/dz-geo";
 
 export interface CreateDzOrderParams {
   orderId: string;
@@ -28,7 +28,7 @@ export interface CreateDzOrderParams {
 }
 
 /**
- * Creates and validates a canonical StandardizedDzOrder using @dz-voice/dz-geo
+ * Creates and validates a canonical StandardizedDzOrder using @akadli/dz-geo
  * to normalize the customer phone, Wilaya code, and commune, while populating
  * the allowed commune constraints scoped to the order's Wilaya.
  */
@@ -36,7 +36,7 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
   // 1. Normalize phone to local 10-digit standard
   const customerPhone = normalizeDzPhone(params.rawCustomerPhone, "local");
 
-  // 2. Normalize Wilaya to 2-digit zero-padded code ("01" to "58")
+  // 2. Normalize Wilaya to 2-digit zero-padded code ("01" to "69")
   const normWilaya = normalizeWilaya(params.rawWilaya);
   const currentWilaya = normWilaya.code;
 

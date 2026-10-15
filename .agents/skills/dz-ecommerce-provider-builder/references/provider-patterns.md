@@ -1,6 +1,6 @@
 # E-Commerce Provider Integration Patterns (`references/provider-patterns.md`)
 
-This reference defines the three canonical architectural patterns for Algerian e-commerce platforms in `dz-voice-confirm`. Always select the pattern that matches the platform's real capabilities rather than inventing unsupported REST endpoints.
+This reference defines the three canonical architectural patterns for Algerian e-commerce platforms in `Akadli-AI`. Always select the pattern that matches the platform's real capabilities rather than inventing unsupported REST endpoints.
 
 ---
 
@@ -26,7 +26,7 @@ Use Pattern A when the platform provides both outbound order webhooks and authen
 ### 1. Inbound Flow (`verifyWebhook` + `parseWebhookOrder`)
 - Verify the platform's HMAC signature against the raw request body.
 - Extract `orderId`, `customerName`, `customerPhone` (from `shipping_address.phone` or `billing_address.phone`), `itemName` (first line item title), `priceDa` (total price in DZD), `currentSize` (variant title/option), `currentWilaya` (`shipping_address.province` or `state`), and `currentCommune` (`shipping_address.city`).
-- Normalize `customerPhone` and `currentWilaya` using `@dz-voice/dz-geo`.
+- Normalize `customerPhone` and `currentWilaya` using `@akadli/dz-geo`.
 
 ### 2. Outbound Flow (`applyOrderDecision`)
 
@@ -59,7 +59,7 @@ export async function applyPatternADecision(
   // CONFIRMED or MODIFIED
   const updatePayload: Record<string, unknown> = {
     status: decision.status === "MODIFIED" ? "confirmed_modified" : "confirmed",
-    tags: decision.status === "MODIFIED" ? ["dz-voice-confirmed", "dz-voice-modified"] : ["dz-voice-confirmed"],
+    tags: decision.status === "MODIFIED" ? ["akadli-confirmed", "akadli-modified"] : ["akadli-confirmed"],
     note: decision.reasonOrNotes
   };
 
@@ -102,7 +102,7 @@ Algerian COD ERPs (Tassyir, Ayor) center around call-center confirmation queues 
 
 ### 1. Inbound Flow
 - Ingest the new order webhook payload from Tassyir/Ayor.
-- Map the ERP's `wilaya_id` or `wilaya_name` and `commune_name` through `@dz-voice/dz-geo` to ensure canonical `"01"`-`"69"` codes and valid commune constraints.
+- Map the ERP's `wilaya_id` or `wilaya_name` and `commune_name` through `@akadli/dz-geo` to ensure canonical `"01"`-`"69"` codes and valid commune constraints.
 
 ### 2. Outbound Flow (Two-Phase Confirmation + Courier Dispatch)
 - **Phase 1 (ERP Order State Update)**: Send the confirmation status (`confirmed`, `confirmed_modified`, or `canceled`) plus updated `wilaya_code`, `commune`, `size`, and `note` to the ERP webhook/API endpoint.

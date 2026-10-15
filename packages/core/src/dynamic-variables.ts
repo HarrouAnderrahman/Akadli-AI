@@ -1,5 +1,5 @@
-import { StandardizedDzOrder } from "@dz-voice/adapter-contract";
-import { normalizeDzPhone } from "@dz-voice/dz-geo";
+import { StandardizedDzOrder } from "@akadli/adapter-contract";
+import { normalizeDzPhone } from "@akadli/dz-geo";
 
 export interface ElevenAgentsDynamicVariables {
   order_id: string;
