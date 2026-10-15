@@ -1,10 +1,10 @@
 import { WilayaCode, WILAYA_CODES } from "@dz-voice/adapter-contract";
-import { WILAYAS_58, WILAYAS_MAP } from "./data/wilayas.js";
+import { WILAYAS_ALL, WILAYAS_MAP } from "./data/wilayas.js";
 import { NormalizedWilayaResult, WilayaRecord } from "./types.js";
 
 export class InvalidWilayaError extends Error {
   constructor(public readonly rawInput: unknown) {
-    super(`Unrecognized Algerian Wilaya input: "${String(rawInput)}". Expected 01-58 or valid Wilaya name.`);
+    super(`Unrecognized Algerian Wilaya input: "${String(rawInput)}". Expected 01-69 or valid Wilaya name.`);
     this.name = "InvalidWilayaError";
   }
 }
@@ -51,7 +51,7 @@ function levenshteinDistance(a: string, b: string): number {
 
 /**
  * Normalizes any messy Wilaya input (numeric code, Arabic, French, Arabizi, or alias)
- * into a canonical 58-Wilaya result.
+ * into a canonical Wilaya result across all 69 Algerian Wilayas.
  */
 export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResult {
   if (rawInput === null || rawInput === undefined) {
@@ -60,7 +60,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
 
   // --- Stage 1: Numeric & Prefix Extraction ---
   if (typeof rawInput === "number") {
-    if (rawInput >= 1 && rawInput <= 58) {
+    if (rawInput >= 1 && rawInput <= 69) {
       const code = String(rawInput).padStart(2, "0") as WilayaCode;
       const record = WILAYAS_MAP.get(code);
       if (record) {
@@ -84,7 +84,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
   const numericMatch = str.match(/(?:^|\b|wilaya\s*)(\d{1,2})\b/i);
   if (numericMatch && numericMatch[1]) {
     const num = parseInt(numericMatch[1], 10);
-    if (num >= 1 && num <= 58) {
+    if (num >= 1 && num <= 69) {
       const code = String(num).padStart(2, "0") as WilayaCode;
       const record = WILAYAS_MAP.get(code);
       if (record) {
@@ -102,7 +102,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
   const cleaned = canonicalizeGeoToken(str);
 
   // --- Stage 3: Alias & Dictionary Lookup ---
-  for (const record of WILAYAS_58) {
+  for (const record of WILAYAS_ALL) {
     const cleanFr = canonicalizeGeoToken(record.nameFr);
     const cleanAr = canonicalizeGeoToken(record.nameAr);
 
@@ -128,7 +128,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
   }
 
   // Also check without stripping leading "el" / "al" if the canonical name itself has it
-  for (const record of WILAYAS_58) {
+  for (const record of WILAYAS_ALL) {
     const lowerFr = record.nameFr.toLowerCase();
     if (str.toLowerCase() === lowerFr) {
       return {
@@ -144,7 +144,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
   let bestMatch: WilayaRecord | null = null;
   let lowestDist = Infinity;
 
-  for (const record of WILAYAS_58) {
+  for (const record of WILAYAS_ALL) {
     const cleanFr = canonicalizeGeoToken(record.nameFr);
     const cleanAr = canonicalizeGeoToken(record.nameAr);
 
