@@ -560,10 +560,12 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
     }
   }
 
-  // Auto hangup after 2.5 seconds per spec
+  // Fallback auto hangup after 8 seconds (allows agent to generate and complete goodbye statement)
   setTimeout(() => {
-    terminateCall('Order finalized successfully');
-  }, 2500);
+    if (currentCallState === 'finalizing' || currentCallState === 'active') {
+      terminateCall('Order finalized successfully');
+    }
+  }, 8000);
 }
 
 async function terminateCall(reason = 'Call ended') {

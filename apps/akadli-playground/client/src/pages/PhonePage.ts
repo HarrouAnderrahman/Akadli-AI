@@ -37,6 +37,8 @@ export class PhonePage {
   private isStartingSession = false;
   private activeSessionToken: string | null = null;
   private lastAnswerTimestamp = 0;
+  private hasFinalizedOrder = false;
+  private hasAgentSpokenGoodbye = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -123,7 +125,8 @@ export class PhonePage {
 
       case 'ORDER_FINALIZED': {
         this.finalizedDecision = msg.data.decision;
-        this.transitionToState('ended');
+        this.hasFinalizedOrder = true;
+        // Keep call active so agent can speak closing statement
         break;
       }
 
@@ -176,6 +179,8 @@ export class PhonePage {
 
     this.isStartingSession = true;
     this.isAnswering = true;
+    this.hasFinalizedOrder = false;
+    this.hasAgentSpokenGoodbye = false;
     const sessionToken = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.activeSessionToken = sessionToken;
 
@@ -220,6 +225,7 @@ export class PhonePage {
       sessionOptions.clientTools = {
         finalize_order_decision: async (parameters: any) => {
           console.log('[Phone] Client Tool finalize_order_decision:', parameters);
+          this.hasFinalizedOrder = true;
           if (parameters.final_commune) {
             const locCheck = validateLocation(
               parameters.final_commune,
@@ -269,13 +275,18 @@ export class PhonePage {
       };
 
       sessionOptions.onMessage = (message: any) => {
+        const isAgent = message.source === 'ai' || message.role === 'agent';
+        if (this.hasFinalizedOrder && isAgent) {
+          this.hasAgentSpokenGoodbye = true;
+        }
+
         this.ws?.send(
           JSON.stringify({
             type: 'TRANSCRIPT_UPDATE',
             data: {
               turn: {
                 id: `eleven-${Date.now()}`,
-                speaker: message.source === 'ai' ? 'agent' : 'user',
+                speaker: isAgent ? 'agent' : 'user',
                 text: message.message,
                 timestamp: Date.now(),
                 isFinal: true,
@@ -283,6 +294,19 @@ export class PhonePage {
             },
           })
         );
+      };
+
+      sessionOptions.onModeChange = ({ mode }: { mode: 'speaking' | 'listening' }) => {
+        if (this.hasFinalizedOrder && (this.hasAgentSpokenGoodbye || mode === 'listening')) {
+          if (mode === 'listening') {
+            console.log('[Phone] Agent completed goodbye statement. Hanging up call in 1.5s...');
+            setTimeout(() => {
+              if (this.currentCallState === 'active') {
+                this.ws?.send(JSON.stringify({ type: 'HANGUP_CALL' }));
+              }
+            }, 1500);
+          }
+        }
       };
 
       sessionOptions.onError = (err: any) => {
