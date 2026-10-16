@@ -8,6 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
+import { handleFinalizeOrderToolCall } from '@akadli/core';
+import { OrderConstraints } from '@akadli/adapter-contract';
 import { config, getLocalIpAddress } from './config.js';
 import {
   CallState,
@@ -457,42 +459,14 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   broadcastToAdmins(finalizedMsg);
   sendToPhone(finalizedMsg);
 
-  // Normalize final wilaya and commune via @akadli/dz-geo
-  let finalWilayaCode: WilayaCode | undefined = undefined;
-  let finalCommuneClean: string | undefined = undefined;
-
-  if (decision.final_wilaya) {
-    try {
-      const normW = normalizeWilaya(decision.final_wilaya);
-      finalWilayaCode = normW.code as WilayaCode;
-      if (decision.final_commune) {
-        const normC = normalizeCommune(decision.final_commune, normW.code);
-        finalCommuneClean = normC.canonicalCommune;
-      }
-    } catch {
-      finalWilayaCode = decision.final_wilaya as WilayaCode;
-      finalCommuneClean = decision.final_commune;
-    }
-  }
-
-  const standardizedDecision: StandardizedFinalizedOrderDecision = {
-    orderId: currentOrder?.order_id || decision.order_id,
-    status: decision.status,
-    finalSize: decision.final_size || undefined,
-    finalWilaya: finalWilayaCode,
-    finalCommune: finalCommuneClean || decision.final_commune || undefined,
-    finalAddressNote: decision.final_address_note || undefined,
-    reasonOrNotes: decision.reason_or_notes || '',
-  };
-
-  // Live Outbound Shopify Admin API Mutation
+  // Live Outbound Shopify Admin API Mutation powered by @akadli/core
   const isShopifyOrder =
     currentOrder?.source === 'shopify' ||
     Boolean(config.shopifyShopDomain && config.shopifyAccessToken);
 
   if (isShopifyOrder && config.shopifyShopDomain && config.shopifyAccessToken && currentOrder) {
     console.log(
-      `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} on store "${config.shopifyShopDomain}"...`
+      `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
     );
     try {
       const credentials = {
@@ -502,20 +476,52 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
         cancelOnRefused: 'true',
       };
 
-      const mutationResult = await shopifyProvider.applyOrderDecision(
-        currentOrder.order_id,
-        standardizedDecision,
-        credentials
+      const constraints: OrderConstraints = {
+        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
+        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
+          const match = w.match(/^(\d{2})/);
+          return (match ? match[1] : w) as WilayaCode;
+        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
+        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
+      };
+
+      const toolResult = await handleFinalizeOrderToolCall(
+        {
+          orderId: currentOrder.order_id || decision.order_id,
+          status: decision.status,
+          finalSize: decision.final_size || undefined,
+          finalWilaya: decision.final_wilaya || undefined,
+          finalCommune: decision.final_commune || undefined,
+          finalAddressNote: decision.final_address_note || undefined,
+          reasonOrNotes: decision.reason_or_notes || '',
+        },
+        shopifyProvider,
+        credentials,
+        constraints
       );
 
-      console.log(`[Shopify Live Mutation Result]:`, mutationResult);
+      console.log(`[@akadli/core Tool Result]:`, toolResult);
+
+      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
 
       const shopifyMutationMsg: WSMessage<ShopifyMutationData> = {
         type: 'SHOPIFY_MUTATION_RESULT',
         data: {
           orderId: currentOrder.order_id,
           decision: standardizedDecision,
-          mutationResult,
+          mutationResult: {
+            success: toolResult.success,
+            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+          },
           liveStore: config.shopifyShopDomain,
           timestamp: Date.now(),
         },
@@ -525,6 +531,17 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
       sendToPhone(shopifyMutationMsg);
     } catch (err: any) {
       console.error('[Shopify Mutation Error]:', err);
+      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
+      const standardizedDecision: StandardizedFinalizedOrderDecision = {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: fallbackWilaya,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
       const failureMsg: WSMessage<ShopifyMutationData> = {
         type: 'SHOPIFY_MUTATION_RESULT',
         data: {

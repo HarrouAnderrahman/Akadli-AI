@@ -11,8 +11,32 @@ export interface FinalizeOrderToolResult {
   success: boolean;
   message: string;
   externalStatus?: string;
+  rawResponse?: unknown;
   decision?: FinalizedOrderDecision;
   error?: string;
+}
+
+function normalizeRawToolPayload(raw: any): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+
+  let finalWilaya = raw.finalWilaya ?? raw.final_wilaya;
+  if (finalWilaya) {
+    try {
+      finalWilaya = normalizeWilaya(finalWilaya).code;
+    } catch {
+      // Keep as-is if unparseable to let schema validation handle it
+    }
+  }
+
+  return {
+    orderId: raw.orderId ?? raw.order_id,
+    status: raw.status,
+    finalSize: raw.finalSize ?? raw.final_size,
+    finalWilaya,
+    finalCommune: raw.finalCommune ?? raw.final_commune,
+    finalAddressNote: raw.finalAddressNote ?? raw.final_address_note,
+    reasonOrNotes: raw.reasonOrNotes ?? raw.reason_or_notes ?? ""
+  };
 }
 
 /**
@@ -27,8 +51,9 @@ export async function handleFinalizeOrderToolCall(
   credentials: Record<string, string>,
   constraints?: OrderConstraints
 ): Promise<FinalizeOrderToolResult> {
-  // 1. Validate payload against schema
-  const parseResult = FinalizedOrderDecisionSchema.safeParse(rawToolPayload);
+  // 1. Normalize and validate payload against schema
+  const normalized = normalizeRawToolPayload(rawToolPayload);
+  const parseResult = FinalizedOrderDecisionSchema.safeParse(normalized);
   if (!parseResult.success) {
     const errorMsg = parseResult.error.errors.map((e) => e.message).join("; ");
     return {
@@ -93,6 +118,7 @@ export async function handleFinalizeOrderToolCall(
     return {
       success: providerResult.success,
       externalStatus: providerResult.externalStatus,
+      rawResponse: providerResult.rawResponse,
       decision,
       message: `Order ${decision.orderId} successfully updated with status ${decision.status}.`
     };

@@ -145,5 +145,29 @@ describe("@akadli/core", () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain("Invalid finalize_order_decision payload");
     });
+
+    it("should accept raw snake_case ElevenLabs tool payload and normalize Wilaya string", async () => {
+      const order = createStandardizedDzOrder(baseOrderParams);
+      const snakePayload = {
+        order_id: "ord_dz_999",
+        status: "MODIFIED",
+        final_size: "42",
+        final_wilaya: "13 - Tlemcen",
+        final_commune: "Mansoura",
+        reason_or_notes: "Customer confirmed over voice"
+      };
+
+      const result = await handleFinalizeOrderToolCall(
+        snakePayload,
+        mockProvider,
+        { apiKey: "test_key" },
+        order.constraints
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.decision?.orderId).toBe("ord_dz_999");
+      expect(result.decision?.finalWilaya).toBe("13");
+      expect(result.decision?.finalCommune).toBe("Mansourah");
+    });
   });
 });
