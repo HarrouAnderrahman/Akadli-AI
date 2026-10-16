@@ -688,10 +688,10 @@ const PORT = config.serverPort;
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIpAddress();
   console.log(`=======================================================`);
-  console.log(`🚀 Akadli-AI Playground Sandbox Server Running!`);
-  console.log(`📡 Local LAN IP:    ${ip}`);
-  console.log(`🔌 Backend API/WS:  http://${ip}:${PORT}`);
-  console.log(`💻 Admin Dashboard: https://${ip}:${config.port}/admin`);
-  console.log(`📱 Mobile Receiver: https://${ip}:${config.port}/phone`);
+  console.log(`Akadli-AI Playground Sandbox Server Running!`);
+  console.log(`Local LAN IP:    ${ip}`);
+  console.log(`Backend API/WS:  http://${ip}:${PORT}`);
+  console.log(`Admin Dashboard: https://${ip}:${config.port}/admin`);
+  console.log(`Mobile Receiver: https://${ip}:${config.port}/phone`);
   console.log(`=======================================================`);
 });

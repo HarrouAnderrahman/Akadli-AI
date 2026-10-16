@@ -9,12 +9,21 @@ export default defineConfig({
     https: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:3001',
+        target: 'ws://127.0.0.1:3001',
         ws: true,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err: any) => {
+            if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') {
+              return;
+            }
+            console.error('[Vite Proxy Error]:', err.message);
+          });
+        },
       },
     },
   },
