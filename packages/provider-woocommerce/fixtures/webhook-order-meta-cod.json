@@ -1,0 +1,78 @@
+{
+  "id": 87654,
+  "number": "87654",
+  "order_key": "wc_order_dz87654",
+  "status": "pending",
+  "currency": "DZD",
+  "store_name": "Boutique Kabyle COD",
+  "total": "8900.00",
+  "billing": {
+    "first_name": "Amine",
+    "last_name": "Benali",
+    "company": "",
+    "address_1": "",
+    "address_2": "",
+    "city": "",
+    "state": "",
+    "postcode": "",
+    "country": "DZ",
+    "email": "amine.benali@example.com",
+    "phone": ""
+  },
+  "shipping": {
+    "first_name": "Amine",
+    "last_name": "Benali",
+    "company": "",
+    "address_1": "",
+    "address_2": "",
+    "city": "",
+    "state": "",
+    "postcode": "",
+    "country": "DZ",
+    "phone": ""
+  },
+  "payment_method": "cod",
+  "payment_method_title": "Paiement à la livraison",
+  "line_items": [
+    {
+      "id": 102,
+      "name": "Robe Traditionnelle Chaouie",
+      "product_id": 8801,
+      "variation_id": 8802,
+      "quantity": 1,
+      "subtotal": "8900.00",
+      "total": "8900.00",
+      "sku": "ROBE-CH-L",
+      "price": 8900,
+      "meta_data": [
+        {
+          "id": 301,
+          "key": "taille",
+          "value": "L"
+        }
+      ]
+    }
+  ],
+  "meta_data": [
+    {
+      "id": 501,
+      "key": "_billing_phone",
+      "value": "0660987654"
+    },
+    {
+      "id": 502,
+      "key": "_billing_wilaya",
+      "value": "60 - Barika"
+    },
+    {
+      "id": 503,
+      "key": "commune",
+      "value": "Barika"
+    },
+    {
+      "id": 504,
+      "key": "adresse",
+      "value": "Centre ville en face de la mosquée"
+    }
+  ]
+}

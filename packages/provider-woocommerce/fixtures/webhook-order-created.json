@@ -1,0 +1,57 @@
+{
+  "id": 54321,
+  "number": "54321",
+  "order_key": "wc_order_dz123456",
+  "status": "processing",
+  "currency": "DZD",
+  "store_name": "WooCommerce DZ Store",
+  "total": "6500.00",
+  "billing": {
+    "first_name": "Karim",
+    "last_name": "Mansouri",
+    "company": "",
+    "address_1": "Rue de la paix, près de la poste",
+    "address_2": "",
+    "city": "Maghnia",
+    "state": "DZ-13",
+    "postcode": "13000",
+    "country": "DZ",
+    "email": "karim.mansouri@example.com",
+    "phone": "0550123456"
+  },
+  "shipping": {
+    "first_name": "Karim",
+    "last_name": "Mansouri",
+    "company": "",
+    "address_1": "Rue de la paix, près de la poste",
+    "address_2": "",
+    "city": "Maghnia",
+    "state": "DZ-13",
+    "postcode": "13000",
+    "country": "DZ",
+    "phone": "0550123456"
+  },
+  "payment_method": "cod",
+  "payment_method_title": "Cash on Delivery",
+  "line_items": [
+    {
+      "id": 101,
+      "name": "Chaussures de Sport Orthopédiques",
+      "product_id": 9901,
+      "variation_id": 9902,
+      "quantity": 1,
+      "subtotal": "6500.00",
+      "total": "6500.00",
+      "sku": "SPORT-DZ-42",
+      "price": 6500,
+      "meta_data": [
+        {
+          "id": 201,
+          "key": "pa_size",
+          "value": "42"
+        }
+      ]
+    }
+  ],
+  "meta_data": []
+}
