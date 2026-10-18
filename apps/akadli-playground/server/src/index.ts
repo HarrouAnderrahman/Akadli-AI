@@ -134,7 +134,10 @@ app.get('/api/status', (req, res) => {
     phoneConnected: phoneSocket !== null && phoneSocket.readyState === WebSocket.OPEN,
     callState: currentCallState,
     defaultAgentId: config.elevenLabsAgentId,
-    shopifyConfigured: Boolean(config.shopifyShopDomain && config.shopifyAccessToken),
+    shopifyConfigured: Boolean(
+      config.shopifyShopDomain &&
+        (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
+    ),
     shopifyDomain: config.shopifyShopDomain || null,
     shopifyApiVersion: config.shopifyApiVersion,
     youcanConfigured: Boolean(config.youcanAccessToken),
@@ -621,9 +624,13 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
 
   // Live Outbound Order Mutations powered by @akadli/core
   const isYouCanOrder = currentOrder?.source === 'youcan';
+  const hasShopifyCreds = Boolean(
+    config.shopifyShopDomain &&
+      (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
+  );
   const isShopifyOrder =
     currentOrder?.source === 'shopify' ||
-    (!isYouCanOrder && Boolean(config.shopifyShopDomain && config.shopifyAccessToken));
+    (!isYouCanOrder && hasShopifyCreds);
 
   if (isYouCanOrder && currentOrder) {
     console.log(
@@ -720,17 +727,25 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
       };
       broadcastToAdmins(failureMsg);
     }
-  } else if (isShopifyOrder && config.shopifyShopDomain && config.shopifyAccessToken && currentOrder) {
+  } else if (isShopifyOrder && hasShopifyCreds && currentOrder) {
     console.log(
       `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
     );
     try {
-      const credentials = {
+      const credentials: Record<string, string> = {
         shopDomain: config.shopifyShopDomain,
-        accessToken: config.shopifyAccessToken,
         apiVersion: config.shopifyApiVersion || '2025-01',
         cancelOnRefused: 'true',
       };
+      if (config.shopifyAccessToken) {
+        credentials.accessToken = config.shopifyAccessToken;
+      }
+      if (config.shopifyClientId) {
+        credentials.clientId = config.shopifyClientId;
+      }
+      if (config.shopifyClientSecret) {
+        credentials.clientSecret = config.shopifyClientSecret;
+      }
 
       const constraints: OrderConstraints = {
         allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],

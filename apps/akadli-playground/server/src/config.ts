@@ -36,8 +36,18 @@ export const config = {
   get shopifyAccessToken(): string {
     return (process.env.SHOPIFY_ACCESS_TOKEN || '').trim();
   },
+  get shopifyClientId(): string {
+    return (process.env.SHOPIFY_CLIENT_ID || '').trim();
+  },
+  get shopifyClientSecret(): string {
+    return (process.env.SHOPIFY_CLIENT_SECRET || '').trim();
+  },
   get shopifyWebhookSecret(): string {
-    return (process.env.SHOPIFY_WEBHOOK_SECRET || '').trim();
+    return (
+      process.env.SHOPIFY_WEBHOOK_SECRET ||
+      process.env.SHOPIFY_CLIENT_SECRET ||
+      ''
+    ).trim();
   },
   get shopifyApiVersion(): string {
     return (process.env.SHOPIFY_API_VERSION || '2025-01').trim();
