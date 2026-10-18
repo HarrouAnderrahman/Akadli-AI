@@ -154,8 +154,8 @@ On the `/admin` dashboard under **Call Dispatch -> Simulate Shopify Webhook**:
 ### 4. Live Shopify Admin API Mutation
 When a call concludes and the agent finalizes the order (`ORDER_FINALIZED`):
 - If `SHOPIFY_SHOP_DOMAIN` and `SHOPIFY_ACCESS_TOKEN` are configured, `ShopifyProvider.applyOrderDecision` automatically updates the live Shopify order:
-  - **CONFIRMED**: Tags order with `dz-confirmed` and appends call notes.
-  - **MODIFIED**: Updates customer `shipping_address` (Wilaya, Commune, Address line), tags with `dz-modified`, and notes size change requests.
-  - **REFUSED**: Tags with `dz-refused` and cancels the order via `POST /admin/api/2025-01/orders/{id}/cancel.json`.
+  - **CONFIRMED**: Tags order with `akadli-confirmed` and appends call notes.
+  - **MODIFIED**: Updates customer `shipping_address` (Wilaya, Commune, Address line), tags with `akadli-modified` (and `akadli-size-{size}` if size changed), and notes size change requests.
+  - **REFUSED**: Tags with `akadli-refused` and cancels the order via `POST /admin/api/2025-01/orders/{id}/cancel.json`.
 - The live REST API response is rendered directly in the `/admin` decision card with status, timestamp, and raw JSON payload details.
 

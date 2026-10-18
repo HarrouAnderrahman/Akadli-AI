@@ -32,6 +32,9 @@ importers:
       '@akadli/provider-shopify':
         specifier: workspace:*
         version: link:../../packages/provider-shopify
+      '@akadli/provider-youcan':
+        specifier: workspace:*
+        version: link:../../packages/provider-youcan
       '@elevenlabs/client':
         specifier: ^1.28.0
         version: 1.28.0(@types/dom-mediacapture-record@1.0.22)

@@ -65,6 +65,9 @@ export class AdminPage {
   private shopifyConfigured = false;
   private shopifyDomain: string | null = null;
   private shopifyMutationResult: ShopifyMutationData | null = null;
+  private youcanConfigured = false;
+  private youcanApiBaseUrl: string | null = null;
+  private youcanMutationResult: ShopifyMutationData | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -98,7 +101,10 @@ export class AdminPage {
         }
         this.shopifyConfigured = Boolean(data.shopifyConfigured);
         this.shopifyDomain = data.shopifyDomain || null;
+        this.youcanConfigured = Boolean(data.youcanConfigured);
+        this.youcanApiBaseUrl = data.youcanApiBaseUrl || null;
         this.updateShopifyStatusUi();
+        this.updateYouCanStatusUi();
       }
     } catch (e) {}
   }
@@ -146,6 +152,7 @@ export class AdminPage {
         this.transcripts = [];
         this.finalizedDecision = null;
         this.shopifyMutationResult = null;
+        this.youcanMutationResult = null;
         this.stopTimer();
         this.updateStatusBadge();
         this.renderTranscripts();
@@ -191,6 +198,21 @@ export class AdminPage {
 
       case 'SHOPIFY_MUTATION_RESULT': {
         this.shopifyMutationResult = msg.data;
+        this.renderDecisionSummary();
+        break;
+      }
+
+      case 'YOUCAN_WEBHOOK_RECEIVED': {
+        if (msg.data?.order) {
+          this.order = msg.data.order;
+          this.updateFormFieldsFromOrder();
+          this.updateOrderSyncBadge();
+        }
+        break;
+      }
+
+      case 'YOUCAN_MUTATION_RESULT': {
+        this.youcanMutationResult = msg.data;
         this.renderDecisionSummary();
         break;
       }
@@ -258,6 +280,12 @@ export class AdminPage {
               <span class="text-[11px] text-zinc-400">Shopify Sandbox</span>
             </div>
 
+            <!-- YouCan Connection Status -->
+            <div id="youcan-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+              <span class="text-[11px] text-zinc-400">YouCan Sandbox</span>
+            </div>
+
             <!-- Connection Status -->
             <div id="phone-status-pill" class="flex items-center gap-2 text-xs text-zinc-400">
               <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
@@ -303,11 +331,11 @@ export class AdminPage {
                 </button>
               </div>
 
-              <!-- Shopify Webhook Simulation -->
+              <!-- Webhook Simulations -->
               <div class="pt-3 border-t border-zinc-800/60 space-y-2">
                 <div class="flex items-center justify-between text-[11px] text-zinc-400">
                   <span>Simulate Shopify Webhook</span>
-                  <span class="font-mono text-[10px] text-zinc-500">fixtures/*.json</span>
+                  <span class="font-mono text-[10px] text-zinc-500">Shopify fixtures</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                   <button id="simulate-shopify-standard-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate standard Shopify order created webhook">
@@ -315,6 +343,19 @@ export class AdminPage {
                   </button>
                   <button id="simulate-shopify-codform-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate Shopify COD form note attributes webhook">
                     <span>COD Form Note</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
+                  <span>Simulate YouCan Webhook</span>
+                  <span class="font-mono text-[10px] text-zinc-500">YouCan (.shop) fixtures</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button id="simulate-youcan-standard-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate standard YouCan order created webhook">
+                    <span>YouCan: Standard Order</span>
+                  </button>
+                  <button id="simulate-youcan-extrafields-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate YouCan 1-Page COD form extra_fields webhook">
+                    <span>YouCan: 1-Page COD Form</span>
                   </button>
                 </div>
               </div>
@@ -643,6 +684,15 @@ export class AdminPage {
     this.container.querySelector('#simulate-shopify-codform-btn')?.addEventListener('click', () => {
       this.handleSimulateShopifyWebhook('cod-form');
     });
+
+    // YouCan webhook simulations
+    this.container.querySelector('#simulate-youcan-standard-btn')?.addEventListener('click', () => {
+      this.handleSimulateYouCanWebhook('standard');
+    });
+
+    this.container.querySelector('#simulate-youcan-extrafields-btn')?.addEventListener('click', () => {
+      this.handleSimulateYouCanWebhook('extra-fields');
+    });
   }
 
   private syncFormToJson() {
@@ -879,6 +929,42 @@ export class AdminPage {
       `;
     }
 
+    let youcanMutationHtml = '';
+    if (this.youcanMutationResult) {
+      const res = this.youcanMutationResult;
+      const mut = res.mutationResult;
+      const isSuccess = mut.success;
+      const statusBadge = isSuccess
+        ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">UPDATED</span>'
+        : '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-rose-400">MUTATION FAILED</span>';
+
+      const storeLabel = res.liveStore ? `${res.liveStore} (#${res.orderId})` : `#${res.orderId}`;
+
+      youcanMutationHtml = `
+        <div class="mt-3 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-zinc-200">YouCan REST API</span>
+              <span class="text-zinc-500 font-mono text-[11px]">${storeLabel}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>External Status: <code class="text-zinc-200">${mut.externalStatus}</code></span>
+            <span class="text-zinc-500 font-mono text-[10px]">${new Date(res.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details class="cursor-pointer pt-0.5">
+            <summary class="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono select-none">API Mutation Details</summary>
+            <pre class="mt-1 p-2 rounded bg-zinc-900 border border-zinc-800/80 text-[10px] font-mono text-zinc-400 overflow-x-auto">${JSON.stringify(
+              mut.rawResponse ?? mut,
+              null,
+              2
+            )}</pre>
+          </details>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
@@ -911,6 +997,7 @@ export class AdminPage {
         }
 
         ${shopifyMutationHtml}
+        ${youcanMutationHtml}
 
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
@@ -940,6 +1027,23 @@ export class AdminPage {
     }
   }
 
+  private updateYouCanStatusUi() {
+    const pill = this.container.querySelector('#youcan-status-pill') as HTMLElement | null;
+    if (!pill) return;
+    if (this.youcanConfigured && this.youcanApiBaseUrl) {
+      const cleanUrl = this.youcanApiBaseUrl.replace(/^https?:\/\//, '');
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-indigo-400 px-2.5 py-1 rounded-md border border-indigo-500/20 bg-indigo-500/10';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span><span class="font-mono text-[11px]">${cleanUrl}</span>`;
+      pill.title = 'Live YouCan REST API Connected';
+    } else {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-zinc-400 px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span><span class="text-[11px]">YouCan Sandbox</span>`;
+      pill.title = 'YouCan credentials not configured (Webhook test & local sandbox mode)';
+    }
+  }
+
   private updateOrderSyncBadge() {
     const badge = this.container.querySelector('#order-sync-badge');
     if (!badge) return;
@@ -947,6 +1051,10 @@ export class AdminPage {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-emerald-500/20 bg-emerald-500/10 text-emerald-400';
       badge.textContent = `Shopify: #${this.order.order_id}`;
+    } else if (this.order.source === 'youcan') {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-indigo-500/20 bg-indigo-500/10 text-indigo-400';
+      badge.textContent = `YouCan: #${this.order.order_id}`;
     } else {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400';
@@ -993,6 +1101,22 @@ export class AdminPage {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to simulate Shopify webhook');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  private async handleSimulateYouCanWebhook(fixture: 'standard' | 'extra-fields') {
+    try {
+      const res = await fetch('/api/webhooks/youcan/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixture }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to simulate YouCan webhook');
       }
     } catch (err: any) {
       alert(err.message);

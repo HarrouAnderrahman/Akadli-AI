@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
+import { YouCanProvider } from '@akadli/provider-youcan';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
 import { OrderConstraints } from '@akadli/adapter-contract';
@@ -59,7 +60,23 @@ function getShopifyFixture(filename: string): string {
   throw new Error(`Shopify fixture "${filename}" not found in candidate paths.`);
 }
 
+function getYouCanFixture(filename: string): string {
+  const candidatePaths = [
+    path.resolve(__dirname, '../../../../packages/provider-youcan/fixtures', filename),
+    path.resolve(__dirname, '../../../../../packages/provider-youcan/fixtures', filename),
+    path.resolve(process.cwd(), 'packages/provider-youcan/fixtures', filename),
+    path.resolve(process.cwd(), '../../packages/provider-youcan/fixtures', filename),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf-8');
+    }
+  }
+  throw new Error(`YouCan fixture "${filename}" not found in candidate paths.`);
+}
+
 const shopifyProvider = new ShopifyProvider();
+const youcanProvider = new YouCanProvider();
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -120,6 +137,8 @@ app.get('/api/status', (req, res) => {
     shopifyConfigured: Boolean(config.shopifyShopDomain && config.shopifyAccessToken),
     shopifyDomain: config.shopifyShopDomain || null,
     shopifyApiVersion: config.shopifyApiVersion,
+    youcanConfigured: Boolean(config.youcanAccessToken),
+    youcanApiBaseUrl: config.youcanApiBaseUrl,
   });
 });
 
@@ -271,6 +290,147 @@ app.post('/api/webhooks/shopify/simulate', async (req, res) => {
     }
   } catch (err: any) {
     console.error('[Shopify Simulate Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Real YouCan Webhook Ingress (order.created)
+app.post('/api/webhooks/youcan', async (req, res) => {
+  try {
+    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
+    const headers = req.headers as Record<string, string>;
+
+    // 1. Cryptographically verify HMAC-SHA256 signature if secret is configured
+    if (config.youcanWebhookSecret) {
+      const isValid = await youcanProvider.verifyWebhook(
+        headers,
+        rawBody,
+        config.youcanWebhookSecret
+      );
+      if (!isValid) {
+        console.warn('[YouCan Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
+        return res.status(401).json({
+          error: 'Invalid YouCan HMAC-SHA256 signature',
+        });
+      }
+    } else {
+      console.log(
+        '[YouCan Webhook] YOUCAN_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
+      );
+    }
+
+    // 2. Parse payload into canonical StandardizedDzOrder
+    const standardizedOrder = await youcanProvider.parseWebhookOrder(req.body);
+    console.log(
+      `[YouCan Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
+    );
+
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'youcan');
+    orderPayload.raw_order = req.body;
+
+    // 3. Broadcast webhook receipt to admin dashboard
+    broadcastToAdmins({
+      type: 'YOUCAN_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: req.body,
+      },
+    });
+
+    // 4. Trigger incoming call on connected phone receiver
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        message: 'YouCan order ingested and mobile receiver is ringing',
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'YouCan order ingested into state, but no mobile phone client is connected',
+      });
+    }
+  } catch (err: any) {
+    console.error('[YouCan Webhook Error]:', err);
+    res.status(400).json({ error: err.message || 'Failed to process YouCan webhook' });
+  }
+});
+
+// Local YouCan Fixture Simulation Endpoint
+app.post('/api/webhooks/youcan/simulate', async (req, res) => {
+  try {
+    const fixtureType =
+      req.body?.fixture === 'extra-fields' || req.body?.fixture === 'cod-form'
+        ? 'webhook-order-extra-fields.json'
+        : 'webhook-order-created.json';
+    const rawFixtureBody = getYouCanFixture(fixtureType);
+    const parsedPayload = JSON.parse(rawFixtureBody);
+
+    const secret = config.youcanWebhookSecret || 'simulated_youcan_secret_key';
+    const computedHmac = createHmac('sha256', secret)
+      .update(Buffer.from(rawFixtureBody, 'utf8'))
+      .digest('hex');
+
+    const headers: Record<string, string> = {
+      'x-youcan-signature': computedHmac,
+      'content-type': 'application/json',
+    };
+
+    // Verify signature through provider
+    const isSignatureValid = await youcanProvider.verifyWebhook(
+      headers,
+      rawFixtureBody,
+      secret
+    );
+
+    // Parse into canonical order
+    const standardizedOrder = await youcanProvider.parseWebhookOrder(parsedPayload);
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'youcan');
+    orderPayload.raw_order = parsedPayload;
+
+    console.log(
+      `[YouCan Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
+    );
+
+    broadcastToAdmins({
+      type: 'YOUCAN_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: parsedPayload,
+        simulated: true,
+        fixture: fixtureType,
+      },
+    });
+
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'YouCan order simulated and loaded, but phone client is offline',
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    }
+  } catch (err: any) {
+    console.error('[YouCan Simulate Error]:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -459,12 +619,108 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   broadcastToAdmins(finalizedMsg);
   sendToPhone(finalizedMsg);
 
-  // Live Outbound Shopify Admin API Mutation powered by @akadli/core
+  // Live Outbound Order Mutations powered by @akadli/core
+  const isYouCanOrder = currentOrder?.source === 'youcan';
   const isShopifyOrder =
     currentOrder?.source === 'shopify' ||
-    Boolean(config.shopifyShopDomain && config.shopifyAccessToken);
+    (!isYouCanOrder && Boolean(config.shopifyShopDomain && config.shopifyAccessToken));
 
-  if (isShopifyOrder && config.shopifyShopDomain && config.shopifyAccessToken && currentOrder) {
+  if (isYouCanOrder && currentOrder) {
+    console.log(
+      `[YouCan Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
+    );
+    try {
+      const credentials = {
+        accessToken: config.youcanAccessToken || 'simulated_youcan_token',
+        baseUrl: config.youcanApiBaseUrl || 'https://api.youcan.shop',
+        closeOnRefused: 'true',
+      };
+
+      const constraints: OrderConstraints = {
+        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
+        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
+          const match = w.match(/^(\d{2})/);
+          return (match ? match[1] : w) as WilayaCode;
+        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
+        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
+      };
+
+      const toolResult = await handleFinalizeOrderToolCall(
+        {
+          orderId: currentOrder.order_id || decision.order_id,
+          status: decision.status,
+          finalSize: decision.final_size || undefined,
+          finalWilaya: decision.final_wilaya || undefined,
+          finalCommune: decision.final_commune || undefined,
+          finalAddressNote: decision.final_address_note || undefined,
+          reasonOrNotes: decision.reason_or_notes || '',
+        },
+        youcanProvider,
+        credentials,
+        constraints
+      );
+
+      console.log(`[@akadli/core YouCan Tool Result]:`, toolResult);
+
+      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const youcanMutationMsg: WSMessage<ShopifyMutationData> = {
+        type: 'YOUCAN_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: toolResult.success,
+            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+          },
+          liveStore: config.youcanApiBaseUrl,
+          provider: 'youcan',
+          timestamp: Date.now(),
+        },
+      };
+
+      broadcastToAdmins(youcanMutationMsg);
+      sendToPhone(youcanMutationMsg);
+    } catch (err: any) {
+      console.error('[YouCan Mutation Error]:', err);
+      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
+      const standardizedDecision: StandardizedFinalizedOrderDecision = {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: fallbackWilaya,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const failureMsg: WSMessage<ShopifyMutationData> = {
+        type: 'YOUCAN_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: false,
+            externalStatus: 'MUTATION_EXCEPTION',
+            rawResponse: { error: err.message },
+          },
+          liveStore: config.youcanApiBaseUrl,
+          provider: 'youcan',
+          timestamp: Date.now(),
+        },
+      };
+      broadcastToAdmins(failureMsg);
+    }
+  } else if (isShopifyOrder && config.shopifyShopDomain && config.shopifyAccessToken && currentOrder) {
     console.log(
       `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
     );

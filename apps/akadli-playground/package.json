@@ -20,6 +20,7 @@
     "@akadli/core": "workspace:*",
     "@akadli/dz-geo": "workspace:*",
     "@akadli/provider-shopify": "workspace:*",
+    "@akadli/provider-youcan": "workspace:*",
     "@elevenlabs/client": "^1.28.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -42,6 +42,15 @@ export const config = {
   get shopifyApiVersion(): string {
     return (process.env.SHOPIFY_API_VERSION || '2025-01').trim();
   },
+  get youcanAccessToken(): string {
+    return (process.env.YOUCAN_ACCESS_TOKEN || '').trim();
+  },
+  get youcanWebhookSecret(): string {
+    return (process.env.YOUCAN_WEBHOOK_SECRET || '').trim();
+  },
+  get youcanApiBaseUrl(): string {
+    return (process.env.YOUCAN_API_BASE_URL || 'https://api.youcan.shop').trim();
+  },
 };
 
 export function getLocalIpAddress(): string {

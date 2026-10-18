@@ -32,7 +32,7 @@ export interface OrderPayload {
   current_commune: string;
   current_address_note: string;
   constraints: OrderConstraints;
-  source?: 'manual' | 'shopify' | string;
+  source?: 'manual' | 'shopify' | 'youcan' | string;
   raw_order?: unknown;
 }
 
@@ -144,6 +144,8 @@ export type WSMessageType =
   | 'ORDER_FINALIZED'
   | 'SHOPIFY_WEBHOOK_RECEIVED'
   | 'SHOPIFY_MUTATION_RESULT'
+  | 'YOUCAN_WEBHOOK_RECEIVED'
+  | 'YOUCAN_MUTATION_RESULT'
   | 'ERROR'
   | 'PING'
   | 'PONG';
@@ -157,6 +159,7 @@ export interface ShopifyMutationData {
     rawResponse?: unknown;
   };
   liveStore?: string;
+  provider?: 'shopify' | 'youcan';
   timestamp: number;
 }
 
