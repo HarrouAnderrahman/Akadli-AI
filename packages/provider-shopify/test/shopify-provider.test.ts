@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { ShopifyProvider } from "../src/index.js";
+import { ShopifyProvider, clearShopifyTokenCache } from "../src/index.js";
 
 const __dirname = resolve(fileURLToPath(import.meta.url), "..");
 
@@ -74,6 +74,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   capturedPutRequests = [];
   capturedPostRequests = [];
+  clearShopifyTokenCache();
   server.resetHandlers();
 });
 afterAll(() => server.close());
@@ -212,9 +213,9 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
         tags: "akadli-modified, akadli-size-43",
         note: "[Akadli-AI] Order MODIFIED: Size -> 43; Wilaya -> 13; Commune -> Maghnia; Note -> Nouvelle adresse près du stade; Details: Taille changée de 42 à 43",
         shipping_address: {
-          province: "13",
-          city: "Maghnia",
-          address1: "Nouvelle adresse près du stade"
+          city: "Maghnia (13)",
+          address1: "Nouvelle adresse près du stade",
+          address2: "Wilaya: 13 | Commune: Maghnia"
         }
       }
     });
@@ -274,5 +275,121 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
 
     expect(result.success).toBe(false);
     expect(result.externalStatus).toBe("UNAUTHORIZED");
+  });
+
+  it("8. parses real-world Algerian live Shopify order with missing province (null) into Wilaya 13 - Tlemcen and Commune Maghnia", async () => {
+    const liveAlgeriaPayload = {
+      id: 9988776655,
+      name: "#1002",
+      shop_name: "DzShop Live",
+      currency: "DZD",
+      total_price: "5000",
+      line_items: [
+        {
+          id: 11223344,
+          title: "Pack Chaussures",
+          variant_title: "42",
+          quantity: 1,
+          price: "5000"
+        }
+      ],
+      shipping_address: {
+        first_name: "Walid",
+        last_name: "Benslimane",
+        name: "Walid Benslimane",
+        phone: "0770987654",
+        province: null,
+        province_code: null,
+        city: "Tlemcen",
+        zip: "13000",
+        address1: "Maghnia",
+        address2: null,
+        country: "Algeria",
+        country_code: "DZ"
+      },
+      billing_address: null,
+      customer: {
+        first_name: "Walid",
+        last_name: "Benslimane",
+        phone: "0770987654"
+      },
+      note_attributes: []
+    };
+
+    const order = await provider.parseWebhookOrder(liveAlgeriaPayload);
+
+    expect(order.orderId).toBe("9988776655");
+    expect(order.customerPhone).toBe("0770987654");
+    expect(order.currentWilaya).toBe("13"); // 13 - Tlemcen
+    expect(order.currentCommune).toBe("Maghnia");
+    expect(order.constraints.allowedWilayas).toContain("13");
+    expect(order.constraints.allowedCommunes).toContain("Maghnia");
+    expect(order.constraints.allowedCommunes).toContain("Tlemcen");
+  });
+
+  it("9. supports OAuth client_credentials token exchange and caches token in memory", async () => {
+    let tokenExchangeCount = 0;
+    server.use(
+      http.post(`https://${SHOP_DOMAIN}/admin/oauth/access_token`, async ({ request }) => {
+        tokenExchangeCount++;
+        const text = await request.text();
+        const params = new URLSearchParams(text);
+
+        if (
+          params.get("grant_type") === "client_credentials" &&
+          params.get("client_id") === "test_client_id_dz" &&
+          params.get("client_secret") === "test_client_secret_dz"
+        ) {
+          return HttpResponse.json({
+            access_token: "shpat_exchanged_oauth_token_789",
+            scope: "write_orders,read_orders",
+            expires_in: 3600
+          });
+        }
+        return HttpResponse.json({ error: "invalid_client" }, { status: 401 });
+      })
+    );
+
+    const oauthCreds = {
+      shopDomain: SHOP_DOMAIN,
+      clientId: "test_client_id_dz",
+      clientSecret: "test_client_secret_dz",
+      apiVersion: API_VERSION,
+      cancelOnRefused: "true"
+    };
+
+    // First call: should trigger OAuth token exchange POST
+    const firstResult = await provider.applyOrderDecision(
+      "1029384756",
+      {
+        orderId: "1029384756",
+        status: "CONFIRMED"
+      },
+      oauthCreds
+    );
+
+    expect(firstResult.success).toBe(true);
+    expect(tokenExchangeCount).toBe(1);
+    expect(capturedPutRequests.length).toBe(1);
+    expect(capturedPutRequests[0].headers.get("X-Shopify-Access-Token")).toBe(
+      "shpat_exchanged_oauth_token_789"
+    );
+
+    // Second call: should reuse token from in-memory cache without repeating exchange
+    const secondResult = await provider.applyOrderDecision(
+      "1029384756",
+      {
+        orderId: "1029384756",
+        status: "CONFIRMED"
+      },
+      oauthCreds
+    );
+
+    expect(secondResult.success).toBe(true);
+    expect(tokenExchangeCount).toBe(1); // Cached in memory!
+    expect(capturedPutRequests.length).toBe(2);
+    expect(capturedPutRequests[1].headers.get("X-Shopify-Access-Token")).toBe(
+      "shpat_exchanged_oauth_token_789"
+    );
   });
 });
