@@ -22,6 +22,7 @@ export const ShopifyAddressSchema = z.object({
   province: z.string().nullable().optional(),
   province_code: z.string().nullable().optional(),
   city: z.string().nullable().optional(),
+  zip: z.string().nullable().optional(),
   address1: z.string().nullable().optional(),
   address2: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
@@ -54,11 +55,31 @@ export type ShopifyOrderWebhookPayload = z.infer<
   typeof ShopifyOrderWebhookPayloadSchema
 >;
 
-export const ShopifyCredentialsSchema = z.object({
-  shopDomain: z.string().min(1, "shopDomain is required"),
-  accessToken: z.string().min(1, "accessToken is required"),
-  apiVersion: z.string().default("2024-04"),
-  cancelOnRefused: z.string().default("true")
-});
+export const ShopifyCredentialsSchema = z
+  .object({
+    shopDomain: z.string().min(1, "shopDomain is required"),
+    accessToken: z.string().optional(),
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    apiVersion: z.string().default("2024-04"),
+    cancelOnRefused: z.string().default("true")
+  })
+  .superRefine((creds, ctx) => {
+    const hasAccessToken = Boolean(creds.accessToken && creds.accessToken.trim());
+    const hasClientCredentials = Boolean(
+      creds.clientId &&
+        creds.clientId.trim() &&
+        creds.clientSecret &&
+        creds.clientSecret.trim()
+    );
+
+    if (!hasAccessToken && !hasClientCredentials) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Must provide either accessToken or both clientId and clientSecret."
+      });
+    }
+  });
 
 export type ShopifyCredentials = z.infer<typeof ShopifyCredentialsSchema>;
