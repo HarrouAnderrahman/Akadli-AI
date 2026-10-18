@@ -32,6 +32,9 @@ importers:
       '@akadli/provider-shopify':
         specifier: workspace:*
         version: link:../../packages/provider-shopify
+      '@akadli/provider-woocommerce':
+        specifier: workspace:*
+        version: link:../../packages/provider-woocommerce
       '@akadli/provider-youcan':
         specifier: workspace:*
         version: link:../../packages/provider-youcan
@@ -140,6 +143,34 @@ importers:
         version: 3.2.7(@types/node@22.20.5)(jiti@1.21.7)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(tsx@4.23.15)
 
   packages/provider-shopify:
+    dependencies:
+      '@akadli/adapter-contract':
+        specifier: workspace:*
+        version: link:../adapter-contract
+      '@akadli/core':
+        specifier: workspace:*
+        version: link:../core
+      '@akadli/dz-geo':
+        specifier: workspace:*
+        version: link:../dz-geo
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.9
+        version: 22.20.5
+      msw:
+        specifier: ^2.7.3
+        version: 2.15.0(@types/node@22.20.5)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@1.21.7)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(tsx@4.23.15)
+
+  packages/provider-woocommerce:
     dependencies:
       '@akadli/adapter-contract':
         specifier: workspace:*

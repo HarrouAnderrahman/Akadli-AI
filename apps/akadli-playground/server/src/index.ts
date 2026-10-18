@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
 import { YouCanProvider } from '@akadli/provider-youcan';
+import { WooCommerceProvider } from '@akadli/provider-woocommerce';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
 import { OrderConstraints } from '@akadli/adapter-contract';
@@ -75,8 +76,24 @@ function getYouCanFixture(filename: string): string {
   throw new Error(`YouCan fixture "${filename}" not found in candidate paths.`);
 }
 
+function getWooCommerceFixture(filename: string): string {
+  const candidatePaths = [
+    path.resolve(__dirname, '../../../../packages/provider-woocommerce/fixtures', filename),
+    path.resolve(__dirname, '../../../../../packages/provider-woocommerce/fixtures', filename),
+    path.resolve(process.cwd(), 'packages/provider-woocommerce/fixtures', filename),
+    path.resolve(process.cwd(), '../../packages/provider-woocommerce/fixtures', filename),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf-8');
+    }
+  }
+  throw new Error(`WooCommerce fixture "${filename}" not found in candidate paths.`);
+}
+
 const shopifyProvider = new ShopifyProvider();
 const youcanProvider = new YouCanProvider();
+const woocommerceProvider = new WooCommerceProvider();
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -142,6 +159,12 @@ app.get('/api/status', (req, res) => {
     shopifyApiVersion: config.shopifyApiVersion,
     youcanConfigured: Boolean(config.youcanAccessToken),
     youcanApiBaseUrl: config.youcanApiBaseUrl,
+    woocommerceConfigured: Boolean(
+      config.woocommerceSiteUrl &&
+        config.woocommerceConsumerKey &&
+        config.woocommerceConsumerSecret
+    ),
+    woocommerceSiteUrl: config.woocommerceSiteUrl || null,
   });
 });
 
@@ -438,6 +461,147 @@ app.post('/api/webhooks/youcan/simulate', async (req, res) => {
   }
 });
 
+// Real WooCommerce Webhook Ingress (order.created / order.updated)
+app.post('/api/webhooks/woocommerce', async (req, res) => {
+  try {
+    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
+    const headers = req.headers as Record<string, string>;
+
+    // 1. Cryptographically verify HMAC-SHA256 Base64 signature if secret is configured
+    if (config.woocommerceWebhookSecret) {
+      const isValid = await woocommerceProvider.verifyWebhook(
+        headers,
+        rawBody,
+        config.woocommerceWebhookSecret
+      );
+      if (!isValid) {
+        console.warn('[WooCommerce Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
+        return res.status(401).json({
+          error: 'Invalid WooCommerce HMAC-SHA256 signature',
+        });
+      }
+    } else {
+      console.log(
+        '[WooCommerce Webhook] WOOCOMMERCE_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
+      );
+    }
+
+    // 2. Parse payload into canonical StandardizedDzOrder
+    const standardizedOrder = await woocommerceProvider.parseWebhookOrder(req.body);
+    console.log(
+      `[WooCommerce Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
+    );
+
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'woocommerce');
+    orderPayload.raw_order = req.body;
+
+    // 3. Broadcast webhook receipt to admin dashboard
+    broadcastToAdmins({
+      type: 'WOOCOMMERCE_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: req.body,
+      },
+    });
+
+    // 4. Trigger incoming call on connected phone receiver
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        message: 'WooCommerce order ingested and mobile receiver is ringing',
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'WooCommerce order ingested into state, but no mobile phone client is connected',
+      });
+    }
+  } catch (err: any) {
+    console.error('[WooCommerce Webhook Error]:', err);
+    res.status(400).json({ error: err.message || 'Failed to process WooCommerce webhook' });
+  }
+});
+
+// Local WooCommerce Fixture Simulation Endpoint
+app.post('/api/webhooks/woocommerce/simulate', async (req, res) => {
+  try {
+    const fixtureType =
+      req.body?.fixture === 'meta-cod' || req.body?.fixture === 'cod-form'
+        ? 'webhook-order-meta-cod.json'
+        : 'webhook-order-created.json';
+    const rawFixtureBody = getWooCommerceFixture(fixtureType);
+    const parsedPayload = JSON.parse(rawFixtureBody);
+
+    const secret = config.woocommerceWebhookSecret || 'simulated_woocommerce_secret_key';
+    const computedHmac = createHmac('sha256', secret)
+      .update(Buffer.from(rawFixtureBody, 'utf8'))
+      .digest('base64');
+
+    const headers: Record<string, string> = {
+      'x-wc-webhook-signature': computedHmac,
+      'content-type': 'application/json',
+    };
+
+    // Verify signature through provider
+    const isSignatureValid = await woocommerceProvider.verifyWebhook(
+      headers,
+      rawFixtureBody,
+      secret
+    );
+
+    // Parse into canonical order
+    const standardizedOrder = await woocommerceProvider.parseWebhookOrder(parsedPayload);
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'woocommerce');
+    orderPayload.raw_order = parsedPayload;
+
+    console.log(
+      `[WooCommerce Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
+    );
+
+    broadcastToAdmins({
+      type: 'WOOCOMMERCE_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: parsedPayload,
+        simulated: true,
+        fixture: fixtureType,
+      },
+    });
+
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'WooCommerce order simulated and loaded, but phone client is offline',
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    }
+  } catch (err: any) {
+    console.error('[WooCommerce Simulate Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/trigger-call', (req, res) => {
   const { payload, config: vConfig } = req.body;
   if (!payload) {
@@ -624,13 +788,14 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
 
   // Live Outbound Order Mutations powered by @akadli/core
   const isYouCanOrder = currentOrder?.source === 'youcan';
+  const isWooCommerceOrder = currentOrder?.source === 'woocommerce';
   const hasShopifyCreds = Boolean(
     config.shopifyShopDomain &&
       (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
   );
   const isShopifyOrder =
     currentOrder?.source === 'shopify' ||
-    (!isYouCanOrder && hasShopifyCreds);
+    (!isYouCanOrder && !isWooCommerceOrder && hasShopifyCreds);
 
   if (isYouCanOrder && currentOrder) {
     console.log(
@@ -722,6 +887,102 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
           },
           liveStore: config.youcanApiBaseUrl,
           provider: 'youcan',
+          timestamp: Date.now(),
+        },
+      };
+      broadcastToAdmins(failureMsg);
+    }
+  } else if (isWooCommerceOrder && currentOrder) {
+    console.log(
+      `[WooCommerce Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
+    );
+    try {
+      const credentials = {
+        siteUrl: config.woocommerceSiteUrl || 'https://dz-boutique.com',
+        consumerKey: config.woocommerceConsumerKey || 'ck_simulated_key',
+        consumerSecret: config.woocommerceConsumerSecret || 'cs_simulated_secret',
+        cancelOnRefused: 'true',
+      };
+
+      const constraints: OrderConstraints = {
+        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
+        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
+          const match = w.match(/^(\d{2})/);
+          return (match ? match[1] : w) as WilayaCode;
+        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
+        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
+      };
+
+      const toolResult = await handleFinalizeOrderToolCall(
+        {
+          orderId: currentOrder.order_id || decision.order_id,
+          status: decision.status,
+          finalSize: decision.final_size || undefined,
+          finalWilaya: decision.final_wilaya || undefined,
+          finalCommune: decision.final_commune || undefined,
+          finalAddressNote: decision.final_address_note || undefined,
+          reasonOrNotes: decision.reason_or_notes || '',
+        },
+        woocommerceProvider,
+        credentials,
+        constraints
+      );
+
+      console.log(`[@akadli/core WooCommerce Tool Result]:`, toolResult);
+
+      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const woocommerceMutationMsg: WSMessage<ShopifyMutationData> = {
+        type: 'WOOCOMMERCE_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: toolResult.success,
+            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+          },
+          liveStore: config.woocommerceSiteUrl || 'WooCommerce DZ Store',
+          provider: 'woocommerce',
+          timestamp: Date.now(),
+        },
+      };
+
+      broadcastToAdmins(woocommerceMutationMsg);
+      sendToPhone(woocommerceMutationMsg);
+    } catch (err: any) {
+      console.error('[WooCommerce Mutation Error]:', err);
+      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
+      const standardizedDecision: StandardizedFinalizedOrderDecision = {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: fallbackWilaya,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const failureMsg: WSMessage<ShopifyMutationData> = {
+        type: 'WOOCOMMERCE_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: false,
+            externalStatus: 'MUTATION_EXCEPTION',
+            rawResponse: { error: err.message },
+          },
+          liveStore: config.woocommerceSiteUrl || 'WooCommerce DZ Store',
+          provider: 'woocommerce',
           timestamp: Date.now(),
         },
       };

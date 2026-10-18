@@ -61,6 +61,18 @@ export const config = {
   get youcanApiBaseUrl(): string {
     return (process.env.YOUCAN_API_BASE_URL || 'https://api.youcan.shop').trim();
   },
+  get woocommerceSiteUrl(): string {
+    return (process.env.WOOCOMMERCE_SITE_URL || '').trim();
+  },
+  get woocommerceConsumerKey(): string {
+    return (process.env.WOOCOMMERCE_CONSUMER_KEY || '').trim();
+  },
+  get woocommerceConsumerSecret(): string {
+    return (process.env.WOOCOMMERCE_CONSUMER_SECRET || '').trim();
+  },
+  get woocommerceWebhookSecret(): string {
+    return (process.env.WOOCOMMERCE_WEBHOOK_SECRET || '').trim();
+  },
 };
 
 export function getLocalIpAddress(): string {

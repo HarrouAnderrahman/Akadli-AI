@@ -146,6 +146,8 @@ export type WSMessageType =
   | 'SHOPIFY_MUTATION_RESULT'
   | 'YOUCAN_WEBHOOK_RECEIVED'
   | 'YOUCAN_MUTATION_RESULT'
+  | 'WOOCOMMERCE_WEBHOOK_RECEIVED'
+  | 'WOOCOMMERCE_MUTATION_RESULT'
   | 'ERROR'
   | 'PING'
   | 'PONG';
@@ -159,7 +161,7 @@ export interface ShopifyMutationData {
     rawResponse?: unknown;
   };
   liveStore?: string;
-  provider?: 'shopify' | 'youcan';
+  provider?: 'shopify' | 'youcan' | 'woocommerce';
   timestamp: number;
 }
 

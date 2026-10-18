@@ -68,6 +68,9 @@ export class AdminPage {
   private youcanConfigured = false;
   private youcanApiBaseUrl: string | null = null;
   private youcanMutationResult: ShopifyMutationData | null = null;
+  private woocommerceConfigured = false;
+  private woocommerceSiteUrl: string | null = null;
+  private woocommerceMutationResult: ShopifyMutationData | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -103,8 +106,11 @@ export class AdminPage {
         this.shopifyDomain = data.shopifyDomain || null;
         this.youcanConfigured = Boolean(data.youcanConfigured);
         this.youcanApiBaseUrl = data.youcanApiBaseUrl || null;
+        this.woocommerceConfigured = Boolean(data.woocommerceConfigured);
+        this.woocommerceSiteUrl = data.woocommerceSiteUrl || null;
         this.updateShopifyStatusUi();
         this.updateYouCanStatusUi();
+        this.updateWooCommerceStatusUi();
       }
     } catch (e) {}
   }
@@ -153,6 +159,7 @@ export class AdminPage {
         this.finalizedDecision = null;
         this.shopifyMutationResult = null;
         this.youcanMutationResult = null;
+        this.woocommerceMutationResult = null;
         this.stopTimer();
         this.updateStatusBadge();
         this.renderTranscripts();
@@ -213,6 +220,21 @@ export class AdminPage {
 
       case 'YOUCAN_MUTATION_RESULT': {
         this.youcanMutationResult = msg.data;
+        this.renderDecisionSummary();
+        break;
+      }
+
+      case 'WOOCOMMERCE_WEBHOOK_RECEIVED': {
+        if (msg.data?.order) {
+          this.order = msg.data.order;
+          this.updateFormFieldsFromOrder();
+          this.updateOrderSyncBadge();
+        }
+        break;
+      }
+
+      case 'WOOCOMMERCE_MUTATION_RESULT': {
+        this.woocommerceMutationResult = msg.data;
         this.renderDecisionSummary();
         break;
       }
@@ -286,6 +308,12 @@ export class AdminPage {
               <span class="text-[11px] text-zinc-400">YouCan Sandbox</span>
             </div>
 
+            <!-- WooCommerce Connection Status -->
+            <div id="woocommerce-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+              <span class="text-[11px] text-zinc-400">WooCommerce Sandbox</span>
+            </div>
+
             <!-- Connection Status -->
             <div id="phone-status-pill" class="flex items-center gap-2 text-xs text-zinc-400">
               <span class="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
@@ -356,6 +384,19 @@ export class AdminPage {
                   </button>
                   <button id="simulate-youcan-extrafields-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate YouCan 1-Page COD form extra_fields webhook">
                     <span>YouCan: 1-Page COD Form</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
+                  <span>Simulate WooCommerce Webhook</span>
+                  <span class="font-mono text-[10px] text-zinc-500">WooCommerce REST fixtures</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button id="simulate-woocommerce-standard-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate standard WooCommerce order created webhook">
+                    <span>WooCommerce: Standard</span>
+                  </button>
+                  <button id="simulate-woocommerce-metacod-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate WooCommerce COD plugin meta_data webhook">
+                    <span>WooCommerce: COD Meta</span>
                   </button>
                 </div>
               </div>
@@ -510,6 +551,8 @@ export class AdminPage {
     this.attachEventListeners();
     this.updateStatusBadge();
     this.updateShopifyStatusUi();
+    this.updateYouCanStatusUi();
+    this.updateWooCommerceStatusUi();
     this.updateOrderSyncBadge();
   }
 
@@ -692,6 +735,15 @@ export class AdminPage {
 
     this.container.querySelector('#simulate-youcan-extrafields-btn')?.addEventListener('click', () => {
       this.handleSimulateYouCanWebhook('extra-fields');
+    });
+
+    // WooCommerce webhook simulations
+    this.container.querySelector('#simulate-woocommerce-standard-btn')?.addEventListener('click', () => {
+      this.handleSimulateWooCommerceWebhook('standard');
+    });
+
+    this.container.querySelector('#simulate-woocommerce-metacod-btn')?.addEventListener('click', () => {
+      this.handleSimulateWooCommerceWebhook('meta-cod');
     });
   }
 
@@ -965,6 +1017,42 @@ export class AdminPage {
       `;
     }
 
+    let woocommerceMutationHtml = '';
+    if (this.woocommerceMutationResult) {
+      const res = this.woocommerceMutationResult;
+      const mut = res.mutationResult;
+      const isSuccess = mut.success;
+      const statusBadge = isSuccess
+        ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-purple-500/20 bg-purple-500/10 text-purple-400">UPDATED</span>'
+        : '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-rose-400">MUTATION FAILED</span>';
+
+      const storeLabel = res.liveStore ? `${res.liveStore} (#${res.orderId})` : `#${res.orderId}`;
+
+      woocommerceMutationHtml = `
+        <div class="mt-3 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-zinc-200">WooCommerce REST API</span>
+              <span class="text-zinc-500 font-mono text-[11px]">${storeLabel}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>External Status: <code class="text-zinc-200">${mut.externalStatus}</code></span>
+            <span class="text-zinc-500 font-mono text-[10px]">${new Date(res.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details class="cursor-pointer pt-0.5">
+            <summary class="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono select-none">API Mutation Details</summary>
+            <pre class="mt-1 p-2 rounded bg-zinc-900 border border-zinc-800/80 text-[10px] font-mono text-zinc-400 overflow-x-auto">${JSON.stringify(
+              mut.rawResponse ?? mut,
+              null,
+              2
+            )}</pre>
+          </details>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
@@ -998,6 +1086,7 @@ export class AdminPage {
 
         ${shopifyMutationHtml}
         ${youcanMutationHtml}
+        ${woocommerceMutationHtml}
 
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
@@ -1044,6 +1133,23 @@ export class AdminPage {
     }
   }
 
+  private updateWooCommerceStatusUi() {
+    const pill = this.container.querySelector('#woocommerce-status-pill') as HTMLElement | null;
+    if (!pill) return;
+    if (this.woocommerceConfigured && this.woocommerceSiteUrl) {
+      const cleanUrl = this.woocommerceSiteUrl.replace(/^https?:\/\//, '');
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-purple-400 px-2.5 py-1 rounded-md border border-purple-500/20 bg-purple-500/10';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span><span class="font-mono text-[11px]">${cleanUrl}</span>`;
+      pill.title = 'Live WooCommerce REST API Connected';
+    } else {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-zinc-400 px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span><span class="text-[11px]">WooCommerce Sandbox</span>`;
+      pill.title = 'WooCommerce credentials not configured (Webhook test & local sandbox mode)';
+    }
+  }
+
   private updateOrderSyncBadge() {
     const badge = this.container.querySelector('#order-sync-badge');
     if (!badge) return;
@@ -1055,6 +1161,10 @@ export class AdminPage {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-indigo-500/20 bg-indigo-500/10 text-indigo-400';
       badge.textContent = `YouCan: #${this.order.order_id}`;
+    } else if (this.order.source === 'woocommerce') {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-purple-500/20 bg-purple-500/10 text-purple-400';
+      badge.textContent = `WooCommerce: #${this.order.order_id}`;
     } else {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400';
@@ -1117,6 +1227,22 @@ export class AdminPage {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to simulate YouCan webhook');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  private async handleSimulateWooCommerceWebhook(fixture: 'standard' | 'meta-cod') {
+    try {
+      const res = await fetch('/api/webhooks/woocommerce/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixture }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to simulate WooCommerce webhook');
       }
     } catch (err: any) {
       alert(err.message);
