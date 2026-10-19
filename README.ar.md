@@ -114,6 +114,6 @@ pnpm --filter @akadli/playground dev
 
 ## الترخيص (License)
 
-رخصة [MIT](https://opensource.org/licenses/MIT) مفتوحة المصدر.
+رخصة [MIT](./LICENSE) مفتوحة المصدر.
 
 </div>

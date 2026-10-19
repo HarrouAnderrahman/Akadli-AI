@@ -88,4 +88,4 @@ Review [`./AGENTS.md`](./AGENTS.md) and [`.agents/skills/`](./.agents/skills/) b
 
 ## License
 
-MIT
+[MIT](./LICENSE)
