@@ -10,6 +10,7 @@ import { ShopifyProvider } from '@akadli/provider-shopify';
 import { YouCanProvider } from '@akadli/provider-youcan';
 import { WooCommerceProvider } from '@akadli/provider-woocommerce';
 import { GSheetsProvider } from '@akadli/provider-gsheets';
+import { TassyirProvider } from '@akadli/provider-tassyir';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
 import { IEcommerceProvider, OrderConstraints } from '@akadli/adapter-contract';
@@ -67,8 +68,9 @@ const shopifyProvider = new ShopifyProvider();
 const youcanProvider = new YouCanProvider();
 const woocommerceProvider = new WooCommerceProvider();
 const gsheetsProvider = new GSheetsProvider();
+const tassyirProvider = new TassyirProvider();
 
-type ProviderKey = 'shopify' | 'youcan' | 'woocommerce' | 'gsheets';
+type ProviderKey = 'shopify' | 'youcan' | 'woocommerce' | 'gsheets' | 'tassyir';
 
 interface ProviderDescriptor {
   key: ProviderKey;
@@ -112,13 +114,14 @@ const providerRegistry: ProviderDescriptor[] = [
       const isYouCan = order?.source === 'youcan';
       const isWooCommerce = order?.source === 'woocommerce';
       const isGSheets = order?.source === 'gsheets';
+      const isTassyir = order?.source === 'tassyir';
       const hasShopifyCreds = Boolean(
         config.shopifyShopDomain &&
           (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
       );
       return (
         order?.source === 'shopify' ||
-        (!isYouCan && !isWooCommerce && !isGSheets && hasShopifyCreds)
+        (!isYouCan && !isWooCommerce && !isGSheets && !isTassyir && hasShopifyCreds)
       );
     },
     getMutationCredentials: () => {
@@ -237,6 +240,36 @@ const providerRegistry: ProviderDescriptor[] = [
       return credentials;
     },
   },
+  {
+    key: 'tassyir',
+    displayName: 'Tassyir',
+    provider: tassyirProvider,
+    getWebhookSecret: () => config.tassyirWebhookSecret,
+    secretEnvVarName: 'TASSYIR_WEBHOOK_SECRET',
+    webhookReceivedType: 'TASSYIR_WEBHOOK_RECEIVED',
+    mutationResultType: 'TASSYIR_MUTATION_RESULT',
+    getLiveStoreLabel: () => config.tassyirApiBaseUrl || 'https://api.tassyir.dz/v1',
+    resolveFixture: (fixture) =>
+      fixture === 'stopdesk' || fixture === 'stop-desk' || fixture === '59'
+        ? 'webhook-order-stopdesk.json'
+        : 'webhook-order-created.json',
+    createSimulatedHeaders: (rawBody, secret) => {
+      const computedHmac = createHmac('sha256', secret)
+        .update(Buffer.from(rawBody, 'utf8'))
+        .digest('hex');
+      return {
+        'x-tassyir-signature': computedHmac,
+        'content-type': 'application/json',
+      };
+    },
+    isTargetOrder: (order) => order?.source === 'tassyir',
+    getMutationCredentials: () => ({
+      apiKey: config.tassyirApiKey || 'simulated_tassyir_api_key',
+      baseUrl: config.tassyirApiBaseUrl || 'https://api.tassyir.dz/v1',
+      dispatchOnConfirm: 'true',
+      cancelOnRefused: 'true',
+    }),
+  },
 ];
 
 const server = http.createServer(app);
@@ -320,6 +353,8 @@ app.get('/api/status', (req, res) => {
           ? 'apps_script'
           : null,
     gsheetsSpreadsheetId: config.gsheetsSpreadsheetId || null,
+    tassyirConfigured: Boolean(config.tassyirApiKey),
+    tassyirApiBaseUrl: config.tassyirApiBaseUrl,
   });
 });
 

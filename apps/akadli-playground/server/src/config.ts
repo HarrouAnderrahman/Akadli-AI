@@ -85,6 +85,15 @@ export const config = {
   get gsheetsWebhookSecret(): string {
     return (process.env.GSHEETS_WEBHOOK_SECRET || '').trim();
   },
+  get tassyirApiKey(): string {
+    return (process.env.TASSYIR_API_KEY || '').trim();
+  },
+  get tassyirWebhookSecret(): string {
+    return (process.env.TASSYIR_WEBHOOK_SECRET || '').trim();
+  },
+  get tassyirApiBaseUrl(): string {
+    return (process.env.TASSYIR_API_BASE_URL || 'https://api.tassyir.dz/v1').trim();
+  },
 };
 
 export function getLocalIpAddress(): string {

@@ -150,6 +150,8 @@ export type WSMessageType =
   | 'WOOCOMMERCE_MUTATION_RESULT'
   | 'GSHEETS_WEBHOOK_RECEIVED'
   | 'GSHEETS_MUTATION_RESULT'
+  | 'TASSYIR_WEBHOOK_RECEIVED'
+  | 'TASSYIR_MUTATION_RESULT'
   | 'ERROR'
   | 'PING'
   | 'PONG';
@@ -163,7 +165,7 @@ export interface ShopifyMutationData {
     rawResponse?: unknown;
   };
   liveStore?: string;
-  provider?: 'shopify' | 'youcan' | 'woocommerce' | 'gsheets';
+  provider?: 'shopify' | 'youcan' | 'woocommerce' | 'gsheets' | 'tassyir';
   timestamp: number;
 }
 

@@ -75,6 +75,9 @@ export class AdminPage {
   private gsheetsMode: string | null = null;
   private gsheetsSpreadsheetId: string | null = null;
   private gsheetsMutationResult: ShopifyMutationData | null = null;
+  private tassyirConfigured = false;
+  private tassyirApiBaseUrl: string | null = null;
+  private tassyirMutationResult: ShopifyMutationData | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -115,10 +118,13 @@ export class AdminPage {
         this.gsheetsConfigured = Boolean(data.gsheetsConfigured);
         this.gsheetsMode = data.gsheetsMode || null;
         this.gsheetsSpreadsheetId = data.gsheetsSpreadsheetId || null;
+        this.tassyirConfigured = Boolean(data.tassyirConfigured);
+        this.tassyirApiBaseUrl = data.tassyirApiBaseUrl || null;
         this.updateShopifyStatusUi();
         this.updateYouCanStatusUi();
         this.updateWooCommerceStatusUi();
         this.updateGSheetsStatusUi();
+        this.updateTassyirStatusUi();
       }
     } catch (e) {}
   }
@@ -169,6 +175,7 @@ export class AdminPage {
         this.youcanMutationResult = null;
         this.woocommerceMutationResult = null;
         this.gsheetsMutationResult = null;
+        this.tassyirMutationResult = null;
         this.stopTimer();
         this.updateStatusBadge();
         this.renderTranscripts();
@@ -263,6 +270,21 @@ export class AdminPage {
         break;
       }
 
+      case 'TASSYIR_WEBHOOK_RECEIVED': {
+        if (msg.data?.order) {
+          this.order = msg.data.order;
+          this.updateFormFieldsFromOrder();
+          this.updateOrderSyncBadge();
+        }
+        break;
+      }
+
+      case 'TASSYIR_MUTATION_RESULT': {
+        this.tassyirMutationResult = msg.data;
+        this.renderDecisionSummary();
+        break;
+      }
+
       case 'CALL_ENDED': {
         this.currentCallState = 'ended';
         this.stopTimer();
@@ -342,6 +364,12 @@ export class AdminPage {
             <div id="gsheets-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
               <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
               <span class="text-[11px] text-zinc-400">GSheets Sandbox</span>
+            </div>
+
+            <!-- Tassyir Connection Status -->
+            <div id="tassyir-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+              <span class="text-[11px] text-zinc-400">Tassyir Sandbox</span>
             </div>
 
             <!-- Connection Status -->
@@ -440,6 +468,19 @@ export class AdminPage {
                   </button>
                   <button id="simulate-gsheets-arabic-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate Arabic COD Google Sheet row webhook">
                     <span>GSheets: Arabic COD Sheet</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
+                  <span>Simulate Tassyir Webhook</span>
+                  <span class="font-mono text-[10px] text-zinc-500">COD ERP & Dispatch fixtures</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button id="simulate-tassyir-standard-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate standard Tassyir order created webhook">
+                    <span>Tassyir: Standard ERP</span>
+                  </button>
+                  <button id="simulate-tassyir-stopdesk-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate Tassyir Stop-Desk Wilaya 59 Aflou webhook">
+                    <span>Tassyir: Stop-Desk 59</span>
                   </button>
                 </div>
               </div>
@@ -596,6 +637,8 @@ export class AdminPage {
     this.updateShopifyStatusUi();
     this.updateYouCanStatusUi();
     this.updateWooCommerceStatusUi();
+    this.updateGSheetsStatusUi();
+    this.updateTassyirStatusUi();
     this.updateOrderSyncBadge();
   }
 
@@ -796,6 +839,15 @@ export class AdminPage {
 
     this.container.querySelector('#simulate-gsheets-arabic-btn')?.addEventListener('click', () => {
       this.handleSimulateGSheetsWebhook('arabic');
+    });
+
+    // Tassyir webhook simulations
+    this.container.querySelector('#simulate-tassyir-standard-btn')?.addEventListener('click', () => {
+      this.handleSimulateTassyirWebhook('standard');
+    });
+
+    this.container.querySelector('#simulate-tassyir-stopdesk-btn')?.addEventListener('click', () => {
+      this.handleSimulateTassyirWebhook('stopdesk');
     });
   }
 
@@ -1141,6 +1193,42 @@ export class AdminPage {
       `;
     }
 
+    let tassyirMutationHtml = '';
+    if (this.tassyirMutationResult) {
+      const res = this.tassyirMutationResult;
+      const mut = res.mutationResult;
+      const isSuccess = mut.success;
+      const statusBadge = isSuccess
+        ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-amber-500/20 bg-amber-500/10 text-amber-400">UPDATED</span>'
+        : '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-rose-400">MUTATION FAILED</span>';
+
+      const storeLabel = res.liveStore ? `${res.liveStore} (#${res.orderId})` : `#${res.orderId}`;
+
+      tassyirMutationHtml = `
+        <div class="mt-3 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-zinc-200">Tassyir Algerian COD ERP</span>
+              <span class="text-zinc-500 font-mono text-[11px]">${storeLabel}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>External Status: <code class="text-zinc-200">${mut.externalStatus}</code></span>
+            <span class="text-zinc-500 font-mono text-[10px]">${new Date(res.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details class="cursor-pointer pt-0.5">
+            <summary class="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono select-none">API Mutation Details</summary>
+            <pre class="mt-1 p-2 rounded bg-zinc-900 border border-zinc-800/80 text-[10px] font-mono text-zinc-400 overflow-x-auto">${JSON.stringify(
+              mut.rawResponse ?? mut,
+              null,
+              2
+            )}</pre>
+          </details>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
@@ -1176,6 +1264,7 @@ export class AdminPage {
         ${youcanMutationHtml}
         ${woocommerceMutationHtml}
         ${gsheetsMutationHtml}
+        ${tassyirMutationHtml}
 
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
@@ -1256,6 +1345,23 @@ export class AdminPage {
     }
   }
 
+  private updateTassyirStatusUi() {
+    const pill = this.container.querySelector('#tassyir-status-pill') as HTMLElement | null;
+    if (!pill) return;
+    if (this.tassyirConfigured && this.tassyirApiBaseUrl) {
+      const cleanUrl = this.tassyirApiBaseUrl.replace(/^https?:\/\//, '');
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-400 px-2.5 py-1 rounded-md border border-amber-500/20 bg-amber-500/10';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span class="font-mono text-[11px]">${cleanUrl}</span>`;
+      pill.title = 'Live Tassyir COD ERP Connected';
+    } else {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-zinc-400 px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span><span class="text-[11px]">Tassyir Sandbox</span>`;
+      pill.title = 'Tassyir credentials not configured (Webhook test & local sandbox mode)';
+    }
+  }
+
   private updateOrderSyncBadge() {
     const badge = this.container.querySelector('#order-sync-badge');
     if (!badge) return;
@@ -1275,6 +1381,10 @@ export class AdminPage {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-emerald-500/20 bg-emerald-500/10 text-emerald-400';
       badge.textContent = `GSheets: #${this.order.order_id}`;
+    } else if (this.order.source === 'tassyir') {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-amber-500/20 bg-amber-500/10 text-amber-400';
+      badge.textContent = `Tassyir: #${this.order.order_id}`;
     } else {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400';
@@ -1374,4 +1484,21 @@ export class AdminPage {
       alert(err.message);
     }
   }
+
+  private async handleSimulateTassyirWebhook(fixture: 'standard' | 'stopdesk') {
+    try {
+      const res = await fetch('/api/webhooks/tassyir/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixture }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to simulate Tassyir webhook');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
 }
+

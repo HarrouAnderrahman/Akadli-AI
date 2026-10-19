@@ -21,6 +21,7 @@
     "@akadli/dz-geo": "workspace:*",
     "@akadli/provider-gsheets": "workspace:*",
     "@akadli/provider-shopify": "workspace:*",
+    "@akadli/provider-tassyir": "workspace:*",
     "@akadli/provider-woocommerce": "workspace:*",
     "@akadli/provider-youcan": "workspace:*",
     "@elevenlabs/client": "^1.28.0",
