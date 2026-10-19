@@ -12,7 +12,7 @@ import { WooCommerceProvider } from '@akadli/provider-woocommerce';
 import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
-import { OrderConstraints } from '@akadli/adapter-contract';
+import { IEcommerceProvider, OrderConstraints } from '@akadli/adapter-contract';
 import { config, getLocalIpAddress } from './config.js';
 import {
   CallState,
@@ -21,6 +21,7 @@ import {
   TranscriptTurn,
   VoiceConfig,
   WSMessage,
+  WSMessageType,
   StandardizedFinalizedOrderDecision,
   WilayaCode,
   ShopifyMutationData,
@@ -47,70 +48,196 @@ app.use(
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getShopifyFixture(filename: string): string {
+function getProviderFixture(provider: string, filename: string): string {
   const candidatePaths = [
-    path.resolve(__dirname, '../../../../packages/provider-shopify/fixtures', filename),
-    path.resolve(__dirname, '../../../../../packages/provider-shopify/fixtures', filename),
-    path.resolve(process.cwd(), 'packages/provider-shopify/fixtures', filename),
-    path.resolve(process.cwd(), '../../packages/provider-shopify/fixtures', filename),
+    path.resolve(__dirname, `../../../../packages/provider-${provider}/fixtures`, filename),
+    path.resolve(__dirname, `../../../../../packages/provider-${provider}/fixtures`, filename),
+    path.resolve(process.cwd(), `packages/provider-${provider}/fixtures`, filename),
+    path.resolve(process.cwd(), `../../packages/provider-${provider}/fixtures`, filename),
   ];
   for (const p of candidatePaths) {
     if (fs.existsSync(p)) {
       return fs.readFileSync(p, 'utf-8');
     }
   }
-  throw new Error(`Shopify fixture "${filename}" not found in candidate paths.`);
-}
-
-function getYouCanFixture(filename: string): string {
-  const candidatePaths = [
-    path.resolve(__dirname, '../../../../packages/provider-youcan/fixtures', filename),
-    path.resolve(__dirname, '../../../../../packages/provider-youcan/fixtures', filename),
-    path.resolve(process.cwd(), 'packages/provider-youcan/fixtures', filename),
-    path.resolve(process.cwd(), '../../packages/provider-youcan/fixtures', filename),
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      return fs.readFileSync(p, 'utf-8');
-    }
-  }
-  throw new Error(`YouCan fixture "${filename}" not found in candidate paths.`);
-}
-
-function getWooCommerceFixture(filename: string): string {
-  const candidatePaths = [
-    path.resolve(__dirname, '../../../../packages/provider-woocommerce/fixtures', filename),
-    path.resolve(__dirname, '../../../../../packages/provider-woocommerce/fixtures', filename),
-    path.resolve(process.cwd(), 'packages/provider-woocommerce/fixtures', filename),
-    path.resolve(process.cwd(), '../../packages/provider-woocommerce/fixtures', filename),
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      return fs.readFileSync(p, 'utf-8');
-    }
-  }
-  throw new Error(`WooCommerce fixture "${filename}" not found in candidate paths.`);
-}
-
-function getGSheetsFixture(filename: string): string {
-  const candidatePaths = [
-    path.resolve(__dirname, '../../../../packages/provider-gsheets/fixtures', filename),
-    path.resolve(__dirname, '../../../../../packages/provider-gsheets/fixtures', filename),
-    path.resolve(process.cwd(), 'packages/provider-gsheets/fixtures', filename),
-    path.resolve(process.cwd(), '../../packages/provider-gsheets/fixtures', filename),
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      return fs.readFileSync(p, 'utf-8');
-    }
-  }
-  throw new Error(`Google Sheets fixture "${filename}" not found in candidate paths.`);
+  throw new Error(`${provider} fixture "${filename}" not found in candidate paths.`);
 }
 
 const shopifyProvider = new ShopifyProvider();
 const youcanProvider = new YouCanProvider();
 const woocommerceProvider = new WooCommerceProvider();
 const gsheetsProvider = new GSheetsProvider();
+
+type ProviderKey = 'shopify' | 'youcan' | 'woocommerce' | 'gsheets';
+
+interface ProviderDescriptor {
+  key: ProviderKey;
+  displayName: string;
+  provider: IEcommerceProvider;
+  getWebhookSecret: () => string | undefined;
+  secretEnvVarName: string;
+  webhookReceivedType: WSMessageType;
+  mutationResultType: WSMessageType;
+  getLiveStoreLabel: () => string | undefined;
+  resolveFixture: (bodyFixture?: string) => string;
+  createSimulatedHeaders: (rawBody: string, secret: string) => Record<string, string>;
+  isTargetOrder: (order: OrderPayload | null) => boolean;
+  getMutationCredentials: () => Record<string, string>;
+}
+
+const providerRegistry: ProviderDescriptor[] = [
+  {
+    key: 'shopify',
+    displayName: 'Shopify',
+    provider: shopifyProvider,
+    getWebhookSecret: () => config.shopifyWebhookSecret,
+    secretEnvVarName: 'SHOPIFY_WEBHOOK_SECRET',
+    webhookReceivedType: 'SHOPIFY_WEBHOOK_RECEIVED',
+    mutationResultType: 'SHOPIFY_MUTATION_RESULT',
+    getLiveStoreLabel: () => config.shopifyShopDomain,
+    resolveFixture: (fixture) =>
+      fixture === 'cod-form' ? 'webhook-order-cod-form.json' : 'webhook-order-created.json',
+    createSimulatedHeaders: (rawBody, secret) => {
+      const computedHmac = createHmac('sha256', secret)
+        .update(Buffer.from(rawBody, 'utf8'))
+        .digest('base64');
+      return {
+        'x-shopify-hmac-sha256': computedHmac,
+        'x-shopify-topic': 'orders/create',
+        'x-shopify-shop-domain': config.shopifyShopDomain || 'dz-fashion.myshopify.com',
+        'content-type': 'application/json',
+      };
+    },
+    isTargetOrder: (order) => {
+      const isYouCan = order?.source === 'youcan';
+      const isWooCommerce = order?.source === 'woocommerce';
+      const isGSheets = order?.source === 'gsheets';
+      const hasShopifyCreds = Boolean(
+        config.shopifyShopDomain &&
+          (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
+      );
+      return (
+        order?.source === 'shopify' ||
+        (!isYouCan && !isWooCommerce && !isGSheets && hasShopifyCreds)
+      );
+    },
+    getMutationCredentials: () => {
+      const credentials: Record<string, string> = {
+        shopDomain: config.shopifyShopDomain,
+        apiVersion: config.shopifyApiVersion || '2025-01',
+        cancelOnRefused: 'true',
+      };
+      if (config.shopifyAccessToken) credentials.accessToken = config.shopifyAccessToken;
+      if (config.shopifyClientId) credentials.clientId = config.shopifyClientId;
+      if (config.shopifyClientSecret) credentials.clientSecret = config.shopifyClientSecret;
+      return credentials;
+    },
+  },
+  {
+    key: 'youcan',
+    displayName: 'YouCan',
+    provider: youcanProvider,
+    getWebhookSecret: () => config.youcanWebhookSecret,
+    secretEnvVarName: 'YOUCAN_WEBHOOK_SECRET',
+    webhookReceivedType: 'YOUCAN_WEBHOOK_RECEIVED',
+    mutationResultType: 'YOUCAN_MUTATION_RESULT',
+    getLiveStoreLabel: () => config.youcanApiBaseUrl,
+    resolveFixture: (fixture) =>
+      fixture === 'extra-fields' || fixture === 'cod-form'
+        ? 'webhook-order-extra-fields.json'
+        : 'webhook-order-created.json',
+    createSimulatedHeaders: (rawBody, secret) => {
+      const computedHmac = createHmac('sha256', secret)
+        .update(Buffer.from(rawBody, 'utf8'))
+        .digest('hex');
+      return {
+        'x-youcan-signature': computedHmac,
+        'content-type': 'application/json',
+      };
+    },
+    isTargetOrder: (order) => order?.source === 'youcan',
+    getMutationCredentials: () => ({
+      accessToken: config.youcanAccessToken || 'simulated_youcan_token',
+      baseUrl: config.youcanApiBaseUrl || 'https://api.youcan.shop',
+      closeOnRefused: 'true',
+    }),
+  },
+  {
+    key: 'woocommerce',
+    displayName: 'WooCommerce',
+    provider: woocommerceProvider,
+    getWebhookSecret: () => config.woocommerceWebhookSecret,
+    secretEnvVarName: 'WOOCOMMERCE_WEBHOOK_SECRET',
+    webhookReceivedType: 'WOOCOMMERCE_WEBHOOK_RECEIVED',
+    mutationResultType: 'WOOCOMMERCE_MUTATION_RESULT',
+    getLiveStoreLabel: () => config.woocommerceSiteUrl || 'WooCommerce DZ Store',
+    resolveFixture: (fixture) =>
+      fixture === 'meta-cod' || fixture === 'cod-form'
+        ? 'webhook-order-meta-cod.json'
+        : 'webhook-order-created.json',
+    createSimulatedHeaders: (rawBody, secret) => {
+      const computedHmac = createHmac('sha256', secret)
+        .update(Buffer.from(rawBody, 'utf8'))
+        .digest('base64');
+      return {
+        'x-wc-webhook-signature': computedHmac,
+        'content-type': 'application/json',
+      };
+    },
+    isTargetOrder: (order) => order?.source === 'woocommerce',
+    getMutationCredentials: () => ({
+      siteUrl: config.woocommerceSiteUrl || 'https://dz-boutique.com',
+      consumerKey: config.woocommerceConsumerKey || 'ck_simulated_key',
+      consumerSecret: config.woocommerceConsumerSecret || 'cs_simulated_secret',
+      cancelOnRefused: 'true',
+    }),
+  },
+  {
+    key: 'gsheets',
+    displayName: 'Google Sheets',
+    provider: gsheetsProvider,
+    getWebhookSecret: () => config.gsheetsWebhookSecret,
+    secretEnvVarName: 'GSHEETS_WEBHOOK_SECRET',
+    webhookReceivedType: 'GSHEETS_WEBHOOK_RECEIVED',
+    mutationResultType: 'GSHEETS_MUTATION_RESULT',
+    getLiveStoreLabel: () =>
+      config.gsheetsSpreadsheetId
+        ? `Sheet: ${config.gsheetsSpreadsheetId}`
+        : config.gsheetsAppsScriptUrl
+          ? `AppsScript: ${config.gsheetsAppsScriptUrl}`
+          : 'Google Sheets DZ COD',
+    resolveFixture: (fixture) =>
+      fixture === 'arabic' || fixture === 'arabic-cod' || fixture === 'barika'
+        ? 'webhook-row-arabic.json'
+        : 'webhook-row-setshop.json',
+    createSimulatedHeaders: (rawBody, secret) => {
+      const computedHmac = createHmac('sha256', secret)
+        .update(Buffer.from(rawBody, 'utf8'))
+        .digest('hex');
+      return {
+        'x-akadli-signature': computedHmac,
+        'content-type': 'application/json',
+      };
+    },
+    isTargetOrder: (order) => order?.source === 'gsheets',
+    getMutationCredentials: () => {
+      const credentials: Record<string, string> = {};
+      if (config.gsheetsSpreadsheetId && config.gsheetsAccessToken) {
+        credentials.spreadsheetId = config.gsheetsSpreadsheetId;
+        credentials.accessToken = config.gsheetsAccessToken;
+      } else if (config.gsheetsAppsScriptUrl) {
+        credentials.appsScriptWebhookUrl = config.gsheetsAppsScriptUrl;
+        if (config.gsheetsWebhookSecret) {
+          credentials.secret = config.gsheetsWebhookSecret;
+        }
+      } else {
+        credentials.spreadsheetId = 'simulated_spreadsheet_id';
+        credentials.accessToken = 'simulated_access_token';
+      }
+      return credentials;
+    },
+  },
+];
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -205,43 +332,41 @@ app.get('/api/lan-ip', (req, res) => {
   });
 });
 
-// Real Shopify Webhook Ingress (orders/create)
-app.post('/api/webhooks/shopify', async (req, res) => {
+// Provider Webhook Ingress Handler
+async function handleWebhookIngress(
+  desc: ProviderDescriptor,
+  req: express.Request,
+  res: express.Response
+) {
   try {
     const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
     const headers = req.headers as Record<string, string>;
 
-    // 1. Cryptographically verify HMAC-SHA256 signature if secret is configured
-    if (config.shopifyWebhookSecret) {
-      const isValid = await shopifyProvider.verifyWebhook(
-        headers,
-        rawBody,
-        config.shopifyWebhookSecret
-      );
+    const secret = desc.getWebhookSecret();
+    if (secret) {
+      const isValid = await desc.provider.verifyWebhook(headers, rawBody, secret);
       if (!isValid) {
-        console.warn('[Shopify Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
+        console.warn(`[${desc.displayName} Webhook] Rejected request: Invalid HMAC-SHA256 signature.`);
         return res.status(401).json({
-          error: 'Invalid Shopify HMAC-SHA256 signature',
+          error: `Invalid ${desc.displayName} HMAC-SHA256 signature`,
         });
       }
     } else {
       console.log(
-        '[Shopify Webhook] SHOPIFY_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
+        `[${desc.displayName} Webhook] ${desc.secretEnvVarName} not set in .env; skipping HMAC check for testing.`
       );
     }
 
-    // 2. Parse payload into canonical StandardizedDzOrder
-    const standardizedOrder = await shopifyProvider.parseWebhookOrder(req.body);
+    const standardizedOrder = await desc.provider.parseWebhookOrder(req.body);
     console.log(
-      `[Shopify Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
+      `[${desc.displayName} Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
     );
 
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'shopify');
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, desc.key);
     orderPayload.raw_order = req.body;
 
-    // 3. Broadcast webhook receipt to admin dashboard
     broadcastToAdmins({
-      type: 'SHOPIFY_WEBHOOK_RECEIVED',
+      type: desc.webhookReceivedType,
       data: {
         order: orderPayload,
         standardizedOrder,
@@ -249,14 +374,13 @@ app.post('/api/webhooks/shopify', async (req, res) => {
       },
     });
 
-    // 4. Trigger incoming call on connected phone receiver
     if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
       initiateCall(orderPayload);
       res.json({
         success: true,
         orderId: standardizedOrder.orderId,
         ringing: true,
-        message: 'Shopify order ingested and mobile receiver is ringing',
+        message: `${desc.displayName} order ingested and mobile receiver is ringing`,
       });
     } else {
       currentOrder = orderPayload;
@@ -264,55 +388,47 @@ app.post('/api/webhooks/shopify', async (req, res) => {
         success: true,
         orderId: standardizedOrder.orderId,
         ringing: false,
-        warning: 'Shopify order ingested into state, but no mobile phone client is connected',
+        warning: `${desc.displayName} order ingested into state, but no mobile phone client is connected`,
       });
     }
   } catch (err: any) {
-    console.error('[Shopify Webhook Error]:', err);
-    res.status(400).json({ error: err.message || 'Failed to process Shopify webhook' });
+    console.error(`[${desc.displayName} Webhook Error]:`, err);
+    res.status(400).json({ error: err.message || `Failed to process ${desc.displayName} webhook` });
   }
-});
+}
 
-// Local Fixture Simulation Endpoint
-app.post('/api/webhooks/shopify/simulate', async (req, res) => {
+// Provider Webhook Fixture Simulation Handler
+async function handleWebhookSimulate(
+  desc: ProviderDescriptor,
+  req: express.Request,
+  res: express.Response
+) {
   try {
-    const fixtureType =
-      req.body?.fixture === 'cod-form'
-        ? 'webhook-order-cod-form.json'
-        : 'webhook-order-created.json';
-    const rawFixtureBody = getShopifyFixture(fixtureType);
+    const fixtureType = desc.resolveFixture(req.body?.fixture);
+    const rawFixtureBody = getProviderFixture(desc.key, fixtureType);
     const parsedPayload = JSON.parse(rawFixtureBody);
 
-    const secret = config.shopifyWebhookSecret || 'simulated_secret_key';
-    const computedHmac = createHmac('sha256', secret)
-      .update(Buffer.from(rawFixtureBody, 'utf8'))
-      .digest('base64');
+    const secret =
+      desc.getWebhookSecret() ||
+      (desc.key === 'shopify' ? 'simulated_secret_key' : `simulated_${desc.key}_secret_key`);
+    const headers = desc.createSimulatedHeaders(rawFixtureBody, secret);
 
-    const headers: Record<string, string> = {
-      'x-shopify-hmac-sha256': computedHmac,
-      'x-shopify-topic': 'orders/create',
-      'x-shopify-shop-domain': config.shopifyShopDomain || 'dz-fashion.myshopify.com',
-      'content-type': 'application/json',
-    };
-
-    // Verify signature through provider
-    const isSignatureValid = await shopifyProvider.verifyWebhook(
+    const isSignatureValid = await desc.provider.verifyWebhook(
       headers,
       rawFixtureBody,
       secret
     );
 
-    // Parse into canonical order
-    const standardizedOrder = await shopifyProvider.parseWebhookOrder(parsedPayload);
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'shopify');
+    const standardizedOrder = await desc.provider.parseWebhookOrder(parsedPayload);
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, desc.key);
     orderPayload.raw_order = parsedPayload;
 
     console.log(
-      `[Shopify Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
+      `[${desc.displayName} Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
     );
 
     broadcastToAdmins({
-      type: 'SHOPIFY_WEBHOOK_RECEIVED',
+      type: desc.webhookReceivedType,
       data: {
         order: orderPayload,
         standardizedOrder,
@@ -337,441 +453,26 @@ app.post('/api/webhooks/shopify/simulate', async (req, res) => {
         success: true,
         orderId: standardizedOrder.orderId,
         ringing: false,
-        warning: 'Shopify order simulated and loaded, but phone client is offline',
+        warning: `${desc.displayName} order simulated and loaded, but phone client is offline`,
         order: orderPayload,
         signatureValid: isSignatureValid,
       });
     }
   } catch (err: any) {
-    console.error('[Shopify Simulate Error]:', err);
+    console.error(`[${desc.displayName} Simulate Error]:`, err);
     res.status(500).json({ error: err.message });
   }
-});
+}
 
-// Real YouCan Webhook Ingress (order.created)
-app.post('/api/webhooks/youcan', async (req, res) => {
-  try {
-    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
-    const headers = req.headers as Record<string, string>;
-
-    // 1. Cryptographically verify HMAC-SHA256 signature if secret is configured
-    if (config.youcanWebhookSecret) {
-      const isValid = await youcanProvider.verifyWebhook(
-        headers,
-        rawBody,
-        config.youcanWebhookSecret
-      );
-      if (!isValid) {
-        console.warn('[YouCan Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
-        return res.status(401).json({
-          error: 'Invalid YouCan HMAC-SHA256 signature',
-        });
-      }
-    } else {
-      console.log(
-        '[YouCan Webhook] YOUCAN_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
-      );
-    }
-
-    // 2. Parse payload into canonical StandardizedDzOrder
-    const standardizedOrder = await youcanProvider.parseWebhookOrder(req.body);
-    console.log(
-      `[YouCan Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
-    );
-
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'youcan');
-    orderPayload.raw_order = req.body;
-
-    // 3. Broadcast webhook receipt to admin dashboard
-    broadcastToAdmins({
-      type: 'YOUCAN_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: req.body,
-      },
-    });
-
-    // 4. Trigger incoming call on connected phone receiver
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        message: 'YouCan order ingested and mobile receiver is ringing',
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'YouCan order ingested into state, but no mobile phone client is connected',
-      });
-    }
-  } catch (err: any) {
-    console.error('[YouCan Webhook Error]:', err);
-    res.status(400).json({ error: err.message || 'Failed to process YouCan webhook' });
-  }
-});
-
-// Local YouCan Fixture Simulation Endpoint
-app.post('/api/webhooks/youcan/simulate', async (req, res) => {
-  try {
-    const fixtureType =
-      req.body?.fixture === 'extra-fields' || req.body?.fixture === 'cod-form'
-        ? 'webhook-order-extra-fields.json'
-        : 'webhook-order-created.json';
-    const rawFixtureBody = getYouCanFixture(fixtureType);
-    const parsedPayload = JSON.parse(rawFixtureBody);
-
-    const secret = config.youcanWebhookSecret || 'simulated_youcan_secret_key';
-    const computedHmac = createHmac('sha256', secret)
-      .update(Buffer.from(rawFixtureBody, 'utf8'))
-      .digest('hex');
-
-    const headers: Record<string, string> = {
-      'x-youcan-signature': computedHmac,
-      'content-type': 'application/json',
-    };
-
-    // Verify signature through provider
-    const isSignatureValid = await youcanProvider.verifyWebhook(
-      headers,
-      rawFixtureBody,
-      secret
-    );
-
-    // Parse into canonical order
-    const standardizedOrder = await youcanProvider.parseWebhookOrder(parsedPayload);
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'youcan');
-    orderPayload.raw_order = parsedPayload;
-
-    console.log(
-      `[YouCan Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
-    );
-
-    broadcastToAdmins({
-      type: 'YOUCAN_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: parsedPayload,
-        simulated: true,
-        fixture: fixtureType,
-      },
-    });
-
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'YouCan order simulated and loaded, but phone client is offline',
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    }
-  } catch (err: any) {
-    console.error('[YouCan Simulate Error]:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Real WooCommerce Webhook Ingress (order.created / order.updated)
-app.post('/api/webhooks/woocommerce', async (req, res) => {
-  try {
-    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
-    const headers = req.headers as Record<string, string>;
-
-    // 1. Cryptographically verify HMAC-SHA256 Base64 signature if secret is configured
-    if (config.woocommerceWebhookSecret) {
-      const isValid = await woocommerceProvider.verifyWebhook(
-        headers,
-        rawBody,
-        config.woocommerceWebhookSecret
-      );
-      if (!isValid) {
-        console.warn('[WooCommerce Webhook] Rejected request: Invalid HMAC-SHA256 signature.');
-        return res.status(401).json({
-          error: 'Invalid WooCommerce HMAC-SHA256 signature',
-        });
-      }
-    } else {
-      console.log(
-        '[WooCommerce Webhook] WOOCOMMERCE_WEBHOOK_SECRET not set in .env; skipping HMAC check for testing.'
-      );
-    }
-
-    // 2. Parse payload into canonical StandardizedDzOrder
-    const standardizedOrder = await woocommerceProvider.parseWebhookOrder(req.body);
-    console.log(
-      `[WooCommerce Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
-    );
-
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'woocommerce');
-    orderPayload.raw_order = req.body;
-
-    // 3. Broadcast webhook receipt to admin dashboard
-    broadcastToAdmins({
-      type: 'WOOCOMMERCE_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: req.body,
-      },
-    });
-
-    // 4. Trigger incoming call on connected phone receiver
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        message: 'WooCommerce order ingested and mobile receiver is ringing',
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'WooCommerce order ingested into state, but no mobile phone client is connected',
-      });
-    }
-  } catch (err: any) {
-    console.error('[WooCommerce Webhook Error]:', err);
-    res.status(400).json({ error: err.message || 'Failed to process WooCommerce webhook' });
-  }
-});
-
-// Local WooCommerce Fixture Simulation Endpoint
-app.post('/api/webhooks/woocommerce/simulate', async (req, res) => {
-  try {
-    const fixtureType =
-      req.body?.fixture === 'meta-cod' || req.body?.fixture === 'cod-form'
-        ? 'webhook-order-meta-cod.json'
-        : 'webhook-order-created.json';
-    const rawFixtureBody = getWooCommerceFixture(fixtureType);
-    const parsedPayload = JSON.parse(rawFixtureBody);
-
-    const secret = config.woocommerceWebhookSecret || 'simulated_woocommerce_secret_key';
-    const computedHmac = createHmac('sha256', secret)
-      .update(Buffer.from(rawFixtureBody, 'utf8'))
-      .digest('base64');
-
-    const headers: Record<string, string> = {
-      'x-wc-webhook-signature': computedHmac,
-      'content-type': 'application/json',
-    };
-
-    // Verify signature through provider
-    const isSignatureValid = await woocommerceProvider.verifyWebhook(
-      headers,
-      rawFixtureBody,
-      secret
-    );
-
-    // Parse into canonical order
-    const standardizedOrder = await woocommerceProvider.parseWebhookOrder(parsedPayload);
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'woocommerce');
-    orderPayload.raw_order = parsedPayload;
-
-    console.log(
-      `[WooCommerce Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
-    );
-
-    broadcastToAdmins({
-      type: 'WOOCOMMERCE_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: parsedPayload,
-        simulated: true,
-        fixture: fixtureType,
-      },
-    });
-
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'WooCommerce order simulated and loaded, but phone client is offline',
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    }
-  } catch (err: any) {
-    console.error('[WooCommerce Simulate Error]:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Real Google Sheets Webhook Ingress (new row trigger from Apps Script or webhook bridge)
-app.post('/api/webhooks/gsheets', async (req, res) => {
-  try {
-    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
-    const headers = req.headers as Record<string, string>;
-
-    // 1. Verify HMAC hex signature or shared secret if secret is configured
-    if (config.gsheetsWebhookSecret) {
-      const isValid = await gsheetsProvider.verifyWebhook(
-        headers,
-        rawBody,
-        config.gsheetsWebhookSecret
-      );
-      if (!isValid) {
-        console.warn('[Google Sheets Webhook] Rejected request: Invalid signature or secret.');
-        return res.status(401).json({
-          error: 'Invalid Google Sheets signature or secret',
-        });
-      }
-    } else {
-      console.log(
-        '[Google Sheets Webhook] GSHEETS_WEBHOOK_SECRET not set in .env; skipping verification for testing.'
-      );
-    }
-
-    // 2. Parse payload into canonical StandardizedDzOrder
-    const standardizedOrder = await gsheetsProvider.parseWebhookOrder(req.body);
-    console.log(
-      `[Google Sheets Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
-    );
-
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'gsheets');
-    orderPayload.raw_order = req.body;
-
-    // 3. Broadcast webhook receipt to admin dashboard
-    broadcastToAdmins({
-      type: 'GSHEETS_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: req.body,
-      },
-    });
-
-    // 4. Trigger incoming call on connected phone receiver
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        message: 'Google Sheets order ingested and mobile receiver is ringing',
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'Google Sheets order ingested into state, but no mobile phone client is connected',
-      });
-    }
-  } catch (err: any) {
-    console.error('[Google Sheets Webhook Error]:', err);
-    res.status(400).json({ error: err.message || 'Failed to process Google Sheets webhook' });
-  }
-});
-
-// Local Google Sheets Row Fixture Simulation Endpoint
-app.post('/api/webhooks/gsheets/simulate', async (req, res) => {
-  try {
-    const fixtureType =
-      req.body?.fixture === 'arabic' ||
-      req.body?.fixture === 'arabic-cod' ||
-      req.body?.fixture === 'barika'
-        ? 'webhook-row-arabic.json'
-        : 'webhook-row-setshop.json';
-    const rawFixtureBody = getGSheetsFixture(fixtureType);
-    const parsedPayload = JSON.parse(rawFixtureBody);
-
-    const secret = config.gsheetsWebhookSecret || 'simulated_gsheets_secret_key';
-    const computedHmac = createHmac('sha256', secret)
-      .update(Buffer.from(rawFixtureBody, 'utf8'))
-      .digest('hex');
-
-    const headers: Record<string, string> = {
-      'x-akadli-signature': computedHmac,
-      'content-type': 'application/json',
-    };
-
-    // Verify signature through provider
-    const isSignatureValid = await gsheetsProvider.verifyWebhook(
-      headers,
-      rawFixtureBody,
-      secret
-    );
-
-    // Parse into canonical order
-    const standardizedOrder = await gsheetsProvider.parseWebhookOrder(parsedPayload);
-    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'gsheets');
-    orderPayload.raw_order = parsedPayload;
-
-    console.log(
-      `[Google Sheets Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
-    );
-
-    broadcastToAdmins({
-      type: 'GSHEETS_WEBHOOK_RECEIVED',
-      data: {
-        order: orderPayload,
-        standardizedOrder,
-        rawOrder: parsedPayload,
-        simulated: true,
-        fixture: fixtureType,
-      },
-    });
-
-    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
-      initiateCall(orderPayload);
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: true,
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    } else {
-      currentOrder = orderPayload;
-      res.json({
-        success: true,
-        orderId: standardizedOrder.orderId,
-        ringing: false,
-        warning: 'Google Sheets order simulated and loaded, but phone client is offline',
-        order: orderPayload,
-        signatureValid: isSignatureValid,
-      });
-    }
-  } catch (err: any) {
-    console.error('[Google Sheets Simulate Error]:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// Register all provider webhook ingress & simulation endpoints
+for (const desc of providerRegistry) {
+  app.post(`/api/webhooks/${desc.key}`, async (req, res) => {
+    await handleWebhookIngress(desc, req, res);
+  });
+  app.post(`/api/webhooks/${desc.key}/simulate`, async (req, res) => {
+    await handleWebhookSimulate(desc, req, res);
+  });
+}
 
 app.post('/api/trigger-call', (req, res) => {
   const { payload, config: vConfig } = req.body;
@@ -943,6 +644,102 @@ async function handleCallAnswered() {
   }
 }
 
+async function dispatchOrderMutation(
+  desc: ProviderDescriptor,
+  order: OrderPayload,
+  decision: FinalizeOrderDecision
+) {
+  console.log(
+    `[${desc.displayName} Live Mutation] Applying decision "${decision.status}" to order #${order.order_id} via @akadli/core...`
+  );
+  try {
+    const credentials = desc.getMutationCredentials();
+    const constraints: OrderConstraints = {
+      allowedSizes: order.constraints?.allowed_sizes || [order.current_size],
+      allowedWilayas: (order.constraints?.allowed_wilayas?.map((w) => {
+        const match = w.match(/^(\d{2})/);
+        return (match ? match[1] : w) as WilayaCode;
+      }) || [order.current_wilaya.slice(0, 2) as WilayaCode]),
+      allowedCommunes: order.constraints?.allowed_communes || [order.current_commune],
+    };
+
+    const toolResult = await handleFinalizeOrderToolCall(
+      {
+        orderId: order.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: decision.final_wilaya || undefined,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      },
+      desc.provider,
+      credentials,
+      constraints
+    );
+
+    console.log(`[@akadli/core ${desc.key === 'shopify' ? '' : desc.displayName + ' '}Tool Result]:`, toolResult);
+
+    const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
+      orderId: order.order_id || decision.order_id,
+      status: decision.status,
+      finalSize: decision.final_size || undefined,
+      finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
+      finalCommune: decision.final_commune || undefined,
+      finalAddressNote: decision.final_address_note || undefined,
+      reasonOrNotes: decision.reason_or_notes || '',
+    };
+
+    const mutationMsg: WSMessage<ShopifyMutationData> = {
+      type: desc.mutationResultType,
+      data: {
+        orderId: order.order_id,
+        decision: standardizedDecision,
+        mutationResult: {
+          success: toolResult.success,
+          externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+          rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+        },
+        liveStore: desc.getLiveStoreLabel(),
+        ...(desc.key !== 'shopify' ? { provider: desc.key } : {}),
+        timestamp: Date.now(),
+      },
+    };
+
+    broadcastToAdmins(mutationMsg);
+    sendToPhone(mutationMsg);
+  } catch (err: any) {
+    console.error(`[${desc.displayName} Mutation Error]:`, err);
+    const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
+    const standardizedDecision: StandardizedFinalizedOrderDecision = {
+      orderId: order.order_id || decision.order_id,
+      status: decision.status,
+      finalSize: decision.final_size || undefined,
+      finalWilaya: fallbackWilaya,
+      finalCommune: decision.final_commune || undefined,
+      finalAddressNote: decision.final_address_note || undefined,
+      reasonOrNotes: decision.reason_or_notes || '',
+    };
+
+    const failureMsg: WSMessage<ShopifyMutationData> = {
+      type: desc.mutationResultType,
+      data: {
+        orderId: order.order_id,
+        decision: standardizedDecision,
+        mutationResult: {
+          success: false,
+          externalStatus: 'MUTATION_EXCEPTION',
+          rawResponse: { error: err.message },
+        },
+        liveStore: desc.getLiveStoreLabel(),
+        ...(desc.key !== 'shopify' ? { provider: desc.key } : {}),
+        timestamp: Date.now(),
+      },
+    };
+    broadcastToAdmins(failureMsg);
+  }
+}
+
 async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   setCallState('finalizing');
 
@@ -958,418 +755,9 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   sendToPhone(finalizedMsg);
 
   // Live Outbound Order Mutations powered by @akadli/core
-  const isYouCanOrder = currentOrder?.source === 'youcan';
-  const isWooCommerceOrder = currentOrder?.source === 'woocommerce';
-  const isGSheetsOrder = currentOrder?.source === 'gsheets';
-  const hasShopifyCreds = Boolean(
-    config.shopifyShopDomain &&
-      (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
-  );
-  const isShopifyOrder =
-    currentOrder?.source === 'shopify' ||
-    (!isYouCanOrder && !isWooCommerceOrder && !isGSheetsOrder && hasShopifyCreds);
-
-  if (isYouCanOrder && currentOrder) {
-    console.log(
-      `[YouCan Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
-    );
-    try {
-      const credentials = {
-        accessToken: config.youcanAccessToken || 'simulated_youcan_token',
-        baseUrl: config.youcanApiBaseUrl || 'https://api.youcan.shop',
-        closeOnRefused: 'true',
-      };
-
-      const constraints: OrderConstraints = {
-        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
-        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
-          const match = w.match(/^(\d{2})/);
-          return (match ? match[1] : w) as WilayaCode;
-        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
-        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
-      };
-
-      const toolResult = await handleFinalizeOrderToolCall(
-        {
-          orderId: currentOrder.order_id || decision.order_id,
-          status: decision.status,
-          finalSize: decision.final_size || undefined,
-          finalWilaya: decision.final_wilaya || undefined,
-          finalCommune: decision.final_commune || undefined,
-          finalAddressNote: decision.final_address_note || undefined,
-          reasonOrNotes: decision.reason_or_notes || '',
-        },
-        youcanProvider,
-        credentials,
-        constraints
-      );
-
-      console.log(`[@akadli/core YouCan Tool Result]:`, toolResult);
-
-      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const youcanMutationMsg: WSMessage<ShopifyMutationData> = {
-        type: 'YOUCAN_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: toolResult.success,
-            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
-            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
-          },
-          liveStore: config.youcanApiBaseUrl,
-          provider: 'youcan',
-          timestamp: Date.now(),
-        },
-      };
-
-      broadcastToAdmins(youcanMutationMsg);
-      sendToPhone(youcanMutationMsg);
-    } catch (err: any) {
-      console.error('[YouCan Mutation Error]:', err);
-      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
-      const standardizedDecision: StandardizedFinalizedOrderDecision = {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: fallbackWilaya,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const failureMsg: WSMessage<ShopifyMutationData> = {
-        type: 'YOUCAN_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: false,
-            externalStatus: 'MUTATION_EXCEPTION',
-            rawResponse: { error: err.message },
-          },
-          liveStore: config.youcanApiBaseUrl,
-          provider: 'youcan',
-          timestamp: Date.now(),
-        },
-      };
-      broadcastToAdmins(failureMsg);
-    }
-  } else if (isWooCommerceOrder && currentOrder) {
-    console.log(
-      `[WooCommerce Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
-    );
-    try {
-      const credentials = {
-        siteUrl: config.woocommerceSiteUrl || 'https://dz-boutique.com',
-        consumerKey: config.woocommerceConsumerKey || 'ck_simulated_key',
-        consumerSecret: config.woocommerceConsumerSecret || 'cs_simulated_secret',
-        cancelOnRefused: 'true',
-      };
-
-      const constraints: OrderConstraints = {
-        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
-        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
-          const match = w.match(/^(\d{2})/);
-          return (match ? match[1] : w) as WilayaCode;
-        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
-        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
-      };
-
-      const toolResult = await handleFinalizeOrderToolCall(
-        {
-          orderId: currentOrder.order_id || decision.order_id,
-          status: decision.status,
-          finalSize: decision.final_size || undefined,
-          finalWilaya: decision.final_wilaya || undefined,
-          finalCommune: decision.final_commune || undefined,
-          finalAddressNote: decision.final_address_note || undefined,
-          reasonOrNotes: decision.reason_or_notes || '',
-        },
-        woocommerceProvider,
-        credentials,
-        constraints
-      );
-
-      console.log(`[@akadli/core WooCommerce Tool Result]:`, toolResult);
-
-      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const woocommerceMutationMsg: WSMessage<ShopifyMutationData> = {
-        type: 'WOOCOMMERCE_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: toolResult.success,
-            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
-            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
-          },
-          liveStore: config.woocommerceSiteUrl || 'WooCommerce DZ Store',
-          provider: 'woocommerce',
-          timestamp: Date.now(),
-        },
-      };
-
-      broadcastToAdmins(woocommerceMutationMsg);
-      sendToPhone(woocommerceMutationMsg);
-    } catch (err: any) {
-      console.error('[WooCommerce Mutation Error]:', err);
-      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
-      const standardizedDecision: StandardizedFinalizedOrderDecision = {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: fallbackWilaya,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const failureMsg: WSMessage<ShopifyMutationData> = {
-        type: 'WOOCOMMERCE_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: false,
-            externalStatus: 'MUTATION_EXCEPTION',
-            rawResponse: { error: err.message },
-          },
-          liveStore: config.woocommerceSiteUrl || 'WooCommerce DZ Store',
-          provider: 'woocommerce',
-          timestamp: Date.now(),
-        },
-      };
-      broadcastToAdmins(failureMsg);
-    }
-  } else if (isGSheetsOrder && currentOrder) {
-    console.log(
-      `[Google Sheets Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
-    );
-    try {
-      const credentials: Record<string, string> = {};
-      if (config.gsheetsSpreadsheetId && config.gsheetsAccessToken) {
-        credentials.spreadsheetId = config.gsheetsSpreadsheetId;
-        credentials.accessToken = config.gsheetsAccessToken;
-      } else if (config.gsheetsAppsScriptUrl) {
-        credentials.appsScriptWebhookUrl = config.gsheetsAppsScriptUrl;
-        if (config.gsheetsWebhookSecret) {
-          credentials.secret = config.gsheetsWebhookSecret;
-        }
-      } else {
-        // Fallback for simulation / sandbox without live credentials
-        credentials.spreadsheetId = 'simulated_spreadsheet_id';
-        credentials.accessToken = 'simulated_access_token';
-      }
-
-      const constraints: OrderConstraints = {
-        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
-        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
-          const match = w.match(/^(\d{2})/);
-          return (match ? match[1] : w) as WilayaCode;
-        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
-        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
-      };
-
-      const toolResult = await handleFinalizeOrderToolCall(
-        {
-          orderId: currentOrder.order_id || decision.order_id,
-          status: decision.status,
-          finalSize: decision.final_size || undefined,
-          finalWilaya: decision.final_wilaya || undefined,
-          finalCommune: decision.final_commune || undefined,
-          finalAddressNote: decision.final_address_note || undefined,
-          reasonOrNotes: decision.reason_or_notes || '',
-        },
-        gsheetsProvider,
-        credentials,
-        constraints
-      );
-
-      console.log(`[@akadli/core Google Sheets Tool Result]:`, toolResult);
-
-      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const gsheetsMutationMsg: WSMessage<ShopifyMutationData> = {
-        type: 'GSHEETS_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: toolResult.success,
-            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
-            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
-          },
-          liveStore: config.gsheetsSpreadsheetId
-            ? `Sheet: ${config.gsheetsSpreadsheetId}`
-            : config.gsheetsAppsScriptUrl
-              ? `AppsScript: ${config.gsheetsAppsScriptUrl}`
-              : 'Google Sheets DZ COD',
-          provider: 'gsheets',
-          timestamp: Date.now(),
-        },
-      };
-
-      broadcastToAdmins(gsheetsMutationMsg);
-      sendToPhone(gsheetsMutationMsg);
-    } catch (err: any) {
-      console.error('[Google Sheets Mutation Error]:', err);
-      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
-      const standardizedDecision: StandardizedFinalizedOrderDecision = {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: fallbackWilaya,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const failureMsg: WSMessage<ShopifyMutationData> = {
-        type: 'GSHEETS_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: false,
-            externalStatus: 'MUTATION_EXCEPTION',
-            rawResponse: { error: err.message },
-          },
-          liveStore: config.gsheetsSpreadsheetId || 'Google Sheets DZ COD',
-          provider: 'gsheets',
-          timestamp: Date.now(),
-        },
-      };
-      broadcastToAdmins(failureMsg);
-    }
-  } else if (isShopifyOrder && hasShopifyCreds && currentOrder) {
-    console.log(
-      `[Shopify Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
-    );
-    try {
-      const credentials: Record<string, string> = {
-        shopDomain: config.shopifyShopDomain,
-        apiVersion: config.shopifyApiVersion || '2025-01',
-        cancelOnRefused: 'true',
-      };
-      if (config.shopifyAccessToken) {
-        credentials.accessToken = config.shopifyAccessToken;
-      }
-      if (config.shopifyClientId) {
-        credentials.clientId = config.shopifyClientId;
-      }
-      if (config.shopifyClientSecret) {
-        credentials.clientSecret = config.shopifyClientSecret;
-      }
-
-      const constraints: OrderConstraints = {
-        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
-        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
-          const match = w.match(/^(\d{2})/);
-          return (match ? match[1] : w) as WilayaCode;
-        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
-        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
-      };
-
-      const toolResult = await handleFinalizeOrderToolCall(
-        {
-          orderId: currentOrder.order_id || decision.order_id,
-          status: decision.status,
-          finalSize: decision.final_size || undefined,
-          finalWilaya: decision.final_wilaya || undefined,
-          finalCommune: decision.final_commune || undefined,
-          finalAddressNote: decision.final_address_note || undefined,
-          reasonOrNotes: decision.reason_or_notes || '',
-        },
-        shopifyProvider,
-        credentials,
-        constraints
-      );
-
-      console.log(`[@akadli/core Tool Result]:`, toolResult);
-
-      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const shopifyMutationMsg: WSMessage<ShopifyMutationData> = {
-        type: 'SHOPIFY_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: toolResult.success,
-            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
-            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
-          },
-          liveStore: config.shopifyShopDomain,
-          timestamp: Date.now(),
-        },
-      };
-
-      broadcastToAdmins(shopifyMutationMsg);
-      sendToPhone(shopifyMutationMsg);
-    } catch (err: any) {
-      console.error('[Shopify Mutation Error]:', err);
-      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
-      const standardizedDecision: StandardizedFinalizedOrderDecision = {
-        orderId: currentOrder.order_id || decision.order_id,
-        status: decision.status,
-        finalSize: decision.final_size || undefined,
-        finalWilaya: fallbackWilaya,
-        finalCommune: decision.final_commune || undefined,
-        finalAddressNote: decision.final_address_note || undefined,
-        reasonOrNotes: decision.reason_or_notes || '',
-      };
-
-      const failureMsg: WSMessage<ShopifyMutationData> = {
-        type: 'SHOPIFY_MUTATION_RESULT',
-        data: {
-          orderId: currentOrder.order_id,
-          decision: standardizedDecision,
-          mutationResult: {
-            success: false,
-            externalStatus: 'MUTATION_EXCEPTION',
-            rawResponse: { error: err.message },
-          },
-          liveStore: config.shopifyShopDomain,
-          timestamp: Date.now(),
-        },
-      };
-      broadcastToAdmins(failureMsg);
-    }
+  const matchedProvider = providerRegistry.find((p) => p.isTargetOrder(currentOrder));
+  if (matchedProvider && currentOrder) {
+    await dispatchOrderMutation(matchedProvider, currentOrder, decision);
   }
 
   // Fallback auto hangup after 8 seconds (allows agent to generate and complete goodbye statement)
