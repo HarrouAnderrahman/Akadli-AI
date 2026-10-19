@@ -24,12 +24,6 @@ export const config = {
   get elevenLabsAgentId(): string {
     return (process.env.ELEVENLABS_AGENT_ID || '').trim();
   },
-  get geminiApiKey(): string {
-    return (process.env.GEMINI_API_KEY || '').trim();
-  },
-  get openAiApiKey(): string {
-    return (process.env.OPENAI_API_KEY || '').trim();
-  },
   get shopifyShopDomain(): string {
     return (process.env.SHOPIFY_SHOP_DOMAIN || '').trim();
   },

@@ -32,7 +32,6 @@ pnpm --filter @akadli/playground dev
 | :--- | :--- | :--- | :--- |
 | **Server** | `PORT` / `SERVER_PORT` | `3000` / `3001` | Frontend Vite and backend Express ports |
 | **ElevenLabs** | `ELEVENLABS_API_KEY` / `_AGENT_ID` | — | ElevenAgents voice synthesis credentials |
-| **AI LLMs** | `GEMINI_API_KEY` / `OPENAI_API_KEY` | — | Optional backup LLM credentials |
 | **Shopify** | `SHOPIFY_SHOP_DOMAIN` / `_ACCESS_TOKEN` | — | Store domain & permanent access token |
 | **Shopify** | `SHOPIFY_CLIENT_ID` / `_CLIENT_SECRET` | — | OAuth client credentials (auto token exchange) |
 | **Shopify** | `SHOPIFY_WEBHOOK_SECRET` / `_API_VERSION` | `"2025-01"` | HMAC verification secret & API version |
