@@ -1,0 +1,28 @@
+{
+  "event": "order.created",
+  "id": "TSS-90421",
+  "tracking_id": "TY-25-00412",
+  "store_name": "Dz Mode Constantine",
+  "product_name": "Robe Traditionnelle Constantinoise",
+  "size": "L",
+  "cod_amount": 8500,
+  "total_price": 8500,
+  "customer": {
+    "full_name": "Khadija Benali",
+    "phone": "0550123456",
+    "wilaya": "25 - Constantine",
+    "commune": "El Khroub",
+    "address": "Cité 1600 Logements, Bâtiment B3"
+  },
+  "items": [
+    {
+      "name": "Robe Traditionnelle Constantinoise",
+      "variant": "L",
+      "quantity": 1,
+      "price": 8500
+    }
+  ],
+  "confirmation_status": "pending",
+  "status": "pending",
+  "created_at": "2026-10-19T14:30:00Z"
+}
