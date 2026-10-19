@@ -73,6 +73,18 @@ export const config = {
   get woocommerceWebhookSecret(): string {
     return (process.env.WOOCOMMERCE_WEBHOOK_SECRET || '').trim();
   },
+  get gsheetsSpreadsheetId(): string {
+    return (process.env.GSHEETS_SPREADSHEET_ID || '').trim();
+  },
+  get gsheetsAccessToken(): string {
+    return (process.env.GSHEETS_ACCESS_TOKEN || '').trim();
+  },
+  get gsheetsAppsScriptUrl(): string {
+    return (process.env.GSHEETS_APPS_SCRIPT_URL || '').trim();
+  },
+  get gsheetsWebhookSecret(): string {
+    return (process.env.GSHEETS_WEBHOOK_SECRET || '').trim();
+  },
 };
 
 export function getLocalIpAddress(): string {

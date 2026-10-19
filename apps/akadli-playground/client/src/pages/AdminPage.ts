@@ -71,6 +71,10 @@ export class AdminPage {
   private woocommerceConfigured = false;
   private woocommerceSiteUrl: string | null = null;
   private woocommerceMutationResult: ShopifyMutationData | null = null;
+  private gsheetsConfigured = false;
+  private gsheetsMode: string | null = null;
+  private gsheetsSpreadsheetId: string | null = null;
+  private gsheetsMutationResult: ShopifyMutationData | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -108,9 +112,13 @@ export class AdminPage {
         this.youcanApiBaseUrl = data.youcanApiBaseUrl || null;
         this.woocommerceConfigured = Boolean(data.woocommerceConfigured);
         this.woocommerceSiteUrl = data.woocommerceSiteUrl || null;
+        this.gsheetsConfigured = Boolean(data.gsheetsConfigured);
+        this.gsheetsMode = data.gsheetsMode || null;
+        this.gsheetsSpreadsheetId = data.gsheetsSpreadsheetId || null;
         this.updateShopifyStatusUi();
         this.updateYouCanStatusUi();
         this.updateWooCommerceStatusUi();
+        this.updateGSheetsStatusUi();
       }
     } catch (e) {}
   }
@@ -160,6 +168,7 @@ export class AdminPage {
         this.shopifyMutationResult = null;
         this.youcanMutationResult = null;
         this.woocommerceMutationResult = null;
+        this.gsheetsMutationResult = null;
         this.stopTimer();
         this.updateStatusBadge();
         this.renderTranscripts();
@@ -239,6 +248,21 @@ export class AdminPage {
         break;
       }
 
+      case 'GSHEETS_WEBHOOK_RECEIVED': {
+        if (msg.data?.order) {
+          this.order = msg.data.order;
+          this.updateFormFieldsFromOrder();
+          this.updateOrderSyncBadge();
+        }
+        break;
+      }
+
+      case 'GSHEETS_MUTATION_RESULT': {
+        this.gsheetsMutationResult = msg.data;
+        this.renderDecisionSummary();
+        break;
+      }
+
       case 'CALL_ENDED': {
         this.currentCallState = 'ended';
         this.stopTimer();
@@ -312,6 +336,12 @@ export class AdminPage {
             <div id="woocommerce-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
               <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
               <span class="text-[11px] text-zinc-400">WooCommerce Sandbox</span>
+            </div>
+
+            <!-- Google Sheets Connection Status -->
+            <div id="gsheets-status-pill" class="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50">
+              <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+              <span class="text-[11px] text-zinc-400">GSheets Sandbox</span>
             </div>
 
             <!-- Connection Status -->
@@ -397,6 +427,19 @@ export class AdminPage {
                   </button>
                   <button id="simulate-woocommerce-metacod-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate WooCommerce COD plugin meta_data webhook">
                     <span>WooCommerce: COD Meta</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1">
+                  <span>Simulate Google Sheets Webhook</span>
+                  <span class="font-mono text-[10px] text-zinc-500">COD Sheet Row fixtures</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <button id="simulate-gsheets-setshop-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate SetShop / JustSell Google Sheet row webhook">
+                    <span>GSheets: SetShop/JustSell Row</span>
+                  </button>
+                  <button id="simulate-gsheets-arabic-btn" class="h-8 px-2.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-xs transition flex items-center justify-center gap-1.5" title="Simulate Arabic COD Google Sheet row webhook">
+                    <span>GSheets: Arabic COD Sheet</span>
                   </button>
                 </div>
               </div>
@@ -745,6 +788,15 @@ export class AdminPage {
     this.container.querySelector('#simulate-woocommerce-metacod-btn')?.addEventListener('click', () => {
       this.handleSimulateWooCommerceWebhook('meta-cod');
     });
+
+    // Google Sheets webhook simulations
+    this.container.querySelector('#simulate-gsheets-setshop-btn')?.addEventListener('click', () => {
+      this.handleSimulateGSheetsWebhook('setshop');
+    });
+
+    this.container.querySelector('#simulate-gsheets-arabic-btn')?.addEventListener('click', () => {
+      this.handleSimulateGSheetsWebhook('arabic');
+    });
   }
 
   private syncFormToJson() {
@@ -1053,6 +1105,42 @@ export class AdminPage {
       `;
     }
 
+    let gsheetsMutationHtml = '';
+    if (this.gsheetsMutationResult) {
+      const res = this.gsheetsMutationResult;
+      const mut = res.mutationResult;
+      const isSuccess = mut.success;
+      const statusBadge = isSuccess
+        ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">UPDATED</span>'
+        : '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-rose-500/20 bg-rose-500/10 text-rose-400">MUTATION FAILED</span>';
+
+      const storeLabel = res.liveStore ? `${res.liveStore} (#${res.orderId})` : `#${res.orderId}`;
+
+      gsheetsMutationHtml = `
+        <div class="mt-3 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-zinc-200">Google Sheets COD Mutation</span>
+              <span class="text-zinc-500 font-mono text-[11px]">${storeLabel}</span>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="text-[11px] text-zinc-400 flex items-center justify-between">
+            <span>External Status: <code class="text-zinc-200">${mut.externalStatus}</code></span>
+            <span class="text-zinc-500 font-mono text-[10px]">${new Date(res.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details class="cursor-pointer pt-0.5">
+            <summary class="text-[10px] text-zinc-500 hover:text-zinc-400 font-mono select-none">API Mutation Details</summary>
+            <pre class="mt-1 p-2 rounded bg-zinc-900 border border-zinc-800/80 text-[10px] font-mono text-zinc-400 overflow-x-auto">${JSON.stringify(
+              mut.rawResponse ?? mut,
+              null,
+              2
+            )}</pre>
+          </details>
+        </div>
+      `;
+    }
+
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
@@ -1087,6 +1175,7 @@ export class AdminPage {
         ${shopifyMutationHtml}
         ${youcanMutationHtml}
         ${woocommerceMutationHtml}
+        ${gsheetsMutationHtml}
 
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
@@ -1150,6 +1239,23 @@ export class AdminPage {
     }
   }
 
+  private updateGSheetsStatusUi() {
+    const pill = this.container.querySelector('#gsheets-status-pill') as HTMLElement | null;
+    if (!pill) return;
+    if (this.gsheetsConfigured) {
+      const modeLabel = this.gsheetsMode === 'api_v4' ? 'API v4' : 'Apps Script';
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 bg-emerald-500/10';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span class="font-mono text-[11px]">GSheets (${modeLabel})</span>`;
+      pill.title = 'Live Google Sheets Integration Connected';
+    } else {
+      pill.className =
+        'hidden sm:inline-flex items-center gap-1.5 text-xs text-zinc-400 px-2.5 py-1 rounded-md border border-zinc-800 bg-zinc-900/50';
+      pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span><span class="text-[11px]">GSheets Sandbox</span>`;
+      pill.title = 'Google Sheets credentials not configured (Webhook test & local sandbox mode)';
+    }
+  }
+
   private updateOrderSyncBadge() {
     const badge = this.container.querySelector('#order-sync-badge');
     if (!badge) return;
@@ -1165,6 +1271,10 @@ export class AdminPage {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-purple-500/20 bg-purple-500/10 text-purple-400';
       badge.textContent = `WooCommerce: #${this.order.order_id}`;
+    } else if (this.order.source === 'gsheets') {
+      badge.className =
+        'text-[10px] px-1.5 py-0.5 rounded font-mono border border-emerald-500/20 bg-emerald-500/10 text-emerald-400';
+      badge.textContent = `GSheets: #${this.order.order_id}`;
     } else {
       badge.className =
         'text-[10px] px-1.5 py-0.5 rounded font-mono border border-zinc-800 bg-zinc-950 text-zinc-400';
@@ -1243,6 +1353,22 @@ export class AdminPage {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to simulate WooCommerce webhook');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  private async handleSimulateGSheetsWebhook(fixture: 'setshop' | 'arabic') {
+    try {
+      const res = await fetch('/api/webhooks/gsheets/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixture }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to simulate Google Sheets webhook');
       }
     } catch (err: any) {
       alert(err.message);

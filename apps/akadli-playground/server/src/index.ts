@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
 import { YouCanProvider } from '@akadli/provider-youcan';
 import { WooCommerceProvider } from '@akadli/provider-woocommerce';
+import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
 import { OrderConstraints } from '@akadli/adapter-contract';
@@ -91,9 +92,25 @@ function getWooCommerceFixture(filename: string): string {
   throw new Error(`WooCommerce fixture "${filename}" not found in candidate paths.`);
 }
 
+function getGSheetsFixture(filename: string): string {
+  const candidatePaths = [
+    path.resolve(__dirname, '../../../../packages/provider-gsheets/fixtures', filename),
+    path.resolve(__dirname, '../../../../../packages/provider-gsheets/fixtures', filename),
+    path.resolve(process.cwd(), 'packages/provider-gsheets/fixtures', filename),
+    path.resolve(process.cwd(), '../../packages/provider-gsheets/fixtures', filename),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return fs.readFileSync(p, 'utf-8');
+    }
+  }
+  throw new Error(`Google Sheets fixture "${filename}" not found in candidate paths.`);
+}
+
 const shopifyProvider = new ShopifyProvider();
 const youcanProvider = new YouCanProvider();
 const woocommerceProvider = new WooCommerceProvider();
+const gsheetsProvider = new GSheetsProvider();
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -165,6 +182,17 @@ app.get('/api/status', (req, res) => {
         config.woocommerceConsumerSecret
     ),
     woocommerceSiteUrl: config.woocommerceSiteUrl || null,
+    gsheetsConfigured: Boolean(
+      (config.gsheetsSpreadsheetId && config.gsheetsAccessToken) ||
+        config.gsheetsAppsScriptUrl
+    ),
+    gsheetsMode:
+      config.gsheetsSpreadsheetId && config.gsheetsAccessToken
+        ? 'api_v4'
+        : config.gsheetsAppsScriptUrl
+          ? 'apps_script'
+          : null,
+    gsheetsSpreadsheetId: config.gsheetsSpreadsheetId || null,
   });
 });
 
@@ -602,6 +630,149 @@ app.post('/api/webhooks/woocommerce/simulate', async (req, res) => {
   }
 });
 
+// Real Google Sheets Webhook Ingress (new row trigger from Apps Script or webhook bridge)
+app.post('/api/webhooks/gsheets', async (req, res) => {
+  try {
+    const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
+    const headers = req.headers as Record<string, string>;
+
+    // 1. Verify HMAC hex signature or shared secret if secret is configured
+    if (config.gsheetsWebhookSecret) {
+      const isValid = await gsheetsProvider.verifyWebhook(
+        headers,
+        rawBody,
+        config.gsheetsWebhookSecret
+      );
+      if (!isValid) {
+        console.warn('[Google Sheets Webhook] Rejected request: Invalid signature or secret.');
+        return res.status(401).json({
+          error: 'Invalid Google Sheets signature or secret',
+        });
+      }
+    } else {
+      console.log(
+        '[Google Sheets Webhook] GSHEETS_WEBHOOK_SECRET not set in .env; skipping verification for testing.'
+      );
+    }
+
+    // 2. Parse payload into canonical StandardizedDzOrder
+    const standardizedOrder = await gsheetsProvider.parseWebhookOrder(req.body);
+    console.log(
+      `[Google Sheets Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
+    );
+
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'gsheets');
+    orderPayload.raw_order = req.body;
+
+    // 3. Broadcast webhook receipt to admin dashboard
+    broadcastToAdmins({
+      type: 'GSHEETS_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: req.body,
+      },
+    });
+
+    // 4. Trigger incoming call on connected phone receiver
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        message: 'Google Sheets order ingested and mobile receiver is ringing',
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'Google Sheets order ingested into state, but no mobile phone client is connected',
+      });
+    }
+  } catch (err: any) {
+    console.error('[Google Sheets Webhook Error]:', err);
+    res.status(400).json({ error: err.message || 'Failed to process Google Sheets webhook' });
+  }
+});
+
+// Local Google Sheets Row Fixture Simulation Endpoint
+app.post('/api/webhooks/gsheets/simulate', async (req, res) => {
+  try {
+    const fixtureType =
+      req.body?.fixture === 'arabic' ||
+      req.body?.fixture === 'arabic-cod' ||
+      req.body?.fixture === 'barika'
+        ? 'webhook-row-arabic.json'
+        : 'webhook-row-setshop.json';
+    const rawFixtureBody = getGSheetsFixture(fixtureType);
+    const parsedPayload = JSON.parse(rawFixtureBody);
+
+    const secret = config.gsheetsWebhookSecret || 'simulated_gsheets_secret_key';
+    const computedHmac = createHmac('sha256', secret)
+      .update(Buffer.from(rawFixtureBody, 'utf8'))
+      .digest('hex');
+
+    const headers: Record<string, string> = {
+      'x-akadli-signature': computedHmac,
+      'content-type': 'application/json',
+    };
+
+    // Verify signature through provider
+    const isSignatureValid = await gsheetsProvider.verifyWebhook(
+      headers,
+      rawFixtureBody,
+      secret
+    );
+
+    // Parse into canonical order
+    const standardizedOrder = await gsheetsProvider.parseWebhookOrder(parsedPayload);
+    const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, 'gsheets');
+    orderPayload.raw_order = parsedPayload;
+
+    console.log(
+      `[Google Sheets Simulate] Simulated webhook for order #${standardizedOrder.orderId} (signature valid: ${isSignatureValid})`
+    );
+
+    broadcastToAdmins({
+      type: 'GSHEETS_WEBHOOK_RECEIVED',
+      data: {
+        order: orderPayload,
+        standardizedOrder,
+        rawOrder: parsedPayload,
+        simulated: true,
+        fixture: fixtureType,
+      },
+    });
+
+    if (phoneSocket && phoneSocket.readyState === WebSocket.OPEN) {
+      initiateCall(orderPayload);
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: true,
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    } else {
+      currentOrder = orderPayload;
+      res.json({
+        success: true,
+        orderId: standardizedOrder.orderId,
+        ringing: false,
+        warning: 'Google Sheets order simulated and loaded, but phone client is offline',
+        order: orderPayload,
+        signatureValid: isSignatureValid,
+      });
+    }
+  } catch (err: any) {
+    console.error('[Google Sheets Simulate Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/trigger-call', (req, res) => {
   const { payload, config: vConfig } = req.body;
   if (!payload) {
@@ -789,13 +960,14 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   // Live Outbound Order Mutations powered by @akadli/core
   const isYouCanOrder = currentOrder?.source === 'youcan';
   const isWooCommerceOrder = currentOrder?.source === 'woocommerce';
+  const isGSheetsOrder = currentOrder?.source === 'gsheets';
   const hasShopifyCreds = Boolean(
     config.shopifyShopDomain &&
       (config.shopifyAccessToken || (config.shopifyClientId && config.shopifyClientSecret))
   );
   const isShopifyOrder =
     currentOrder?.source === 'shopify' ||
-    (!isYouCanOrder && !isWooCommerceOrder && hasShopifyCreds);
+    (!isYouCanOrder && !isWooCommerceOrder && !isGSheetsOrder && hasShopifyCreds);
 
   if (isYouCanOrder && currentOrder) {
     console.log(
@@ -983,6 +1155,114 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
           },
           liveStore: config.woocommerceSiteUrl || 'WooCommerce DZ Store',
           provider: 'woocommerce',
+          timestamp: Date.now(),
+        },
+      };
+      broadcastToAdmins(failureMsg);
+    }
+  } else if (isGSheetsOrder && currentOrder) {
+    console.log(
+      `[Google Sheets Live Mutation] Applying decision "${decision.status}" to order #${currentOrder.order_id} via @akadli/core...`
+    );
+    try {
+      const credentials: Record<string, string> = {};
+      if (config.gsheetsSpreadsheetId && config.gsheetsAccessToken) {
+        credentials.spreadsheetId = config.gsheetsSpreadsheetId;
+        credentials.accessToken = config.gsheetsAccessToken;
+      } else if (config.gsheetsAppsScriptUrl) {
+        credentials.appsScriptWebhookUrl = config.gsheetsAppsScriptUrl;
+        if (config.gsheetsWebhookSecret) {
+          credentials.secret = config.gsheetsWebhookSecret;
+        }
+      } else {
+        // Fallback for simulation / sandbox without live credentials
+        credentials.spreadsheetId = 'simulated_spreadsheet_id';
+        credentials.accessToken = 'simulated_access_token';
+      }
+
+      const constraints: OrderConstraints = {
+        allowedSizes: currentOrder.constraints?.allowed_sizes || [currentOrder.current_size],
+        allowedWilayas: (currentOrder.constraints?.allowed_wilayas?.map((w) => {
+          const match = w.match(/^(\d{2})/);
+          return (match ? match[1] : w) as WilayaCode;
+        }) || [currentOrder.current_wilaya.slice(0, 2) as WilayaCode]),
+        allowedCommunes: currentOrder.constraints?.allowed_communes || [currentOrder.current_commune],
+      };
+
+      const toolResult = await handleFinalizeOrderToolCall(
+        {
+          orderId: currentOrder.order_id || decision.order_id,
+          status: decision.status,
+          finalSize: decision.final_size || undefined,
+          finalWilaya: decision.final_wilaya || undefined,
+          finalCommune: decision.final_commune || undefined,
+          finalAddressNote: decision.final_address_note || undefined,
+          reasonOrNotes: decision.reason_or_notes || '',
+        },
+        gsheetsProvider,
+        credentials,
+        constraints
+      );
+
+      console.log(`[@akadli/core Google Sheets Tool Result]:`, toolResult);
+
+      const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const gsheetsMutationMsg: WSMessage<ShopifyMutationData> = {
+        type: 'GSHEETS_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: toolResult.success,
+            externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+            rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+          },
+          liveStore: config.gsheetsSpreadsheetId
+            ? `Sheet: ${config.gsheetsSpreadsheetId}`
+            : config.gsheetsAppsScriptUrl
+              ? `AppsScript: ${config.gsheetsAppsScriptUrl}`
+              : 'Google Sheets DZ COD',
+          provider: 'gsheets',
+          timestamp: Date.now(),
+        },
+      };
+
+      broadcastToAdmins(gsheetsMutationMsg);
+      sendToPhone(gsheetsMutationMsg);
+    } catch (err: any) {
+      console.error('[Google Sheets Mutation Error]:', err);
+      const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
+      const standardizedDecision: StandardizedFinalizedOrderDecision = {
+        orderId: currentOrder.order_id || decision.order_id,
+        status: decision.status,
+        finalSize: decision.final_size || undefined,
+        finalWilaya: fallbackWilaya,
+        finalCommune: decision.final_commune || undefined,
+        finalAddressNote: decision.final_address_note || undefined,
+        reasonOrNotes: decision.reason_or_notes || '',
+      };
+
+      const failureMsg: WSMessage<ShopifyMutationData> = {
+        type: 'GSHEETS_MUTATION_RESULT',
+        data: {
+          orderId: currentOrder.order_id,
+          decision: standardizedDecision,
+          mutationResult: {
+            success: false,
+            externalStatus: 'MUTATION_EXCEPTION',
+            rawResponse: { error: err.message },
+          },
+          liveStore: config.gsheetsSpreadsheetId || 'Google Sheets DZ COD',
+          provider: 'gsheets',
           timestamp: Date.now(),
         },
       };

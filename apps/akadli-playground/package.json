@@ -19,6 +19,7 @@
     "@akadli/adapter-contract": "workspace:*",
     "@akadli/core": "workspace:*",
     "@akadli/dz-geo": "workspace:*",
+    "@akadli/provider-gsheets": "workspace:*",
     "@akadli/provider-shopify": "workspace:*",
     "@akadli/provider-woocommerce": "workspace:*",
     "@akadli/provider-youcan": "workspace:*",
