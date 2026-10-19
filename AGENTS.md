@@ -14,7 +14,7 @@ Canonical architectural reference for stateless AI coding sessions across the Ak
   - `docs/api-spec.md` & `fixtures/*.json`
   - `src/schemas.ts`, `src/<name>-client.ts`, `src/<name>-provider.ts`, `src/index.ts`
   - `test/<name>-provider.test.ts` (Vitest + MSW `msw/node` covering all 5 mutation/verification scenarios)
-- `apps/akadli-playground`: Local HTTPS WebRTC phone & webhook testing sandbox (`/admin` and `/phone`).
+- `apps/akadli-playground`: Local HTTPS WebRTC phone & webhook testing sandbox (`/admin` and `/phone`). All store/ERP providers register via `providerRegistry` in `server/src/index.ts`.
 
 ## 3. Strict Coding Invariants (Anti-Drift Rules)
 - **Zero Bloat Dependencies:** Use Node 20+ native `fetch` and `node:crypto` (`crypto.timingSafeEqual`). Never install `axios`, `node-fetch`, or `moment`.
