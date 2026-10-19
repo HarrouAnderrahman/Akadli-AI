@@ -28,7 +28,7 @@ export function canonicalizeGeoToken(input: string): string {
     .trim();
 }
 
-function levenshteinDistance(a: string, b: string): number {
+export function levenshteinDistance(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
   const d: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));

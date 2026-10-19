@@ -1,6 +1,6 @@
 import { WilayaCode } from "@akadli/adapter-contract";
 import { COMMUNES_BY_WILAYA, ARABIC_TO_FRENCH_COMMUNES } from "./data/communes.js";
-import { canonicalizeGeoToken } from "./wilaya.js";
+import { canonicalizeGeoToken, levenshteinDistance } from "./wilaya.js";
 import { CommuneMatchResult } from "./types.js";
 
 /**
@@ -88,7 +88,18 @@ export function resolveCommuneForWilaya(
     }
   }
 
-  // 4. Fallback: return trimmed input so voice agent can clarify with the customer
+  // 4. Bounded Levenshtein fuzzy match for small typos (distance <= 2 for strings >= 5 chars)
+  for (const candidate of allowedCommunesForWilaya) {
+    const candidateClean = canonicalizeGeoToken(candidate);
+    if (cleaned.length >= 5 && candidateClean.length >= 5) {
+      const dist = levenshteinDistance(cleaned, candidateClean);
+      if (dist <= 2) {
+        return { canonicalCommune: candidate, matched: true };
+      }
+    }
+  }
+
+  // 5. Fallback: return trimmed input so voice agent can clarify with the customer
   return { canonicalCommune: rawCommune.trim(), matched: false };
 }
 
