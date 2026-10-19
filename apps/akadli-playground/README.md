@@ -126,18 +126,42 @@ Mobile browsers require **HTTPS** (or `localhost`) to grant microphone permissio
 
 `akadli-playground` includes built-in support for testing `@akadli/provider-shopify` against real Shopify stores or local fixture webhooks:
 
-### 1. Configure Shopify Credentials (Optional for Live Store Mutation)
+### Live Shopify Store Setup Guide (2026 Dev Dashboard)
+When connecting a live Shopify store via the modern developer dashboard:
+1. **Create App in `dev.shopify.com`:**
+   - Go to [dev.shopify.com](https://dev.shopify.com) -> **Apps** -> **Create an App**.
+   - Set **App URL** to `https://example.com` (leave **Embed app in Shopify admin** **UNCHECKED**).
+   - Under **API access** -> **Scopes**, grant `read_orders` and `write_orders`.
+2. **Enable Protected Customer Data Access (CRITICAL):**
+   - In `dev.shopify.com` -> **API access** -> **Protected customer data access**, click **Manage** and enable **Protected customer data**.
+   - Check **Name**, **Address**, and **Phone**.
+   - *Why this is critical*: Without this, Shopify redacts customer details from webhooks and blocks `shipping_address` updates when a customer modifies their Wilaya or Commune.
+3. **Authentication (`clientId` + `clientSecret` or `accessToken`):**
+   - Provide either OAuth client credentials (`SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`) which auto-exchange tokens via `/admin/oauth/access_token`, or a direct Admin Access Token (`SHOPIFY_ACCESS_TOKEN`).
+4. **Algerian Address Mapping (Missing `Province` Field):**
+   - In standard Shopify checkout, selecting `Country: Algeria` hides the `Province` dropdown completely.
+   - Customers typically input their Wilaya in the `city` field, in `address1`, or supply a 5-digit Algerian ONP postal code in `zip` (`13000` -> `13`).
+   - For stores using Algerian COD forms (**EasySell**, **Releasit**, etc.), customer address details are embedded in `note_attributes`.
+   - `@akadli/provider-shopify` automatically extracts and normalizes the Wilaya (`01`-`69`) and Commune across all these sources using `@akadli/dz-geo`.
+
+### 1. Configure Shopify Credentials
 Add to `apps/akadli-playground/.env`:
 ```env
 SHOPIFY_SHOP_DOMAIN=your-store.myshopify.com
+
+# Use either direct SHOPIFY_ACCESS_TOKEN or OAuth Client Credentials:
 SHOPIFY_ACCESS_TOKEN=shpat_xxxxxxxxxxxxxxxxxxxxxxxx
+# OR:
+SHOPIFY_CLIENT_ID=your_client_id
+SHOPIFY_CLIENT_SECRET=your_client_secret
+
 SHOPIFY_WEBHOOK_SECRET=your_webhook_signing_secret
 SHOPIFY_API_VERSION=2025-01
 ```
 
 ### 2. Ingesting Real Webhooks from Shopify
 - Expose the local backend (port `3001`) via a reverse tunnel (e.g., `cloudflared tunnel` or `ngrok`).
-- In the Shopify Admin, navigate to **Settings -> Notifications -> Webhooks** and create a webhook:
+- In Shopify Admin, navigate to **Settings -> Notifications -> Webhooks** (or configure in `dev.shopify.com`) and create a webhook:
   - Event: `Order creation`
   - Format: `JSON`
   - URL: `https://your-tunnel-domain/api/webhooks/shopify`

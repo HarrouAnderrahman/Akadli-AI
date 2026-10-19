@@ -4,6 +4,32 @@ This document defines the technical specification, webhook signature verificatio
 
 ---
 
+## Live Shopify Store Setup Guide (2026 Dev Dashboard)
+
+This section covers the verified live setup steps for integrating Shopify stores with Akadli-AI:
+
+### 1. Create App in `dev.shopify.com`
+- Navigate to [dev.shopify.com](https://dev.shopify.com) and create or open your app.
+- Set **App URL** to `https://example.com` (leave **Embed app in Shopify admin** **UNCHECKED**).
+- Under **API access** -> **Scopes**, select `read_orders,write_orders`.
+
+### 2. Enable Protected Customer Data Access (CRITICAL)
+- In `dev.shopify.com` -> **API access** -> **Protected customer data access**, enable **Protected customer data**.
+- Check **Name**, **Address**, and **Phone**.
+- *Rationale*: Shopify redacts customer details from webhooks and blocks `shipping_address` mutations if these fields are not explicitly approved.
+
+### 3. Authentication (`clientId` + `clientSecret` or `accessToken`)
+- **OAuth Exchange**: Provide `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`. `@akadli/provider-shopify` automatically requests an access token from `POST /admin/oauth/access_token` with `grant_type: client_credentials` and caches it in memory until expiry.
+- **Direct Access Token**: Alternatively, configure `SHOPIFY_ACCESS_TOKEN` (`shpat_...`) directly.
+
+### 4. Algerian Address Mapping (Missing `Province` Field)
+- Shopify checkout hides the `Province` field when Country is set to `Algeria`.
+- Customers typically provide their Wilaya in `city`, `address1`, or enter a 5-digit Algerian ONP postal code in `zip` (`13000` -> Wilaya `13`).
+- Many Algerian merchants use COD form apps (EasySell, Releasit) which store address fields in `note_attributes`.
+- `@akadli/provider-shopify` dynamically resolves Wilaya and Commune using multi-candidate resolution across `note_attributes`, `province`/`province_code`, `city`, `zip`, and `address1`/`address2` via `@akadli/dz-geo`.
+
+---
+
 ## 1. Webhook Signature Verification (`verifyWebhook`)
 
 Shopify signs every webhook request using HMAC-SHA256 calculated over the unparsed raw request body with the merchant's webhook shared secret.
