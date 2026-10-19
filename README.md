@@ -1,92 +1,91 @@
-# Akadli-AI (أكدلي)
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)** • [https://akadli.me](https://akadli.me)
 
-**Akadli-AI** is an autonomous, conversational AI voice confirmation engine specifically engineered for Algerian Cash-on-Delivery (COD) e-commerce. It automates high-churn, call-center outbound confirmation calls using ElevenLabs Conversational AI (ElevenAgents) in Algerian Darja, French, and Modern Standard Arabic.
+# Akadli-AI (`@akadli/*`)
+
+> Open-source Algerian Cash-on-Delivery (COD) Voice Confirmation Engine & E-Commerce Store Adapters.
+
+Akadli-AI automates post-checkout COD order confirmation calls in Algerian Darja via ElevenAgents (WebRTC / SIP / WhatsApp links), validates addresses against the official **2026 Algerian administrative division (69 Wilayas & 1,708 Communes)**, and mutates orders across Shopify, YouCan, WooCommerce, Google Sheets, and Tassyir.
 
 ---
 
-## Architecture & Monorepo Structure
-
-Built as a high-performance **Turborepo + pnpm** monorepo designed for deterministic multi-provider integrations:
+## End-to-End Lifecycle
 
 ```text
-akadli-ai/
-├── apps/
-│   └── akadli-playground/           # Local WebRTC testing harness (/admin and /phone mobile receiver)
-├── packages/
-│   ├── adapter-contract/             # Canonical Zod schemas & TypeScript interfaces (Zero external dependencies)
-│   ├── dz-geo/                       # 69 Wilayas (2026), 1,708 Communes & +213 phone normalizer
-│   ├── core/                         # ElevenAgents dynamic prompt variable builder & tool handler
-│   └── provider-<name>/              # Pluggable store & ERP adapters (Phase 2: YouCan, Shopify, Tassyir, etc.)
-├── .agents/skills/                   # Local workspace automation skills for pairing agents
-└── package.json                      # Workspace scripts & tooling
+Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilayas) -> @akadli/core (Darja Voice Call) -> applyOrderDecision() (Live Store Update)
 ```
 
 ---
 
-## Packages Overview
+## Monorepo Packages
 
-### 1. `@akadli/adapter-contract`
-- Strict zero-dependency contract library defining:
-  - `StandardizedDzOrder`: Universal normalized order format (`orderId`, `customerPhone`, `currentWilaya`, `constraints`).
-  - `FinalizedOrderDecision`: Strict schema for ElevenAgents `finalize_order_decision` tool calls (`CONFIRMED`, `REFUSED`, `MODIFIED`).
-  - `IEcommerceProvider`: Standard interface with `verifyWebhook`, `parseWebhookOrder`, and `applyOrderDecision`.
-  - `WilayaCodeSchema`: Validates zero-padded 2-digit codes (`"01"` to `"69"`).
-
-### 2. `@akadli/dz-geo`
-- Comprehensive 2026 Algerian administrative division dataset:
-  - **69 Wilayas** (`"01"` to `"69"`) including the 11 delegated Wilayas (*Aflou, Barika, Bou Saada, El Abiodh Sidi Cheikh, etc.*).
-  - **1,708 Communes** with cross-script Arabic to French mappings.
-  - **`WILAYAS_58`**: Backward-compatibility slice for legacy couriers (Yalidine, Ecotrack, ZR Express) or older store database enums.
-  - **4-Stage Wilaya Normalizer**: Numeric extraction -> Script canonicalization -> Alias & Arabizi dictionary -> Levenshtein fuzzy match.
-  - **Algerian Phone Normalizer**: Normalizes any input format into local `05/06/07XXXXXXXX` or international E.164 `+213[567]XXXXXXXX`.
-
-### 3. `@akadli/core`
-- **Dynamic Variable Injection**: Constructs `dynamicVariables` for ElevenAgents (`allowed_sizes_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`, `price_da`) to prevent hallucinations.
-- **Server Tool Handler**: Processes `finalize_order_decision` tool invocations, normalizes any customer modifications, validates them against constraints, and dispatches to the store provider.
-
-### 4. `apps/akadli-playground` (`@akadli/playground`)
-- Full-fidelity local WebRTC simulator for development (sandbox testbed):
-  - `/admin`: Control dashboard to load sample orders, configure agent credentials, and trigger calls.
-  - `/phone`: Simulated mobile phone receiver connecting to ElevenLabs Conversational WebRTC with custom ringtone and Darja audio playback.
+| Package | Scope | Description |
+| :--- | :--- | :--- |
+| [`@akadli/adapter-contract`](./packages/adapter-contract) | Contracts | Pure Zod schemas & `IEcommerceProvider` contract |
+| [`@akadli/dz-geo`](./packages/dz-geo) | Geo / Phone | 2026 Algerian 69 Wilayas, 1,708 Communes & `+213` phone normalizer |
+| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder & `handleFinalizeOrderToolCall` orchestrator |
+| [`@akadli/provider-shopify`](./packages/provider-shopify) | Adapter | Shopify HMAC verification, Algeria missing-province fallback, OAuth `client_credentials` & REST mutations |
+| [`@akadli/provider-youcan`](./packages/provider-youcan) | Adapter | YouCan `.shop` webhook verification, 1-page COD `extra_fields` parser & order close/update API |
+| [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | Adapter | WooCommerce REST v3 Basic Auth, `DZ-XX` state & COD plugin `meta_data` adapter |
+| [`@akadli/provider-gsheets`](./packages/provider-gsheets) | Adapter | Universal Google Sheets v4 & Apps Script bridge for SetShop, JustSell, Foorweb & landing pages |
+| [`@akadli/provider-tassyir`](./packages/provider-tassyir) | Adapter / ERP | Tassyir Algerian COD ERP & two-phase courier expedition dispatch for Yalidine/Ecotrack/ZR |
 
 ---
 
-## Quick Start
+## 30-Second Example
 
-### Prerequisites
-- Node.js >= 20.0.0
-- pnpm >= 9.0.0
+```typescript
+import { ShopifyProvider } from "@akadli/provider-shopify";
+import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "@akadli/core";
 
-### Installation
+const provider = new ShopifyProvider();
+
+// 1. Verify webhook signature & parse standardized Algerian COD order
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 2. Inject dynamic prompt variables into ElevenAgents for Darja voice confirmation call
+const promptVars = buildElevenAgentsDynamicVariables(order);
+
+// 3. Handle ElevenAgents finalize_order_decision tool call & mutate live store
+const result = await handleFinalizeOrderToolCall(
+  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED" }
+  provider,
+  {
+    shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
+    accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
+  },
+  order.constraints
+);
+```
+
+---
+
+## Interactive Sandbox (`@akadli/playground`)
+
+Test live voice calls over local Wi-Fi with WebRTC audio streaming:
+
 ```bash
+git clone https://github.com/Akadli-AI/Akadli-AI.git
 pnpm install
-```
-
-### Build & Typecheck
-```bash
-# Build all packages
 pnpm build
-
-# Typecheck all packages
-pnpm typecheck
+pnpm --filter @akadli/playground dev
 ```
 
-### Run Tests
-```bash
-# Run all Vitest suites across packages
-pnpm test
-```
+- Open `https://localhost:3000/admin` to trigger calls, inspect payloads, and test webhook ingestion.
+- Open `https://localhost:3000/phone` on your smartphone to receive simulated customer voice calls.
+- See [`packages/provider-shopify/README.md`](./packages/provider-shopify/README.md) for live Shopify Dev Dashboard (`dev.shopify.com`) & Cloudflare Tunnel setup.
 
-### Launch Voice Simulator
-```bash
-cd apps/akadli-playground
-cp .env.example .env # Add your ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID
-pnpm dev
-```
-- Open `https://localhost:3000/admin` for the Admin Dashboard.
-- Open `https://localhost:3000/phone` for the Mobile Phone Receiver.
+---
+
+## For AI Coding Agents
+
+Review [`./AGENTS.md`](./AGENTS.md) and [`.agents/skills/`](./.agents/skills/) before modifying code:
+- Maintain `@akadli/*` package boundaries and zero-bloat runtime dependencies.
+- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`).
+- Enforce the pre-commit verification gate: `pnpm turbo run build typecheck lint test`.
 
 ---
 
 ## License
-Private & Proprietary - Akadli-AI.
+
+MIT
