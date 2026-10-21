@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { WooCommerceProvider } from "../src/index.js";
+import { WooCommerceProvider, isWooCommerceWebhookPing } from "../src/index.js";
 
 const __dirname = resolve(fileURLToPath(import.meta.url), "..");
 
@@ -321,5 +321,61 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
 
     expect(notFoundRes.success).toBe(false);
     expect(notFoundRes.externalStatus).toBe("NOT_FOUND");
+  });
+
+  it("8. detects unsigned WooCommerce deliver_ping handshake and distinguishes from normal orders", () => {
+    // 1. Form-urlencoded raw body string (WC deliver_ping default)
+    expect(
+      isWooCommerceWebhookPing(
+        { "content-type": "application/x-www-form-urlencoded" },
+        undefined,
+        "webhook_id=1"
+      )
+    ).toBe(true);
+
+    // 2. Parsed body object
+    expect(isWooCommerceWebhookPing({}, { webhook_id: 1 })).toBe(true);
+    expect(isWooCommerceWebhookPing({}, { webhook_id: "42" })).toBe(true);
+
+    // 3. Raw Buffer
+    expect(
+      isWooCommerceWebhookPing({}, undefined, Buffer.from("webhook_id=99"))
+    ).toBe(true);
+
+    // 4. Topic header fallback
+    expect(
+      isWooCommerceWebhookPing({
+        "x-wc-webhook-topic": "action.woocommerce_deliver_ping"
+      })
+    ).toBe(true);
+
+    // 5. Provider instance methods
+    expect(provider.isWebhookPing({}, { webhook_id: 1 })).toBe(true);
+    expect(provider.isWooCommerceWebhookPing({}, { webhook_id: 1 })).toBe(true);
+
+    // 6. Signed request is NEVER treated as a ping handshake
+    expect(
+      isWooCommerceWebhookPing(
+        { "x-wc-webhook-signature": "valid_sig" },
+        { webhook_id: 1 }
+      )
+    ).toBe(false);
+
+    // 7. Case-insensitive signature check prevents false positives
+    expect(
+      isWooCommerceWebhookPing(
+        { "X-WC-Webhook-Signature": "valid_sig" },
+        undefined,
+        "webhook_id=1"
+      )
+    ).toBe(false);
+
+    // 8. Normal order fixture is NOT treated as a ping
+    expect(
+      isWooCommerceWebhookPing({}, standardPayload, standardRawBody)
+    ).toBe(false);
+
+    // 9. Empty payload is NOT a ping
+    expect(isWooCommerceWebhookPing({}, {})).toBe(false);
   });
 });

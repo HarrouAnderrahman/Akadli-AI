@@ -39,6 +39,12 @@ export function verifyWooCommerceWebhook(
 }
 ```
 
+### Initial Unsigned Handshake Ping (`isWooCommerceWebhookPing`)
+When creating or activating a webhook in WordPress Admin, WooCommerce core invokes `WC_Webhook::deliver_ping()` via `wp_safe_remote_post()`.
+- **Payload:** `webhook_id=<id>` (sent with `Content-Type: application/x-www-form-urlencoded`).
+- **Signature:** WooCommerce **does not calculate or send** an `x-wc-webhook-signature` header on test pings.
+- **Handling:** Webhook receivers must recognize this handshake via `isWooCommerceWebhookPing(headers, body, rawBody)` and acknowledge immediately with HTTP 200 without attempting HMAC verification or order parsing.
+
 ---
 
 ## 2. Inbound COD Order Extraction (`parseWebhookOrder`)

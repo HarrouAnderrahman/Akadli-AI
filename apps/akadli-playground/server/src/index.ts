@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
 import { YouCanProvider } from '@akadli/provider-youcan';
-import { WooCommerceProvider } from '@akadli/provider-woocommerce';
+import { WooCommerceProvider, isWooCommerceWebhookPing } from '@akadli/provider-woocommerce';
 import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { TassyirProvider } from '@akadli/provider-tassyir';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
@@ -40,6 +40,14 @@ const app = express();
 app.use(cors());
 app.use(
   express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: true,
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     },
@@ -377,11 +385,39 @@ async function handleWebhookIngress(
     const rawBody: Buffer | string = (req as any).rawBody || JSON.stringify(req.body);
     const headers = req.headers as Record<string, string>;
 
+    // Handle WooCommerce initial unsigned handshake ping (WC_Webhook::deliver_ping)
+    if (desc.key === 'woocommerce' && isWooCommerceWebhookPing(headers, req.body, rawBody)) {
+      const webhookId =
+        req.body?.webhook_id ||
+        (typeof rawBody === 'string' && rawBody.split('webhook_id=')[1]?.split('&')[0]) ||
+        (Buffer.isBuffer(rawBody) && rawBody.toString('utf8').split('webhook_id=')[1]?.split('&')[0]) ||
+        'unknown';
+      console.log(
+        `[WooCommerce Webhook] Acknowledged initial webhook handshake ping (webhook_id: ${webhookId}).`
+      );
+      return res.status(200).json({
+        success: true,
+        message: 'WooCommerce webhook ping acknowledged',
+        webhook_id: webhookId,
+      });
+    }
+
     const secret = desc.getWebhookSecret();
     if (secret) {
       const isValid = await desc.provider.verifyWebhook(headers, rawBody, secret);
       if (!isValid) {
-        console.warn(`[${desc.displayName} Webhook] Rejected request: Invalid HMAC-SHA256 signature.`);
+        const receivedSignature =
+          headers['x-wc-webhook-signature'] ||
+          headers['x-shopify-hmac-sha256'] ||
+          headers['x-youcan-signature'] ||
+          headers['x-tassyir-signature'] ||
+          headers['x-akadli-signature'];
+        console.warn(
+          `[${desc.displayName} Webhook] Rejected request: Invalid HMAC-SHA256 signature. ` +
+          `ContentType: "${req.headers['content-type']}", ` +
+          `UserAgent: "${req.headers['user-agent']}", ` +
+          `SignatureHeader: "${receivedSignature ? 'present' : 'MISSING'}"`
+        );
         return res.status(401).json({
           error: `Invalid ${desc.displayName} HMAC-SHA256 signature`,
         });

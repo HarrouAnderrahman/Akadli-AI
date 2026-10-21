@@ -20,11 +20,85 @@ import {
 } from "./schemas.js";
 import { WooCommerceClient } from "./woocommerce-client.js";
 
+/**
+ * Detects whether an inbound HTTP request is an unsigned WooCommerce webhook handshake ping.
+ * WooCommerce sends a lightweight test ping (`WC_Webhook::deliver_ping`) upon webhook creation or activation
+ * with body `webhook_id=<id>` (application/x-www-form-urlencoded) and no `x-wc-webhook-signature` header.
+ */
+export function isWooCommerceWebhookPing(
+  headers: Record<string, string | undefined>,
+  body?: unknown,
+  rawBody?: Buffer | string
+): boolean {
+  // If a signature is present, it is not an unsigned handshake ping
+  const sigKey = Object.keys(headers).find(
+    (k) => k.toLowerCase() === "x-wc-webhook-signature"
+  );
+  if (sigKey && headers[sigKey]) {
+    return false;
+  }
+
+  // Check explicit ping topic header if provided
+  const topicKey = Object.keys(headers).find(
+    (k) => k.toLowerCase() === "x-wc-webhook-topic"
+  );
+  const topic = topicKey ? headers[topicKey] : undefined;
+  if (topic === "action.woocommerce_deliver_ping") {
+    return true;
+  }
+
+  // Check parsed body (e.g. from express.urlencoded or express.json)
+  if (body && typeof body === "object") {
+    if ("webhook_id" in (body as Record<string, unknown>)) {
+      return true;
+    }
+  } else if (typeof body === "string" && body.includes("webhook_id=")) {
+    return true;
+  }
+
+  // Check raw body (Buffer or string)
+  if (rawBody) {
+    const rawStr =
+      typeof rawBody === "string"
+        ? rawBody
+        : Buffer.isBuffer(rawBody)
+          ? rawBody.toString("utf8")
+          : "";
+    if (rawStr.includes("webhook_id=")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export class WooCommerceProvider implements IEcommerceProvider {
   private readonly customFetch?: typeof fetch;
 
   constructor(fetchFn?: typeof fetch) {
     this.customFetch = fetchFn;
+  }
+
+  /**
+   * Detects whether an inbound HTTP request is an unsigned WooCommerce webhook handshake ping.
+   */
+  isWebhookPing(
+    headers: Record<string, string | undefined>,
+    body?: unknown,
+    rawBody?: Buffer | string
+  ): boolean {
+    return isWooCommerceWebhookPing(headers, body, rawBody);
+  }
+
+  /**
+   * Alias matching the standalone function name for flexibility.
+   */
+  isWooCommerceWebhookPing(
+    headers: Record<string, string | undefined>,
+    body?: unknown,
+    rawBody?: Buffer | string
+  ): boolean {
+    return isWooCommerceWebhookPing(headers, body, rawBody);
   }
 
   /**

@@ -46,17 +46,25 @@
 <div dir="ltr" align="left">
 
 ```typescript
-import { WooCommerceProvider } from "@akadli/provider-woocommerce";
+import { WooCommerceProvider, isWooCommerceWebhookPing } from "@akadli/provider-woocommerce";
 
 const provider = new WooCommerceProvider();
 
-// 1. التحقق من توقيع HMAC-SHA256 (Base64 من x-wc-webhook-signature)
-const isValid = await provider.verifyWebhook(headers, rawBody, process.env.WOOCOMMERCE_WEBHOOK_SECRET!);
+// 1. تأكيد استلام إشارة الفحص الأولية غير الموقعة لووكومرس (WC_Webhook::deliver_ping)
+if (isWooCommerceWebhookPing(headers, req.body, rawBody)) {
+  return res.status(200).json({ success: true, message: "Webhook ping acknowledged" });
+}
 
-// 2. تحليل الطلبية وتطبيع رموز DZ-XX وحقول meta_data
+// 2. التحقق من توقيع HMAC-SHA256 (Base64 من x-wc-webhook-signature)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.WOOCOMMERCE_WEBHOOK_SECRET!);
+if (!isValid) {
+  return res.status(401).json({ error: "Invalid HMAC signature" });
+}
+
+// 3. تحليل الطلبية وتطبيع رموز DZ-XX وحقول meta_data
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تحديث الطلب في WooCommerce (تحديث البيانات الوصفية، إضافة ملاحظة، وتحديث الحالة)
+// 4. تحديث الطلب في WooCommerce (تحديث البيانات الوصفية، إضافة ملاحظة، وتحديث الحالة)
 const result = await provider.applyOrderDecision(order.orderId, {
   orderId: order.orderId,
   status: "CONFIRMED",

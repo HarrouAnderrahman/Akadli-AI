@@ -40,17 +40,25 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for WordPress Wo
 ## Usage Example
 
 ```typescript
-import { WooCommerceProvider } from "@akadli/provider-woocommerce";
+import { WooCommerceProvider, isWooCommerceWebhookPing } from "@akadli/provider-woocommerce";
 
 const provider = new WooCommerceProvider();
 
-// 1. Verify Webhook HMAC signature (Base64 from x-wc-webhook-signature)
-const isValid = await provider.verifyWebhook(headers, rawBody, process.env.WOOCOMMERCE_WEBHOOK_SECRET!);
+// 1. Acknowledge WooCommerce initial unsigned handshake ping (WC_Webhook::deliver_ping)
+if (isWooCommerceWebhookPing(headers, req.body, rawBody)) {
+  return res.status(200).json({ success: true, message: "Webhook ping acknowledged" });
+}
 
-// 2. Parse standardized Algerian COD order (supports DZ-XX states and meta_data)
+// 2. Verify Webhook HMAC signature (Base64 from x-wc-webhook-signature)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.WOOCOMMERCE_WEBHOOK_SECRET!);
+if (!isValid) {
+  return res.status(401).json({ error: "Invalid HMAC signature" });
+}
+
+// 3. Parse standardized Algerian COD order (supports DZ-XX states and meta_data)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. Mutate WooCommerce order (updates meta_data, adds order note, updates status)
+// 4. Mutate WooCommerce order (updates meta_data, adds order note, updates status)
 const result = await provider.applyOrderDecision(order.orderId, {
   orderId: order.orderId,
   status: "CONFIRMED",
