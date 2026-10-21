@@ -4,9 +4,16 @@ import {
   StandardizedDzOrder,
   FinalizedOrderDecision,
   FinalizedOrderDecisionSchema,
-  ApplyOrderDecisionResult
+  ApplyOrderDecisionResult,
+  WilayaCode
 } from "@akadli/adapter-contract";
 import { createStandardizedDzOrder } from "@akadli/core";
+import {
+  normalizeWilaya,
+  normalizeCommune,
+  InvalidWilayaError,
+  canonicalizeGeoToken
+} from "@akadli/dz-geo";
 import {
   YouCanOrderWebhookPayloadSchema,
   YouCanCredentialsSchema
@@ -58,14 +65,17 @@ export class YouCanProvider implements IEcommerceProvider {
 
   /**
    * Parses YouCan order.created webhook payload into canonical StandardizedDzOrder
-   * using dual-source address & phone extraction.
+   * using envelope unwrapping and resilient multi-candidate Algerian address extraction.
    */
   async parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder> {
     const data = YouCanOrderWebhookPayloadSchema.parse(payload);
+    const shippingAddr = data.shipping?.address;
 
     // Helpers to scan extra_fields and custom_fields (used heavily in Algerian 1-page COD checkouts)
-    const phonePatterns = [/(?:phone|téléphone|telephone|tel|هاتف|تلفون)/i];
-    const wilayaPatterns = [/(?:wilaya|province|ولاية)/i];
+    const phonePatterns = [
+      /(?:phone|téléphone|telephone|tel|mobile|هاتف|تلفون|موبايل|جوال)/i
+    ];
+    const wilayaPatterns = [/(?:wilaya|province|state|ولاية)/i];
     const communePatterns = [/(?:commune|city|بلدية)/i];
     const addressPatterns = [/(?:address|adresse|عنوان)/i];
     const namePatterns = [/(?:^nom$|^name$|^full[_\s]?name$|اسم)/i];
@@ -115,41 +125,214 @@ export class YouCanProvider implements IEcommerceProvider {
       return undefined;
     };
 
+    const extractNotesPairs = (): Array<{ key: string; value: string }> => {
+      const allNotes = [
+        data.notes,
+        data.note,
+        data.customer_notes,
+        data.comment
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      if (!allNotes.trim()) return [];
+
+      const pairs: Array<{ key: string; value: string }> = [];
+      const lines = allNotes.split(/\r?\n/);
+      for (const line of lines) {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx > 0) {
+          const k = line.slice(0, colonIdx).trim();
+          const v = line.slice(colonIdx + 1).trim();
+          if (k && v) {
+            pairs.push({ key: k, value: v });
+          }
+        }
+      }
+      return pairs;
+    };
+
+    const combinedNotesPairs = extractNotesPairs();
+
+    const findInNotes = (patterns: RegExp[]): string | undefined => {
+      for (const entry of combinedNotesPairs) {
+        for (const pattern of patterns) {
+          if (pattern.test(entry.key)) {
+            return entry.value;
+          }
+        }
+      }
+      return undefined;
+    };
+
     // 1. Phone extraction (primary -> fallback)
     const rawCustomerPhone =
-      data.shipping?.address?.phone ||
+      shippingAddr?.phone ||
+      data.shipping?.phone ||
       data.customer?.phone ||
       findInExtra(phonePatterns) ||
+      findInNotes(phonePatterns) ||
       "";
 
-    // 2. Wilaya extraction
+    // 2. Multi-Candidate Wilaya Resolution:
+    // Try resolving in order: extra_fields -> notes -> shipping region/state -> city -> zip -> address lines
+    let zipCandidate: string | undefined;
+    const rawZip = shippingAddr?.zip ?? shippingAddr?.postal_code;
+    if (rawZip) {
+      const cleanZip = String(rawZip).trim();
+      if (/^\d{5}$/.test(cleanZip)) {
+        zipCandidate = cleanZip.slice(0, 2);
+      } else if (/^\d{1,2}$/.test(cleanZip)) {
+        zipCandidate = cleanZip;
+      } else {
+        zipCandidate = cleanZip;
+      }
+    }
+
+    const wilayaCandidates: Array<string | undefined> = [
+      findInExtra(wilayaPatterns),
+      findInNotes(wilayaPatterns),
+      shippingAddr?.region ?? undefined,
+      shippingAddr?.state ?? undefined,
+      shippingAddr?.city ?? undefined,
+      zipCandidate,
+      shippingAddr?.first_line ?? shippingAddr?.address1 ?? undefined,
+      shippingAddr?.second_line ?? shippingAddr?.address2 ?? undefined
+    ];
+
+    let resolvedWilaya: ReturnType<typeof normalizeWilaya> | undefined;
+    for (const candidate of wilayaCandidates) {
+      if (!candidate || !candidate.trim()) continue;
+      try {
+        resolvedWilaya = normalizeWilaya(candidate);
+        break;
+      } catch (err) {
+        if (err instanceof InvalidWilayaError) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
     const rawWilaya =
-      data.shipping?.address?.region ||
-      data.shipping?.address?.state ||
+      resolvedWilaya?.code ||
       findInExtra(wilayaPatterns) ||
+      findInNotes(wilayaPatterns) ||
+      shippingAddr?.region ||
+      shippingAddr?.state ||
       "";
 
-    // 3. Commune extraction
+    // 3. Smart Commune Resolution
+    const tryMatchCommune = (
+      candidate: string | null | undefined,
+      wilayaCode: WilayaCode
+    ): string | undefined => {
+      if (!candidate || !candidate.trim()) return undefined;
+      const direct = normalizeCommune(candidate, wilayaCode);
+      if (direct.matched) {
+        return direct.canonicalCommune;
+      }
+      const parts = candidate
+        .split(/[,;\/|\-]+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      for (const part of parts) {
+        const seg = normalizeCommune(part, wilayaCode);
+        if (seg.matched) {
+          return seg.canonicalCommune;
+        }
+      }
+      return undefined;
+    };
+
+    let resolvedCommune: string | undefined;
+    if (resolvedWilaya) {
+      const wilayaCode = resolvedWilaya.code as WilayaCode;
+      const wilayaCapitalClean = canonicalizeGeoToken(resolvedWilaya.nameFr);
+
+      // Check explicit commune in extra_fields/custom_fields first
+      const extraCommuneVal = findInExtra(communePatterns);
+      if (extraCommuneVal) {
+        const extraMatch = tryMatchCommune(extraCommuneVal, wilayaCode);
+        if (extraMatch) {
+          resolvedCommune = extraMatch;
+        }
+      }
+
+      // Check explicit commune in customer notes
+      if (!resolvedCommune) {
+        const noteCommuneVal = findInNotes(communePatterns);
+        if (noteCommuneVal) {
+          const noteMatch = tryMatchCommune(noteCommuneVal, wilayaCode);
+          if (noteMatch) {
+            resolvedCommune = noteMatch;
+          }
+        }
+      }
+
+      // If not yet resolved, test city, first_line, second_line against normalizeCommune
+      if (!resolvedCommune) {
+        const cityMatch = tryMatchCommune(shippingAddr?.city, wilayaCode);
+        const addr1Match = tryMatchCommune(
+          shippingAddr?.first_line || shippingAddr?.address1,
+          wilayaCode
+        );
+        const addr2Match = tryMatchCommune(
+          shippingAddr?.second_line || shippingAddr?.address2,
+          wilayaCode
+        );
+        const extraCityVal = findInExtra([/(?:city)/i]);
+        const extraCityMatch = tryMatchCommune(extraCityVal, wilayaCode);
+
+        // Prefer specific non-capital commune
+        if (addr1Match && canonicalizeGeoToken(addr1Match) !== wilayaCapitalClean) {
+          resolvedCommune = addr1Match;
+        } else if (addr2Match && canonicalizeGeoToken(addr2Match) !== wilayaCapitalClean) {
+          resolvedCommune = addr2Match;
+        } else if (cityMatch && canonicalizeGeoToken(cityMatch) !== wilayaCapitalClean) {
+          resolvedCommune = cityMatch;
+        } else if (extraCityMatch && canonicalizeGeoToken(extraCityMatch) !== wilayaCapitalClean) {
+          resolvedCommune = extraCityMatch;
+        } else if (cityMatch) {
+          resolvedCommune = cityMatch;
+        } else if (extraCityMatch) {
+          resolvedCommune = extraCityMatch;
+        } else if (addr1Match) {
+          resolvedCommune = addr1Match;
+        } else if (addr2Match) {
+          resolvedCommune = addr2Match;
+        }
+      }
+    }
+
     const rawCommune =
-      data.shipping?.address?.city ||
+      resolvedCommune ||
+      shippingAddr?.city ||
       findInExtra(communePatterns) ||
+      findInNotes(communePatterns) ||
       "";
 
     // 4. Customer Name extraction
-    const fullName = [data.customer?.first_name, data.customer?.last_name]
+    const fullName = [
+      data.customer?.first_name || shippingAddr?.first_name,
+      data.customer?.last_name || shippingAddr?.last_name
+    ]
       .filter(Boolean)
       .join(" ")
       .trim();
+
     const customerName =
       (fullName.length > 0 ? fullName : undefined) ||
-      data.shipping?.address?.first_name ||
+      data.customer?.name ||
+      shippingAddr?.name ||
       findInExtra(namePatterns) ||
+      findInNotes(namePatterns) ||
       "Client";
 
     // 5. Address note extraction
     const shippingLines = [
-      data.shipping?.address?.first_line,
-      data.shipping?.address?.second_line
+      shippingAddr?.first_line || shippingAddr?.address1,
+      shippingAddr?.second_line || shippingAddr?.address2
     ]
       .filter(Boolean)
       .join(", ")
@@ -158,13 +341,17 @@ export class YouCanProvider implements IEcommerceProvider {
     const currentAddressNote =
       (shippingLines.length > 0 ? shippingLines : undefined) ||
       findInExtra(addressPatterns) ||
+      findInNotes(addressPatterns) ||
       "";
 
     // 6. Item Name & Size
     const firstVariant = data.variants?.[0];
     const firstLineItem = data.line_items?.[0];
     const itemName =
-      firstVariant?.item?.name || firstLineItem?.title || "Article";
+      firstVariant?.item?.name ||
+      firstVariant?.title ||
+      firstLineItem?.title ||
+      "Article";
     const currentSize =
       firstVariant?.variation?.size ||
       firstVariant?.title ||

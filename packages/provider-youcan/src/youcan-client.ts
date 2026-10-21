@@ -50,9 +50,32 @@ export class YouCanClient {
   }
 
   /**
+   * Updates order general status on YouCan via PUT /orders/{orderId}/status.
+   * Supported slugs: "open", "closed", "processed", "canceled-by-seller", or custom status slug.
+   */
+  async updateOrderStatus(
+    orderId: string,
+    status: string
+  ): Promise<YouCanClientResult> {
+    const url = `${this.baseUrl}/orders/${orderId}/status`;
+    return this.request(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ status })
+    });
+  }
+
+  /**
    * Closes an order on YouCan via PUT /orders/{orderId}/close.
    */
-  async closeOrder(orderId: string): Promise<YouCanClientResult> {
+  async closeOrder(
+    orderId: string,
+    cancelOrder = true
+  ): Promise<YouCanClientResult> {
     const url = `${this.baseUrl}/orders/${orderId}/close`;
     return this.request(url, {
       method: "PUT",
@@ -60,7 +83,8 @@ export class YouCanClient {
         Authorization: `Bearer ${this.accessToken}`,
         "Content-Type": "application/json",
         Accept: "application/json"
-      }
+      },
+      body: JSON.stringify({ cancel_order: cancelOrder })
     });
   }
 

@@ -43,38 +43,63 @@ export function verifyYouCanWebhook(
 
 ## 2. Inbound COD Order Extraction (`parseWebhookOrder`)
 
-YouCan `order.created` payloads for Algerian COD merchants typically arrive in one of two modes:
-1. **Standard YouCan Checkout:** Customer address and phone are located in `customer` and `shipping.address` (`region` or `state` for Wilaya, `city` for Commune, `first_line` for street/address note).
-2. **Algerian 1-Page COD Checkout Form:** Because merchants in Algeria frequently streamline checkout into a single fast form, `shipping.address` can be minimal or empty, and customer phone, Wilaya, and Commune are submitted via `extra_fields` or `custom_fields`.
+YouCan webhook deliveries can arrive in several envelope formats:
+
+1. **Official YouCan Resthook Standard Payload Format:**
+   ```json
+   {
+     "event_name": "order.created",
+     "event_happened_at": "2026-10-16T14:20:00.000000Z",
+     "data": {
+       "id": "ord_yc_882910",
+       "total": 6400,
+       ...
+     }
+   }
+   ```
+2. **App Webhook / Resthook Delivery Envelope:**
+   ```json
+   {
+     "id": "8e6b019b-06de-496d-a96d-c9ee69c0ccf0",
+     "event": "order.created",
+     "store_id": "store_yc_111",
+     "payload": {
+       "id": "ord_yc_882910",
+       ...
+     }
+   }
+   ```
+3. **Nested Resource Envelope:** `{ data: { order: { ... } } }`, `{ payload: { order: { ... } } }`, or `{ order: { ... } }`.
+4. **Direct Order Object:** `{ id: "ord_yc_882910", total: ..., customer: { ... }, shipping: { ... } }`.
 
 ### Extraction Pipeline
 
-1. **Order Basics:**
-   - `orderId`: `String(payload.id)`
-   - `storeName`: `payload.store_name || "YouCan Store"`
-   - `itemName`: First variant item name (`payload.variants?.[0]?.item?.name || payload.line_items?.[0]?.title || "Article"`)
-   - `currentSize`: Variant variation size or title (`payload.variants?.[0]?.variation?.size || payload.variants?.[0]?.title || "Standard"`)
-   - `priceDa`: `Math.round(Number(payload.total || 0))`
+1. **Envelope Unwrapping & ID Resolution (`unwrapYouCanPayload`):**
+   - Automatically unwrap `data.order`, `data`, `payload.order`, `payload`, or `order`.
+   - In Resthook delivery envelopes, the root `id` is the webhook delivery UUID. The actual order identifier is resolved from `orderData.id`, `orderData.order_id`, or `orderData.ref`.
+   - Preserves top-level metadata (`store_name`, `extra_fields`, `custom_fields`, `customer`, `notes`).
+   - Normalizes flattened `shipping` objects into canonical `{ address: { ... } }`.
 
-2. **Dual-Source Address & Phone Extraction (CRITICAL for Algerian YouCan COD Forms):**
-   - **Primary Source:**
-     - Customer name: `${payload.customer?.first_name || ""} ${payload.customer?.last_name || ""}`.trim() || `payload.shipping?.address?.first_name`
-     - Phone: `payload.customer?.phone || payload.shipping?.address?.phone`
-     - Wilaya: `payload.shipping?.address?.region || payload.shipping?.address?.state`
-     - Commune: `payload.shipping?.address?.city`
-     - Address Note: `payload.shipping?.address?.first_line || payload.shipping?.address?.second_line`
-   - **Fallback Source (`extra_fields` / `custom_fields`):**
-     When primary fields are missing or empty, inspect `extra_fields` or `custom_fields` (which may be provided as an array of key-value pairs or as an object map):
-     - Keys matching `/(?:phone|téléphone|telephone|tel|هاتف|تلفون)/i`: overrides phone.
-     - Keys matching `/(?:wilaya|province|ولاية)/i`: overrides Wilaya.
-     - Keys matching `/(?:commune|city|بلدية)/i`: overrides Commune.
-     - Keys matching `/(?:address|adresse|عنوان)/i`: overrides Address Note.
-     - Keys matching `/(?:^nom$|^name$|^full[_\s]?name$|اسم)/i`: overrides Customer Name.
+2. **Order Basics:**
+   - `orderId`: `String(data.id)`
+   - `storeName`: `data.store_name || data.shop_name || "YouCan Store"`
+   - `itemName`: First variant item name (`variants?.[0]?.item?.name || variants?.[0]?.title || line_items?.[0]?.title || "Article"`)
+   - `currentSize`: Variant variation size or title (`variants?.[0]?.variation?.size || variants?.[0]?.title || line_items?.[0]?.variant_title || "Standard"`)
+   - `priceDa`: `Math.round(Number(data.total || 0))`
 
-3. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
+3. **Resilient Multi-Candidate Algerian Address & Phone Extraction:**
+   - **Phone Extraction:**
+     - Primary: `shipping.address.phone` or `shipping.phone` or `customer.phone`
+     - Fallback: `extra_fields` / `custom_fields` or customer notes matching `/(?:phone|téléphone|telephone|tel|mobile|هاتف|تلفون|موبايل|جوال)/i`
+   - **Multi-Candidate Wilaya Resolution:**
+     - Try in order: `extra_fields`/`custom_fields` -> `customer_notes` -> `shipping.address.region` -> `shipping.address.state` -> `shipping.address.city` -> `zip` (5-digit prefix or 2-digit code) -> `first_line`/`address1` -> `second_line`/`address2`.
+     - Validates against all 69 official 2026 Wilayas via `normalizeWilaya(...)`.
+   - **Smart Commune Resolution:**
+     - Once Wilaya is resolved, checks `extra_fields`, `customer_notes`, `city`, `first_line`, and `second_line` against `normalizeCommune(..., wilayaCode)`.
+     - Prioritizes specific non-capital communes over the Wilaya capital when found in street lines.
+
+4. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
    - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
-   - Wilaya is resolved against all 69 official 2026 Wilayas via `normalizeWilaya(...)`.
-   - Commune is resolved and checked against the valid communes for the resolved Wilaya via `normalizeCommune(..., wilayaCode)`.
    - Populates `constraints` (`allowedWilayas`, `allowedCommunes`, `allowedSizes`) and builds a canonical `StandardizedDzOrder`.
 
 ---
@@ -138,8 +163,13 @@ All requests include headers:
 ```
 - **Step B:** If `credentials.closeOnRefused !== "false"`, call:
   - **Method:** `PUT {baseUrl}/orders/{orderId}/close`
-  - Closes the refused order in YouCan.
+  - **Payload:** `{"cancel_order": true}`
+  - Closes the refused order and returns items back to stock.
 - **Returns:** `{ success: true, externalStatus: "CANCELLED", rawResponse: ... }`
+
+#### 4. Additional Status Updates (`YouCanClient.updateOrderStatus`)
+- **Method:** `PUT {baseUrl}/orders/{orderId}/status`
+- **Payload:** `{"status": "processed"}` (or `"open"`, `"closed"`, `"canceled-by-seller"`)
 
 ---
 

@@ -463,7 +463,30 @@ async function handleWebhookIngress(
       });
     }
   } catch (err: any) {
-    console.error(`[${desc.displayName} Webhook Error]:`, err);
+    const topLevelKeys =
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+        ? Object.keys(req.body)
+        : Array.isArray(req.body)
+          ? `[Array of length ${req.body.length}]`
+          : typeof req.body;
+
+    let payloadPreview = '';
+    try {
+      payloadPreview = JSON.stringify(req.body, null, 2);
+      if (payloadPreview.length > 1000) {
+        payloadPreview = payloadPreview.slice(0, 1000) + '\n... (truncated)';
+      }
+    } catch {
+      payloadPreview = String(req.body);
+    }
+
+    console.error(
+      `[${desc.displayName} Webhook Error]: Failed to process incoming webhook.\n` +
+      `Top-level keys: ${JSON.stringify(topLevelKeys)}\n` +
+      `Payload preview:\n${payloadPreview}\n` +
+      `Error:`,
+      err
+    );
     res.status(400).json({ error: err.message || `Failed to process ${desc.displayName} webhook` });
   }
 }

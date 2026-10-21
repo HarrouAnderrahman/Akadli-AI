@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { YouCanProvider } from "../src/index.js";
+import { YouCanProvider, YouCanClient } from "../src/index.js";
 
 const __dirname = resolve(fileURLToPath(import.meta.url), "..");
 
@@ -23,6 +23,13 @@ const extraFieldsFixturePath = resolve(
 const extraFieldsRawBody = readFileSync(extraFieldsFixturePath, "utf-8");
 const extraFieldsPayload = JSON.parse(extraFieldsRawBody);
 
+const resthookFixturePath = resolve(
+  __dirname,
+  "../fixtures/webhook-order-resthook-envelope.json"
+);
+const resthookRawBody = readFileSync(resthookFixturePath, "utf-8");
+const resthookPayload = JSON.parse(resthookRawBody);
+
 const WEBHOOK_SECRET = "youcan_webhook_secret_key_algeria_123";
 const BASE_URL = "https://api.youcan.shop";
 const ACCESS_TOKEN = "yc_test_access_token_dz_789";
@@ -34,7 +41,8 @@ const CREDENTIALS = {
 };
 
 let capturedPutRequests: Array<{ url: string; headers: Headers; body: any }> = [];
-let capturedCloseRequests: Array<{ url: string; headers: Headers }> = [];
+let capturedCloseRequests: Array<{ url: string; headers: Headers; body: any }> = [];
+let capturedStatusRequests: Array<{ url: string; headers: Headers; body: any }> = [];
 
 const server = setupServer(
   http.put(`${BASE_URL}/orders/:orderId`, async ({ request, params }) => {
@@ -51,14 +59,34 @@ const server = setupServer(
     });
   }),
   http.put(`${BASE_URL}/orders/:orderId/close`, async ({ request, params }) => {
+    let body: any = null;
+    try {
+      body = await request.json();
+    } catch {
+      // Body is optional
+    }
     capturedCloseRequests.push({
       url: request.url,
-      headers: request.headers
+      headers: request.headers,
+      body
     });
     return HttpResponse.json({
       id: params.orderId,
       closed: true,
       closed_at: new Date().toISOString()
+    });
+  }),
+  http.put(`${BASE_URL}/orders/:orderId/status`, async ({ request, params }) => {
+    const body = await request.json();
+    capturedStatusRequests.push({
+      url: request.url,
+      headers: request.headers,
+      body
+    });
+    return HttpResponse.json({
+      status: 200,
+      detail: "Status is successfully updated",
+      meta: []
     });
   })
 );
@@ -67,6 +95,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   capturedPutRequests = [];
   capturedCloseRequests = [];
+  capturedStatusRequests = [];
   server.resetHandlers();
 });
 afterAll(() => server.close());
@@ -155,7 +184,113 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.constraints.allowedSizes).toEqual(["M"]);
   });
 
-  it("4. executes applyOrderDecision for CONFIRMED and verifies Authorization: Bearer header and request body via MSW", async () => {
+  it("4. unwraps official YouCan Resthook delivery envelope ({ event_name: 'order.created', data: { id: '...' } })", async () => {
+    // Delivery wrapper where root id is absent or delivery-level, and order data is in .data
+    const order = await provider.parseWebhookOrder(resthookPayload);
+
+    expect(order.orderId).toBe("ord_yc_882910");
+    expect(order.storeName).toBe("DzMode YouCan Shop");
+    expect(order.customerName).toBe("Yasmine Hadji");
+    expect(order.customerPhone).toBe("0770987654");
+    expect(order.currentWilaya).toBe("31");
+    expect(order.currentCommune).toBe("Bir El Djir");
+  });
+
+  it("5. unwraps App Webhook envelope ({ id: 'deliv-uuid', event: 'order.created', payload: { ... } }) and handles order.ref", async () => {
+    const appWebhookPayload = {
+      id: "deliv_uuid_abc_777",
+      event: "order.created",
+      store_id: "store_yc_999",
+      payload: {
+        ref: "ORD-DZ-2026-X1",
+        total: 5500,
+        customer: {
+          first_name: "Karim",
+          last_name: "Benali",
+          phone: "0555987654"
+        },
+        shipping: {
+          address: {
+            region: "16",
+            city: "Bab El Oued",
+            first_line: "Rue Didouche Mourad"
+          }
+        },
+        line_items: [
+          {
+            title: "Chemise Lin Homme",
+            variant_title: "L"
+          }
+        ]
+      }
+    };
+
+    const order = await provider.parseWebhookOrder(appWebhookPayload);
+
+    // orderId extracted from payload.ref (not deliv_uuid_abc_777)
+    expect(order.orderId).toBe("ORD-DZ-2026-X1");
+    expect(order.customerName).toBe("Karim Benali");
+    expect(order.customerPhone).toBe("0555987654");
+    expect(order.currentWilaya).toBe("16"); // Alger
+    expect(order.currentCommune).toBe("Bab El Oued");
+    expect(order.itemName).toBe("Chemise Lin Homme");
+    expect(order.currentSize).toBe("L");
+    expect(order.priceDa).toBe(5500);
+  });
+
+  it("6. applies resilient multi-field Algerian Wilaya/Commune extraction when region/state are null", async () => {
+    const nativeCheckoutWithNullRegion = {
+      event_name: "order.created",
+      data: {
+        id: "ord_yc_minimal_555",
+        total: 7200,
+        customer: {
+          first_name: "Amine",
+          phone: "0770112233"
+        },
+        shipping: {
+          address: {
+            first_name: "Amine",
+            region: null,
+            state: null,
+            city: "Boufarik",
+            zip: "09000",
+            first_line: "Rue de la Gare"
+          }
+        },
+        variants: [
+          {
+            item: { name: "Sneakers DZ" },
+            title: "42"
+          }
+        ]
+      }
+    };
+
+    const order = await provider.parseWebhookOrder(nativeCheckoutWithNullRegion);
+
+    expect(order.orderId).toBe("ord_yc_minimal_555");
+    // Wilaya resolved from zip "09000" -> Wilaya 09 (Blida)
+    expect(order.currentWilaya).toBe("09");
+    // Commune resolved from city "Boufarik" (verified against Wilaya 09 communes)
+    expect(order.currentCommune).toBe("Boufarik");
+  });
+
+  it("7. throws descriptive ZodError when order id is completely absent across all envelopes", async () => {
+    const invalidEnvelope = {
+      event_name: "order.created",
+      data: {
+        total: 5000,
+        customer: { first_name: "Test" }
+      }
+    };
+
+    await expect(provider.parseWebhookOrder(invalidEnvelope)).rejects.toThrow(
+      "Order id is required in YouCan webhook payload."
+    );
+  });
+
+  it("8. executes applyOrderDecision for CONFIRMED and verifies Authorization: Bearer header and request body via MSW", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -181,7 +316,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     });
   });
 
-  it("5. executes applyOrderDecision for MODIFIED and asserts shipping.address, tags, and notes are updated", async () => {
+  it("9. executes applyOrderDecision for MODIFIED and asserts shipping.address, tags, and notes are updated", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -218,7 +353,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     });
   });
 
-  it("6. executes applyOrderDecision for REFUSED and asserts tag update + PUT /orders/{id}/close execution", async () => {
+  it("10. executes applyOrderDecision for REFUSED and asserts tag update + PUT /orders/{id}/close execution", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -245,9 +380,10 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(closeReq.headers.get("Authorization")).toBe(
       `Bearer ${ACCESS_TOKEN}`
     );
+    expect(closeReq.body).toEqual({ cancel_order: true });
   });
 
-  it("7. handles HTTP 401 and 422 API errors gracefully", async () => {
+  it("11. handles HTTP 401 and 422 API errors gracefully", async () => {
     // 401 Unauthorized
     server.use(
       http.put(`${BASE_URL}/orders/:orderId`, () =>
@@ -290,5 +426,16 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
 
     expect(result422.success).toBe(false);
     expect(result422.externalStatus).toBe("UNPROCESSABLE_ENTITY");
+  });
+
+  it("12. verifies YouCanClient.updateOrderStatus updates status via PUT /orders/{id}/status", async () => {
+    const client = new YouCanClient(CREDENTIALS);
+    const statusRes = await client.updateOrderStatus("ord_yc_882910", "processed");
+
+    expect(statusRes.success).toBe(true);
+    expect(statusRes.externalStatus).toBe("OK");
+    expect(capturedStatusRequests.length).toBe(1);
+    expect(capturedStatusRequests[0].url).toBe(`${BASE_URL}/orders/ord_yc_882910/status`);
+    expect(capturedStatusRequests[0].body).toEqual({ status: "processed" });
   });
 });

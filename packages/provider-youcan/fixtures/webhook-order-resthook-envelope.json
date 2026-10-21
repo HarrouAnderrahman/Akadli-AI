@@ -1,0 +1,48 @@
+{
+  "id": "deliv_yc_uuid_8e6b019b",
+  "event_name": "order.created",
+  "event_happened_at": "2026-10-16T14:20:00.000000Z",
+  "data": {
+    "id": "ord_yc_882910",
+    "store_name": "DzMode YouCan Shop",
+    "total": 6400,
+    "currency": "DZD",
+    "status": 1,
+    "created_at": "2026-10-16T14:20:00+01:00",
+    "variants": [
+      {
+        "id": "var_901",
+        "item": {
+          "id": "prod_301",
+          "name": "Karakou Algérois Velours"
+        },
+        "variation": {
+          "size": "38",
+          "color": "Bordeaux"
+        },
+        "title": "Taille 38 / Bordeaux",
+        "quantity": 1,
+        "price": 6400
+      }
+    ],
+    "customer": {
+      "id": "cust_551",
+      "first_name": "Yasmine",
+      "last_name": "Hadji",
+      "email": "yasmine.hadji@example.com",
+      "phone": "0770987654"
+    },
+    "shipping": {
+      "address": {
+        "first_name": "Yasmine",
+        "last_name": "Hadji",
+        "phone": "0770987654",
+        "region": "31 - Oran",
+        "city": "Bir El Djir",
+        "first_line": "Résidence El Bahia, Bloc B",
+        "country": "DZ"
+      }
+    },
+    "extra_fields": []
+  }
+}
