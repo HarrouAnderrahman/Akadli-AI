@@ -184,7 +184,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.constraints.allowedSizes).toEqual(["M"]);
   });
 
-  it("4. unwraps official YouCan Resthook delivery envelope ({ event_name: 'order.created', data: { id: '...' } })", async () => {
+  it("4. unwraps official YouCan Resthook delivery envelope and extracts variant.product.name, variations size, and variant_options allowedSizes", async () => {
     // Delivery wrapper where root id is absent or delivery-level, and order data is in .data
     const order = await provider.parseWebhookOrder(resthookPayload);
 
@@ -192,8 +192,12 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.storeName).toBe("DzMode YouCan Shop");
     expect(order.customerName).toBe("Yasmine Hadji");
     expect(order.customerPhone).toBe("0770987654");
-    expect(order.currentWilaya).toBe("31");
-    expect(order.currentCommune).toBe("Bir El Djir");
+    expect(order.currentWilaya).toBe("13"); // Tlemcen
+    expect(order.currentCommune).toBe("Maghnia");
+    expect(order.itemName).toBe("Ensemble Adidas");
+    expect(order.currentSize).toBe("XL");
+    expect(order.priceDa).toBe(4500);
+    expect(order.constraints.allowedSizes).toEqual(["M", "L", "XL"]);
   });
 
   it("5. unwraps App Webhook envelope ({ id: 'deliv-uuid', event: 'order.created', payload: { ... } }) and handles order.ref", async () => {
@@ -238,7 +242,49 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.priceDa).toBe(5500);
   });
 
-  it("6. applies resilient multi-field Algerian Wilaya/Commune extraction when region/state are null", async () => {
+  it("6. extracts currentSize and allowedSizes from variations using Arabic/French keys and fallback values", async () => {
+    const arabicPayload = {
+      event_name: "order.created",
+      data: {
+        id: "ord_yc_arabic_variant",
+        total: 3900,
+        customer: { first_name: "Walid", phone: "0661998877" },
+        shipping: {
+          address: {
+            region: "25",
+            city: "Constantine"
+          }
+        },
+        variants: [
+          {
+            variant: {
+              variations: {
+                "المقاس": "XXL"
+              },
+              product: {
+                meta: {
+                  title: "Djellaba Homme"
+                },
+                variant_options: [
+                  {
+                    name: "المقاس",
+                    values: ["L", "XL", "XXL"]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    };
+
+    const order = await provider.parseWebhookOrder(arabicPayload);
+    expect(order.itemName).toBe("Djellaba Homme");
+    expect(order.currentSize).toBe("XXL");
+    expect(order.constraints.allowedSizes).toEqual(["L", "XL", "XXL"]);
+  });
+
+  it("7. applies resilient multi-field Algerian Wilaya/Commune extraction when region/state are null", async () => {
     const nativeCheckoutWithNullRegion = {
       event_name: "order.created",
       data: {
@@ -276,7 +322,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.currentCommune).toBe("Boufarik");
   });
 
-  it("7. throws descriptive ZodError when order id is completely absent across all envelopes", async () => {
+  it("8. throws descriptive ZodError when order id is completely absent across all envelopes", async () => {
     const invalidEnvelope = {
       event_name: "order.created",
       data: {
@@ -290,7 +336,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     );
   });
 
-  it("8. executes applyOrderDecision for CONFIRMED and verifies Authorization: Bearer header and request body via MSW", async () => {
+  it("9. executes applyOrderDecision for CONFIRMED and verifies Authorization: Bearer header and request body via MSW", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -316,7 +362,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     });
   });
 
-  it("9. executes applyOrderDecision for MODIFIED and asserts shipping.address, tags, and notes are updated", async () => {
+  it("10. executes applyOrderDecision for MODIFIED and asserts shipping.address, tags, and notes are updated", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -353,7 +399,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     });
   });
 
-  it("10. executes applyOrderDecision for REFUSED and asserts tag update + PUT /orders/{id}/close execution", async () => {
+  it("11. executes applyOrderDecision for REFUSED and asserts tag update + PUT /orders/{id}/close execution", async () => {
     const result = await provider.applyOrderDecision(
       "ord_yc_882910",
       {
@@ -383,7 +429,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(closeReq.body).toEqual({ cancel_order: true });
   });
 
-  it("11. handles HTTP 401 and 422 API errors gracefully", async () => {
+  it("12. handles HTTP 401 and 422 API errors gracefully", async () => {
     // 401 Unauthorized
     server.use(
       http.put(`${BASE_URL}/orders/:orderId`, () =>
@@ -428,7 +474,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(result422.externalStatus).toBe("UNPROCESSABLE_ENTITY");
   });
 
-  it("12. verifies YouCanClient.updateOrderStatus updates status via PUT /orders/{id}/status", async () => {
+  it("13. verifies YouCanClient.updateOrderStatus updates status via PUT /orders/{id}/status", async () => {
     const client = new YouCanClient(CREDENTIALS);
     const statusRes = await client.updateOrderStatus("ord_yc_882910", "processed");
 

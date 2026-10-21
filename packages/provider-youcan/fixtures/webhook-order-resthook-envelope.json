@@ -5,24 +5,41 @@
   "data": {
     "id": "ord_yc_882910",
     "store_name": "DzMode YouCan Shop",
-    "total": 6400,
+    "total": 4500,
     "currency": "DZD",
     "status": 1,
     "created_at": "2026-10-16T14:20:00+01:00",
     "variants": [
       {
-        "id": "var_901",
-        "item": {
-          "id": "prod_301",
-          "name": "Karakou Algérois Velours"
-        },
-        "variation": {
-          "size": "38",
-          "color": "Bordeaux"
-        },
-        "title": "Taille 38 / Bordeaux",
+        "id": "bc09ec53-3ba4-4af1-82d7-750514ddfd97",
+        "price": 4500,
         "quantity": 1,
-        "price": 6400
+        "product_variant_id": "16e6d83b-b732-401b-8e2b-6e2d06a5d222",
+        "variant": {
+          "id": "16e6d83b-b732-401b-8e2b-6e2d06a5d222",
+          "product_id": "ee44722e-63ae-4f13-918d-5e75610ce4f9",
+          "variations": {
+            "Size": "XL"
+          },
+          "options": ["Size"],
+          "values": ["XL"],
+          "price": 4500,
+          "product": {
+            "id": "ee44722e-63ae-4f13-918d-5e75610ce4f9",
+            "name": "Ensemble Adidas",
+            "slug": "ensemble-adidas",
+            "variant_options": [
+              {
+                "name": "Size",
+                "type": 4,
+                "values": ["M", "L", "XL"]
+              }
+            ],
+            "meta": {
+              "title": "Ensemble Adidas"
+            }
+          }
+        }
       }
     ],
     "customer": {
@@ -37,9 +54,9 @@
         "first_name": "Yasmine",
         "last_name": "Hadji",
         "phone": "0770987654",
-        "region": "31 - Oran",
-        "city": "Bir El Djir",
-        "first_line": "Résidence El Bahia, Bloc B",
+        "region": "13 - Tlemcen",
+        "city": "Maghnia",
+        "first_line": "Boulevard de la Liberté",
         "country": "DZ"
       }
     },

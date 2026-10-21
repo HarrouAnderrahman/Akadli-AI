@@ -344,19 +344,130 @@ export class YouCanProvider implements IEcommerceProvider {
       findInNotes(addressPatterns) ||
       "";
 
-    // 6. Item Name & Size
+    // 6. Item Name Resolution
     const firstVariant = data.variants?.[0];
     const firstLineItem = data.line_items?.[0];
+
     const itemName =
-      firstVariant?.item?.name ||
-      firstVariant?.title ||
-      firstLineItem?.title ||
+      firstVariant?.variant?.product?.name?.trim() ||
+      firstVariant?.variant?.product?.meta?.title?.trim() ||
+      firstVariant?.item?.name?.trim() ||
+      firstVariant?.name?.trim() ||
+      firstVariant?.title?.trim() ||
+      firstLineItem?.title?.trim() ||
+      firstLineItem?.name?.trim() ||
       "Article";
-    const currentSize =
-      firstVariant?.variation?.size ||
-      firstVariant?.title ||
-      firstLineItem?.variant_title ||
-      "Standard";
+
+    // 7. Selected Variant / Size (currentSize) Resolution
+    const isNonDefault = (val: unknown): val is string => {
+      if (typeof val !== "string") return false;
+      const trimmed = val.trim();
+      return Boolean(trimmed && trimmed.toLowerCase() !== "default");
+    };
+
+    const sizeKeyRegex = /(?:size|taille|pointure|مقاس)/i;
+
+    const extractSizeFromMap = (
+      map: Record<string, unknown> | null | undefined
+    ): string | undefined => {
+      if (!map || typeof map !== "object") return undefined;
+      const entries = Object.entries(map);
+
+      // Check for explicit size key
+      for (const [key, val] of entries) {
+        if (sizeKeyRegex.test(key) && isNonDefault(val)) {
+          return val.trim();
+        }
+      }
+
+      // Fallback: first non-default string value in variations map
+      for (const [, val] of entries) {
+        if (isNonDefault(val)) {
+          return val.trim();
+        }
+      }
+
+      return undefined;
+    };
+
+    let currentSize: string | undefined;
+
+    // Priority 1: variant.variations
+    if (firstVariant?.variant?.variations) {
+      currentSize = extractSizeFromMap(firstVariant.variant.variations);
+    }
+
+    // Priority 2: variant.values[0]
+    if (!currentSize && firstVariant?.variant?.values?.length) {
+      const firstVal = firstVariant.variant.values[0];
+      if (isNonDefault(firstVal)) {
+        currentSize = firstVal.trim();
+      }
+    }
+
+    // Priority 3: variation object (legacy or standard)
+    if (!currentSize && firstVariant?.variation) {
+      currentSize = extractSizeFromMap(
+        firstVariant.variation as Record<string, unknown>
+      );
+    }
+
+    // Priority 4: title / variant.title / line_item variant_title
+    if (!currentSize) {
+      const candidateTitles = [
+        firstVariant?.title,
+        firstVariant?.variant?.title,
+        firstLineItem?.variant_title
+      ];
+      for (const title of candidateTitles) {
+        if (isNonDefault(title)) {
+          currentSize = title.trim();
+          break;
+        }
+      }
+    }
+
+    if (!currentSize) {
+      currentSize = "Standard";
+    }
+
+    // 8. Allowed Sizes (allowedSizes) Extraction from variant_options
+    let allowedSizes: string[] | undefined;
+    const variantOptions = firstVariant?.variant?.product?.variant_options;
+
+    if (Array.isArray(variantOptions) && variantOptions.length > 0) {
+      const sizeOption = variantOptions.find(
+        (opt) =>
+          opt?.name &&
+          /^(?:size|taille|pointure|مقاس)$/i.test(opt.name.trim()) &&
+          Array.isArray(opt.values) &&
+          opt.values.length > 0
+      );
+
+      const targetOption =
+        sizeOption ||
+        variantOptions.find(
+          (opt) => Array.isArray(opt?.values) && opt.values.length > 0
+        );
+
+      if (targetOption?.values) {
+        const cleanedValues = targetOption.values
+          .map((v) => String(v).trim())
+          .filter(Boolean);
+
+        if (cleanedValues.length > 0) {
+          if (currentSize && !cleanedValues.includes(currentSize)) {
+            cleanedValues.push(currentSize);
+          }
+          allowedSizes = Array.from(new Set(cleanedValues));
+        }
+      }
+    }
+
+    if (!allowedSizes || allowedSizes.length === 0) {
+      allowedSizes = [currentSize];
+    }
+
     const priceDa = Math.round(Number(data.total || 0));
     const storeName = data.store_name || data.shop_name || "YouCan Store";
 
@@ -370,7 +481,8 @@ export class YouCanProvider implements IEcommerceProvider {
       currentSize,
       rawWilaya,
       rawCommune,
-      currentAddressNote
+      currentAddressNote,
+      allowedSizes
     });
   }
 

@@ -80,12 +80,28 @@ YouCan webhook deliveries can arrive in several envelope formats:
    - Preserves top-level metadata (`store_name`, `extra_fields`, `custom_fields`, `customer`, `notes`).
    - Normalizes flattened `shipping` objects into canonical `{ address: { ... } }`.
 
-2. **Order Basics:**
+2. **Order Basics & Line Item Extraction:**
    - `orderId`: `String(data.id)`
    - `storeName`: `data.store_name || data.shop_name || "YouCan Store"`
-   - `itemName`: First variant item name (`variants?.[0]?.item?.name || variants?.[0]?.title || line_items?.[0]?.title || "Article"`)
-   - `currentSize`: Variant variation size or title (`variants?.[0]?.variation?.size || variants?.[0]?.title || line_items?.[0]?.variant_title || "Standard"`)
    - `priceDa`: `Math.round(Number(data.total || 0))`
+   - **Product Name (`itemName`) Resolution (in priority order):**
+     1. `variants[0]?.variant?.product?.name`
+     2. `variants[0]?.variant?.product?.meta?.title`
+     3. `variants[0]?.item?.name`
+     4. `variants[0]?.name` / `variants[0]?.title`
+     5. `line_items[0]?.title` / `line_items[0]?.name`
+     6. Fallback: `"Article"`
+   - **Selected Size (`currentSize`) Resolution (in priority order):**
+     1. Case-insensitive lookup in `variants[0]?.variant?.variations` (for keys matching `size`, `taille`, `pointure`, `مقاس`, or first non-default string value)
+     2. `variants[0]?.variant?.values?.[0]` (if not `"default"`)
+     3. `variants[0]?.variation` (case-insensitive key lookup)
+     4. `variants[0]?.title` / `variants[0]?.variant?.title` / `line_items[0]?.variant_title`
+     5. Fallback: `"Standard"`
+   - **Allowed Sizes (`allowedSizes`) Extraction:**
+     - Inspect `variants[0]?.variant?.product?.variant_options`
+     - Extract values from the option matching `/^(?:size|taille|pointure|مقاس)$/i` (or first option with non-empty string values array, e.g. `["M", "L", "XL"]`)
+     - Ensure `currentSize` is always included in `allowedSizes`
+     - Populates `constraints.allowedSizes` in `createStandardizedDzOrder`
 
 3. **Resilient Multi-Candidate Algerian Address & Phone Extraction:**
    - **Phone Extraction:**

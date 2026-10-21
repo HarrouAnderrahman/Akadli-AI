@@ -134,6 +134,43 @@ export function unwrapYouCanPayload(raw: unknown): Record<string, unknown> {
   };
 }
 
+const VariantOptionSchema = z
+  .object({
+    name: z.string().nullish(),
+    type: z.union([z.string(), z.number()]).nullish(),
+    values: z.array(z.string()).nullish()
+  })
+  .passthrough();
+
+const ProductSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).nullish(),
+    name: z.string().nullish(),
+    slug: z.string().nullish(),
+    variant_options: z.array(VariantOptionSchema).nullish(),
+    meta: z
+      .object({
+        title: z.string().nullish()
+      })
+      .passthrough()
+      .nullish()
+  })
+  .passthrough();
+
+const NestedVariantSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).nullish(),
+    product_id: z.union([z.string(), z.number()]).nullish(),
+    variations: z.record(z.any()).nullish(),
+    options: z.array(z.string()).nullish(),
+    values: z.array(z.string()).nullish(),
+    price: z.union([z.string(), z.number()]).nullish(),
+    title: z.string().nullish(),
+    name: z.string().nullish(),
+    product: ProductSchema.nullish()
+  })
+  .passthrough();
+
 const AddressSchema = z
   .object({
     first_name: z.string().nullish(),
@@ -205,6 +242,12 @@ export const YouCanOrderWebhookPayloadSchema = z.preprocess(
           z
             .object({
               id: z.union([z.string(), z.number()]).nullish(),
+              price: z.union([z.string(), z.number()]).nullish(),
+              quantity: z.number().nullish(),
+              product_variant_id: z.union([z.string(), z.number()]).nullish(),
+              name: z.string().nullish(),
+              title: z.string().nullish(),
+              variant: NestedVariantSchema.nullish(),
               item: z
                 .object({
                   id: z.union([z.string(), z.number()]).nullish(),
@@ -218,10 +261,7 @@ export const YouCanOrderWebhookPayloadSchema = z.preprocess(
                   color: z.string().nullish()
                 })
                 .passthrough()
-                .nullish(),
-              title: z.string().nullish(),
-              quantity: z.number().nullish(),
-              price: z.union([z.string(), z.number()]).nullish()
+                .nullish()
             })
             .passthrough()
         )
@@ -232,10 +272,12 @@ export const YouCanOrderWebhookPayloadSchema = z.preprocess(
           z
             .object({
               id: z.union([z.string(), z.number()]).nullish(),
+              name: z.string().nullish(),
               title: z.string().nullish(),
               variant_title: z.string().nullish(),
               quantity: z.number().nullish(),
-              price: z.union([z.string(), z.number()]).nullish()
+              price: z.union([z.string(), z.number()]).nullish(),
+              variant: NestedVariantSchema.nullish()
             })
             .passthrough()
         )
