@@ -22,25 +22,29 @@ pnpm add @akadli/provider-tassyir
 عند إنشاء تطبيق خارجي في منصة مطوري تسيير ([developers.tassyir.io](https://developers.tassyir.io))، قم بتهيئة ملف `tassyir.app.toml`:
 
 ```toml
-[app]
-name = "Akadli-AI Voice Confirmation"
-handle = "akadli-ai"
-client_id = "app_..."
+name        = "Akadli"
+handle      = "akadli"
+api_version = "2026-10"
+
+[access]
+scopes = ["read_orders", "write_orders", "read_customer_contact", "read_products"]
+
+[access.scope_reasons]
+read_orders = "Read incoming COD orders for voice confirmation"
+write_orders = "Confirm, modify, or cancel COD orders after voice call"
+read_customer_contact = "Read buyer phone and address for confirmation call"
+read_products = "Allows the adapter to fetch alternative sizes/variants"
 
 [auth]
 callback_url = "https://your-domain.com/api/webhooks/tassyir/callback"
-scopes = [
-  "read_orders",
-  "write_orders",
-  "read_customer_contact",
-  "read_products"
-]
 
-[webhooks]
-url = "https://your-domain.com/api/webhooks/tassyir"
-events = [
-  "orders/created"
-]
+[[webhooks]]
+topics = ["orders/created"]
+uri    = "/api/webhooks/tassyir"
+
+[hosting]
+mode = "external"
+url  = "https://your-domain.com"
 ```
 
 ### الصلاحيات المطلوبة (Scopes)
