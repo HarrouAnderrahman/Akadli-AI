@@ -1,9 +1,11 @@
 node_modules/
 dist/
 .turbo/
+.astro/
 coverage/
 *.tsbuildinfo
 .DS_Store
 .env
 .env.local
 !.env.example
+

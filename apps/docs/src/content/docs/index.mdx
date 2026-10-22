@@ -1,0 +1,120 @@
+---
+title: Akadli-AI
+description: Open-source Algerian COD Voice Confirmation Engine & Store Adapters for the 2026 69-Wilaya / 1,708-Commune division.
+template: splash
+hero:
+  tagline: Open-source Algerian COD Voice Confirmation Engine & Store Adapters for the official 2026 69-Wilaya / 1,708-Commune division.
+  actions:
+    - text: Get Started
+      link: /getting-started/overview/
+      icon: right-arrow
+      variant: primary
+    - text: Read llms.txt
+      link: /llms.txt
+      icon: document
+      variant: secondary
+    - text: View on GitHub
+      link: https://github.com/Akadli-AI/Akadli-AI
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Developer & Agent Quickstart
+
+<Tabs>
+  <TabItem label="For Human Developers">
+    ### 1. Install Core & Adapter
+
+    ```bash
+    pnpm add @akadli/core @akadli/dz-geo @akadli/provider-shopify
+    ```
+
+    ### 2. Ingest Webhook, Trigger Voice Call & Mutate Order
+
+    ```typescript
+    import { ShopifyProvider } from "@akadli/provider-shopify";
+    import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "@akadli/core";
+
+    const provider = new ShopifyProvider();
+
+    // 1. Verify HMAC signature & parse order into 2026 69-Wilaya format
+    const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+    const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+    // 2. Build ElevenAgents dynamic variables (currentVariant, allowedVariants, phone)
+    const promptVars = buildElevenAgentsDynamicVariables(order);
+
+    // 3. Receive tool call from ElevenLabs after call and apply store mutation
+    const result = await handleFinalizeOrderToolCall(
+      {
+        orderId: order.orderId,
+        status: "CONFIRMED", // or "MODIFIED" (finalVariant, finalCommune) | "REFUSED"
+        reasonOrNotes: "Confirmed in Algerian Darja via ElevenAgents"
+      },
+      provider,
+      { shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!, accessToken: process.env.SHOPIFY_ACCESS_TOKEN! },
+      order.constraints
+    );
+    ```
+  </TabItem>
+
+  <TabItem label="For AI Coding Agents">
+    ### Zero-Friction Agent Context
+
+    Give your AI assistant (Cursor, Antigravity, Claude Code, GitHub Copilot) instant access to the entire Akadli-AI architecture:
+
+    - **Compact Spec:** [`https://akadli.me/llms.txt`](/llms.txt)
+    - **Complete Ecosystem Bundle:** [`https://akadli.me/llms-full.txt`](/llms-full.txt)
+
+    ### Agent System Prompt
+
+    Copy and paste this prompt directly into your agent instructions or composer:
+
+    ```markdown
+    You are integrating the Akadli-AI voice confirmation engine for Algerian Cash-on-Delivery (COD).
+    Fetch context from https://akadli.me/llms-full.txt and adhere strictly to these rules:
+    1. Use @akadli/adapter-contract for StandardizedDzOrder and FinalizedOrderDecision.
+    2. Normalize Algerian addresses to the 2026 69-Wilaya division with @akadli/dz-geo.
+    3. Use @akadli/core to generate ElevenAgents prompt variables and execute handleFinalizeOrderToolCall.
+    4. Store tags MUST follow: akadli-confirmed, akadli-modified, akadli-refused, and akadli-variant-{variant}.
+    5. Order notes MUST be prefixed with [Akadli-AI].
+    6. Never invent ad-hoc status strings; use CONFIRMED, REFUSED, or MODIFIED.
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Architectural Highlights
+
+<CardGrid stagger>
+  <Card title="2026 69 Wilayas & 1,708 Communes" icon="seti:graphql">
+    Official Algerian administrative division with Arabic, French, and Arabizi fuzzy address resolution. Includes newly promoted Wilayas (59–69 like Barika, Bou Saada, Bir El Ater).
+  </Card>
+  <Card title="ElevenAgents Voice Orchestration" icon="rocket">
+    Stateless WebRTC & SIP audio bridge. Generates Darja-tailored system prompt variables and securely validates final decisions via server-side tool calls.
+  </Card>
+  <Card title="Production Store Adapters" icon="puzzle">
+    Ready-to-use stateless connectors for Shopify, YouCan, WooCommerce, Google Sheets (SetShop/JustSell), and Tassyir COD ERP with Ed25519 signature checks.
+  </Card>
+  <Card title="Local Wi-Fi Testing Sandbox" icon="laptop">
+    Interactive `@akadli/playground` with a desktop dispatch center (`/admin`) and a mobile phone simulator (`/phone`) for live testing over LAN without deploying servers.
+  </Card>
+</CardGrid>
+
+---
+
+## Monorepo Package Matrix
+
+| Package | Version | Purpose | Docs |
+| :--- | :--- | :--- | :--- |
+| **`@akadli/adapter-contract`** | `0.1.0` | Zod contracts (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`) | [Read Docs](/core/adapter-contract/) |
+| **`@akadli/dz-geo`** | `0.1.0` | 2026 69 Wilayas, 1,708 Communes, postal codes & `+213` phone normalizer | [Read Docs](/core/dz-geo/) |
+| **`@akadli/core`** | `0.1.0` | Dynamic prompt variables & `handleFinalizeOrderToolCall` voice orchestrator | [Read Docs](/core/engine/) |
+| **`@akadli/provider-shopify`** | `0.1.0` | Shopify HMAC, missing-province fallback, OAuth & order REST mutations | [Read Docs](/providers/shopify/) |
+| **`@akadli/provider-youcan`** | `0.1.0` | YouCan `.shop` webhooks, 1-page checkout `extra_fields` & status mutations | [Read Docs](/providers/youcan/) |
+| **`@akadli/provider-woocommerce`** | `0.1.0` | WooCommerce REST v3, `DZ-XX` state codes & COD plugin `meta_data` parser | [Read Docs](/providers/woocommerce/) |
+| **`@akadli/provider-gsheets`** | `0.1.0` | Universal Google Sheets v4 & Zero-OAuth Apps Script for SetShop / JustSell | [Read Docs](/providers/gsheets/) |
+| **`@akadli/provider-tassyir`** | `0.1.0` | Tassyir Admin API (`2026-10`), Standard Webhooks (`v1a` Ed25519) & OAuth | [Read Docs](/providers/tassyir/) |

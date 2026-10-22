@@ -1,0 +1,120 @@
+---
+title: أكدلي Akadli-AI
+description: محرك مفتوح المصدر لتأكيد طلبيات الدفع عند الاستلام (COD) صوتياً بالذكاء الاصطناعي ومحولات ربط المتاجر الإلكترونية للتقسيم الإداري الجزائري 2026 (69 ولاية و 1708 بلدية).
+template: splash
+hero:
+  tagline: محرك مفتوح المصدر لتأكيد طلبيات الدفع عند الاستلام (COD) صوتياً بالذكاء الاصطناعي ومحولات ربط المتاجر وفق التقسيم الإداري الجزائري 2026 (69 ولاية و 1708 بلدية).
+  actions:
+    - text: ابدأ الآن
+      link: /ar/getting-started/overview/
+      icon: right-arrow
+      variant: primary
+    - text: قراءة llms.txt
+      link: /llms.txt
+      icon: document
+      variant: secondary
+    - text: عرض على GitHub
+      link: https://github.com/Akadli-AI/Akadli-AI
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## البدء السريع للمطورين ولوكلاء الذكاء الاصطناعي
+
+<Tabs>
+  <TabItem label="للمطورين البرمجيين">
+    ### 1. تثبيت الحزم الأساسية ومحول المتجر
+
+    ```bash
+    pnpm add @akadli/core @akadli/dz-geo @akadli/provider-shopify
+    ```
+
+    ### 2. استقبال الطلب، إطلاق المكالمة الصوتية وتحديث المتجر
+
+    ```typescript
+    import { ShopifyProvider } from "@akadli/provider-shopify";
+    import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "@akadli/core";
+
+    const provider = new ShopifyProvider();
+
+    // 1. التحقق من توقيع Webhook وتحليل بيانات الطلبية وفق تقسيم الـ 69 ولاية
+    const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+    const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+    // 2. بناء المتغيرات الديناميكية للمكالمة الصوتية بالدارجة (currentVariant، الولاية، الهاتف)
+    const promptVars = buildElevenAgentsDynamicVariables(order);
+
+    // 3. استقبال قرار العميل من أداة ElevenLabs وتحديث بيانات المتجر فوراً
+    const result = await handleFinalizeOrderToolCall(
+      {
+        orderId: order.orderId,
+        status: "CONFIRMED", // أو "MODIFIED" لتعديل المقاس أو البلدية أو "REFUSED"
+        reasonOrNotes: "تم تأكيد الطلبية بالدارجة عبر مكالمة ElevenAgents الصوتية"
+      },
+      provider,
+      { shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!, accessToken: process.env.SHOPIFY_ACCESS_TOKEN! },
+      order.constraints
+    );
+    ```
+  </TabItem>
+
+  <TabItem label="لوكلاء الذكاء الاصطناعي (AI Coding Agents)">
+    ### ملفات السياق الفوري للوكلاء
+
+    زوّد وكيل البرمجة بالذكاء الاصطناعي (Cursor, Antigravity, Claude Code, GitHub Copilot) بكامل سياق المشروع بضغطة واحدة:
+
+    - **الملخص الهندسي:** [`https://akadli.me/llms.txt`](/llms.txt)
+    - **السياق البرمجي الكامل والشامل:** [`https://akadli.me/llms-full.txt`](/llms-full.txt)
+
+    ### نص التوجيه المباشر (Prompt) للوكيل
+
+    انسخ هذا التوجيه مباشرة داخل بيئة وكيل الذكاء الاصطناعي لديك:
+
+    ```markdown
+    أنت تقوم بربط محرك تأكيد طلبيات الدفع عند الاستلام بالجزائر Akadli-AI.
+    احصل على السياق الكامل من https://akadli.me/llms-full.txt والتزم بالمعايير التالية:
+    1. استخدام @akadli/adapter-contract لنموذج StandardizedDzOrder و FinalizedOrderDecision.
+    2. مطابقة العناوين حصرياً مع التقسيم الإداري 2026 (69 ولاية) باستخدام @akadli/dz-geo.
+    3. استخدام @akadli/core لبناء متغيرات ElevenAgents وتشغيل handleFinalizeOrderToolCall.
+    4. وسوم المتجر يجب أن تكون حصرياً: akadli-confirmed و akadli-modified و akadli-refused و akadli-variant-{variant}.
+    5. يجب أن تبدأ ملاحظات الطلب ببادئة [Akadli-AI].
+    6. لا تخترع حالات جديدة، بل استخدم فقط CONFIRMED أو REFUSED أو MODIFIED.
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## المزايا المعمارية الرئيسية
+
+<CardGrid stagger>
+  <Card title="التقسيم الإداري 2026 (69 ولاية و 1708 بلدية)" icon="seti:graphql">
+    قاعدة بيانات رسمية كاملة مع دعم البحث الذكي غير الدقيق بالعربية والفرنسية والعربيزي. تشمل الولايات المستحدثة (من 59 إلى 69 مثل بريكة وبوسعادة وبئر العاتر ومسعد).
+  </Card>
+  <Card title="إدارة المكالمات الصوتية بـ ElevenAgents" icon="rocket">
+    جسر صوتي بدون حالة (Stateless) عبر WebRTC و SIP. يولد متغيرات التعليمات بالدارجة الجزائرية بدقة ويتحقق برمجياً من قرارات العميل عبر دوال الخادم.
+  </Card>
+  <Card title="محولات جاهزة لمنصات التجارة الإلكترونية" icon="puzzle">
+    تكامل مباشر مع Shopify و YouCan و WooCommerce و Google Sheets ومتاجر SetShop و JustSell ونظام إدارة طلبيات COD الجزائري Tassyir.
+  </Card>
+  <Card title="بيئة تجارب محلية عبر Wi-Fi (@akadli/playground)" icon="laptop">
+    منصة اختبار تفاعلية متكاملة تشمل لوحة تحكم مكتبية للمدير (`/admin`) وهاتف افتراضي تفاعلي (`/phone`) للاختبار المباشر بالهاتف عبر الشبكة المحلية.
+  </Card>
+</CardGrid>
+
+---
+
+## مصفوفة حزم المستودع
+
+| الحزمة | الإصدار | الوظيفة | التوثيق |
+| :--- | :--- | :--- | :--- |
+| **`@akadli/adapter-contract`** | `0.1.0` | عقود Zod النقية (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`) | [عرض التوثيق](/ar/core/adapter-contract/) |
+| **`@akadli/dz-geo`** | `0.1.0` | التقسيم الإداري 2026 (69 ولاية، 1708 بلدية)، الرموز البريدية وتطبيع هواتف `+213` | [عرض التوثيق](/ar/core/dz-geo/) |
+| **`@akadli/core`** | `0.1.0` | منشئ المتغيرات الديناميكية ومنسق قرارات المكالمات `handleFinalizeOrderToolCall` | [عرض التوثيق](/ar/core/engine/) |
+| **`@akadli/provider-shopify`** | `0.1.0` | التحقق من HMAC لشوبيفاي، معالجة الولاية المفقودة، مصادقة OAuth والتحديثات عبر REST | [عرض التوثيق](/ar/providers/shopify/) |
+| **`@akadli/provider-youcan`** | `0.1.0` | التحقق من Webhooks ليوكان، تحليل حقول `extra_fields` وتحديث حالات الطلب | [عرض التوثيق](/ar/providers/youcan/) |
+| **`@akadli/provider-woocommerce`** | `0.1.0` | ووكومرس REST v3، تطبيع رموز `DZ-XX` وحقول `meta_data` لإضافات الدفع عند الاستلام | [عرض التوثيق](/ar/providers/woocommerce/) |
+| **`@akadli/provider-gsheets`** | `0.1.0` | ربط Google Sheets و Apps Script لمتاجر SetShop و JustSell وصفحات الهبوط | [عرض التوثيق](/ar/providers/gsheets/) |
+| **`@akadli/provider-tassyir`** | `0.1.0` | ربط Tassyir Admin API (`2026-10`) وتوقيعات Ed25519 ومصادقة OAuth ورمز التثبيت | [عرض التوثيق](/ar/providers/tassyir/) |

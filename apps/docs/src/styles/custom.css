@@ -1,0 +1,25 @@
+/* Akadli-AI Minimalist Emerald Accent Theme */
+
+:root {
+  --sl-color-accent-low: #064e3b;
+  --sl-color-accent: #10b981;
+  --sl-color-accent-high: #6ee7b7;
+  --sl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d1fae5;
+  --sl-color-accent: #059669;
+  --sl-color-accent-high: #065f46;
+}
+
+/* Subtle border and card styling */
+.card, .starlight-aside {
+  border-radius: 8px;
+}
+
+/* RTL Typography adjustments */
+[dir="rtl"] {
+  font-feature-settings: "cv05", "cv08", "cv11";
+  letter-spacing: normal;
+}
