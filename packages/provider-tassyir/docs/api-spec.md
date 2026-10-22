@@ -19,7 +19,8 @@ callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
 scopes = [
   "read_orders",
   "write_orders",
-  "read_customer_contact"
+  "read_customer_contact",
+  "read_products"
 ]
 
 [webhooks]
@@ -33,6 +34,7 @@ events = [
 - `read_orders`: Allows reading incoming order details, items, and shipping destinations.
 - `write_orders`: Allows patching order notes, confirming orders (`/confirm`), and cancelling refused orders (`/cancel`).
 - `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), `buyer.phone` is masked as `"**********"` and `waiting: true` is flagged. The adapter enforces this guard immediately.
+- `read_products`: Recommended for multi-variant products. Allows the adapter to fetch full size/variant choices from `GET /products/{productId}` so voice agents can let callers choose alternative sizes.
 
 ---
 
@@ -133,9 +135,12 @@ Tassyir emits `orders/created` events with a nested envelope (`data.order`) or f
 4. **Wilaya & Commune Normalization:**
    - `provinceCode` (number `1..69`, e.g. `25` -> Constantine, `59` -> Aflou) maps to official 2026 Algerian divisions via `@akadli/dz-geo`.
    - `townOns` maps to canonical Algerian commune names.
-5. **Item Details:**
+5. **Item & Variant Extraction:**
    - Name: `items[0].title` or `items[0].name`.
-   - Size: `items[0].variantTitle`, `items[0].variant`, or `items[0].options`.
+   - Size / Variant: Cleaned from `items[0].variantName` (e.g. `"nike ensemble - M"` -> `"M"`), `variantTitle`, `variant`, or `options`.
+   - Constraints (`allowedSizes`):
+     - If credentials or client are provided to `parseWebhookOrder` and `items[0].productId` is present, the adapter queries `GET /products/{productId}` to populate all available variants (`product.options` / `product.variants`).
+     - Defaults gracefully to the ordered variant(s) across line items if offline or without `read_products` scope.
 
 ---
 

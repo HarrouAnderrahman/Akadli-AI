@@ -16,18 +16,66 @@ export type TassyirBuyer = z.infer<typeof TassyirBuyerSchema>;
 export const TassyirItemSchema = z
   .object({
     id: z.union([z.string(), z.number()]).nullable().optional(),
+    productId: z.union([z.string(), z.number()]).nullable().optional(),
+    variantId: z.union([z.string(), z.number()]).nullable().optional(),
+    packParentItemId: z.union([z.string(), z.number()]).nullable().optional(),
     name: z.string().nullable().optional(),
     title: z.string().nullable().optional(),
+    variantName: z.string().nullable().optional(),
+    variant_name: z.string().nullable().optional(),
     variantTitle: z.string().nullable().optional(),
+    variant_title: z.string().nullable().optional(),
     variant: z.string().nullable().optional(),
-    options: z.array(z.string()).nullable().optional(),
+    options: z.any().nullable().optional(),
     size: z.string().nullable().optional(),
     quantity: z.number().nullable().optional(),
+    unitPrice: z.union([z.number(), z.string()]).nullable().optional(),
+    totalPrice: z.union([z.number(), z.string()]).nullable().optional(),
     price: z.union([z.number(), z.string()]).nullable().optional(),
+    sku: z.string().nullable().optional(),
   })
   .catchall(z.unknown());
 
 export type TassyirItem = z.infer<typeof TassyirItemSchema>;
+
+export const TassyirProductOptionSchema = z
+  .object({
+    name: z.string().nullable().optional(),
+    values: z.array(z.string()).nullable().optional(),
+  })
+  .catchall(z.unknown());
+
+export type TassyirProductOption = z.infer<typeof TassyirProductOptionSchema>;
+
+export const TassyirProductVariantSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).nullable().optional(),
+    name: z.string().nullable().optional(),
+    sku: z.string().nullable().optional(),
+    price: z.union([z.string(), z.number()]).nullable().optional(),
+  })
+  .catchall(z.unknown());
+
+export type TassyirProductVariant = z.infer<typeof TassyirProductVariantSchema>;
+
+export const TassyirProductSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]),
+    storeId: z.union([z.string(), z.number()]).nullable().optional(),
+    name: z.string().nullable().optional(),
+    slug: z.string().nullable().optional(),
+    type: z.string().nullable().optional(),
+    active: z.boolean().nullable().optional(),
+    visible: z.boolean().nullable().optional(),
+    currency: z.string().nullable().optional(),
+    price: z.union([z.string(), z.number()]).nullable().optional(),
+    sku: z.string().nullable().optional(),
+    options: z.array(TassyirProductOptionSchema).nullable().optional(),
+    variants: z.array(TassyirProductVariantSchema).nullable().optional(),
+  })
+  .catchall(z.unknown());
+
+export type TassyirProduct = z.infer<typeof TassyirProductSchema>;
 
 export const TassyirCustomerSchema = z
   .object({

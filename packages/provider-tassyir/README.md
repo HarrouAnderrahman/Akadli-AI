@@ -23,7 +23,8 @@ callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
 scopes = [
   "read_orders",
   "write_orders",
-  "read_customer_contact"
+  "read_customer_contact",
+  "read_products"
 ]
 
 [webhooks]
@@ -37,6 +38,7 @@ events = [
 - `read_orders`: Read incoming orders, line items, and customer delivery destinations.
 - `write_orders`: Update order notes, confirm (`/confirm`), and cancel (`/cancel`) orders.
 - `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), phone numbers are masked as `"**********"` and the order enters `waiting: true`. The adapter detects this and throws an actionable error.
+- `read_products`: Recommended for multi-variant products. Allows the adapter to fetch full size/variant choices from `GET /products/{productId}` so voice callers can switch sizes.
 
 ---
 

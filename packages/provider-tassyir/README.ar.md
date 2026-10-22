@@ -29,7 +29,8 @@ callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
 scopes = [
   "read_orders",
   "write_orders",
-  "read_customer_contact"
+  "read_customer_contact",
+  "read_products"
 ]
 
 [webhooks]

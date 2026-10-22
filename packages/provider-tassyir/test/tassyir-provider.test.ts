@@ -12,6 +12,9 @@ import {
   clearWebhookKeysCache,
   ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY,
   parseEd25519PublicKey,
+  cleanVariantString,
+  extractVariantFromItem,
+  extractAllowedSizesFromProduct,
 } from "../src/index.js";
 
 const __dirname = resolve(fileURLToPath(import.meta.url), "..");
@@ -680,5 +683,172 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     );
     expect(result503.success).toBe(false);
     expect(result503.externalStatus).toBe("API_BUSY");
+  });
+
+  it("15. parses live Tassyir payload with variantName: 'nike ensemble - M' and extracts clean variant 'M'", async () => {
+    const liveOrderPayload = {
+      id: "evt_768511938354222522",
+      type: "orders/created",
+      apiVersion: "2026-10",
+      createdAt: "2026-10-22T16:32:04.365Z",
+      businessId: "768261938617522044",
+      storeId: "768261943948481595",
+      appId: "768498309554771615",
+      installationId: "768500224288102645",
+      changed: [],
+      data: {
+        order: {
+          id: "768511937683136113",
+          orderNumber: "#00000201",
+          storeId: "768261943948481595",
+          status: "pending",
+          waiting: false,
+          archived: false,
+          dispatched: false,
+          delivered: false,
+          returned: false,
+          currency: "DZD",
+          total: "4000.00",
+          shippingPrice: "0.00",
+          subtotal: "4000.00",
+          discountTotal: "0.00",
+          discounts: [],
+          buyer: {
+            provinceCode: 13,
+            townOns: 1316,
+            name: "harrou amine",
+            phone: "+213550000000",
+            phone2: null,
+            email: null,
+            address: "أولاد أحمد",
+            address2: null,
+          },
+          delivery: {
+            method: "home",
+            speed: "standard",
+            deliveryAgentId: null,
+            trackingNumber: null,
+            carrierStatus: null,
+          },
+          items: [
+            {
+              id: "768511937829934974",
+              productId: "768511690433109782",
+              variantId: "768511691032893383",
+              packParentItemId: null,
+              name: "nike ensemble",
+              variantName: "nike ensemble - M",
+              sku: null,
+              quantity: 1,
+              unitPrice: "4000.00",
+              totalPrice: "4000.00",
+            },
+          ],
+        },
+      },
+    };
+
+    const order = await provider.parseWebhookOrder(liveOrderPayload);
+    expect(order.orderId).toBe("768511937683136113");
+    expect(order.itemName).toBe("nike ensemble");
+    expect(order.currentSize).toBe("M");
+    expect(order.constraints.allowedSizes).toEqual(["M"]);
+    expect(order.currentWilaya).toBe("13");
+    expect(order.currentAddressNote).toBe("أولاد أحمد");
+    expect(order.priceDa).toBe(4000);
+  });
+
+  it("16. fetches live product variants via GET /products/:id when credentials are provided to parseWebhookOrder", async () => {
+    server.use(
+      http.get(`${BASE_URL}/products/768511690433109782`, () =>
+        HttpResponse.json({
+          id: "768511690433109782",
+          name: "nike ensemble",
+          options: [
+            {
+              name: "Taille",
+              values: ["S", "M", "L", "XL"],
+            },
+          ],
+          variants: [
+            { id: "v1", name: "nike ensemble - S" },
+            { id: "v2", name: "nike ensemble - M" },
+            { id: "v3", name: "nike ensemble - L" },
+            { id: "v4", name: "nike ensemble - XL" },
+          ],
+        })
+      )
+    );
+
+    const liveOrderPayload = {
+      id: "evt_768511938354222522",
+      type: "orders/created",
+      apiVersion: "2026-10",
+      data: {
+        order: {
+          id: "768511937683136113",
+          total: "4000.00",
+          buyer: {
+            provinceCode: 13,
+            townOns: 1316,
+            name: "harrou amine",
+            phone: "+213550000000",
+            address: "أولاد أحمد",
+          },
+          items: [
+            {
+              id: "item_1",
+              productId: "768511690433109782",
+              variantId: "v2",
+              name: "nike ensemble",
+              variantName: "nike ensemble - M",
+            },
+          ],
+        },
+      },
+    };
+
+    const order = await provider.parseWebhookOrder(liveOrderPayload, {
+      credentials: CREDENTIALS,
+    });
+
+    expect(order.currentSize).toBe("M");
+    expect(order.constraints.allowedSizes).toEqual(["S", "M", "L", "XL"]);
+  });
+
+  it("17. unit tests variant parsing helpers for multiple delimiters and edge cases", () => {
+    // cleanVariantString
+    expect(cleanVariantString("nike ensemble - M", "nike ensemble")).toBe("M");
+    expect(cleanVariantString("nike ensemble - Rouge / XL", "nike ensemble")).toBe("Rouge / XL");
+    expect(cleanVariantString("nike ensemble", "nike ensemble")).toBe("Standard");
+    expect(cleanVariantString("nike ensemble - Default Title", "nike ensemble")).toBe("Standard");
+    expect(cleanVariantString("nike ensemble - Standard", "nike ensemble")).toBe("Standard");
+    expect(cleanVariantString("42", "Chaussure")).toBe("42");
+    expect(cleanVariantString("L", "Robe")).toBe("L");
+    expect(cleanVariantString("", "Product")).toBe("Standard");
+    expect(cleanVariantString(null, "Product")).toBe("Standard");
+
+    // extractVariantFromItem
+    expect(extractVariantFromItem({ name: "T-Shirt", variantName: "T-Shirt - XL" })).toBe("XL");
+    expect(extractVariantFromItem({ name: "T-Shirt", variantTitle: "L" })).toBe("L");
+    expect(extractVariantFromItem({ name: "T-Shirt", size: "38" })).toBe("38");
+    expect(extractVariantFromItem({ name: "T-Shirt", options: ["Rouge", "M"] })).toBe("Rouge / M");
+    expect(extractVariantFromItem({ name: "T-Shirt", variantName: "T-Shirt" })).toBe("Standard");
+    expect(extractVariantFromItem(undefined)).toBe("Standard");
+
+    // extractAllowedSizesFromProduct
+    const product = {
+      id: "prod_1",
+      name: "Ensemble Sport",
+      options: [
+        { name: "Taille", values: ["M", "L", "XL"] },
+      ],
+      variants: [
+        { id: "1", name: "Ensemble Sport - M" },
+        { id: "2", name: "Ensemble Sport - L" },
+        { id: "3", name: "Ensemble Sport - XL" },
+      ],
+    };
+    expect(extractAllowedSizesFromProduct(product)).toEqual(["M", "L", "XL"]);
   });
 });

@@ -7,6 +7,8 @@ import {
   TassyirDispatchPayload,
   TassyirOAuthTokenResponse,
   TassyirOAuthTokenResponseSchema,
+  TassyirProduct,
+  TassyirProductSchema,
 } from "./schemas.js";
 
 export const ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY =
@@ -323,6 +325,28 @@ export class TassyirClient {
       },
       body: JSON.stringify(payload),
     });
+  }
+
+  /**
+   * Fetches product details and variants from Tassyir Admin API via GET /products/{productId}.
+   * Returns null if product does not exist, app lacks read_products scope, or request fails.
+   */
+  async getProduct(productId: string | number): Promise<TassyirProduct | null> {
+    const url = `${this.baseUrl}/products/${encodeURIComponent(String(productId))}`;
+    try {
+      const res = await this.request(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      if (res.success && res.rawResponse) {
+        return TassyirProductSchema.parse(res.rawResponse);
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   private async request(

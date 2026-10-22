@@ -18,6 +18,8 @@ import {
   TassyirWebhookPayloadSchema,
   TassyirCredentialsSchema,
   TassyirOrder,
+  TassyirItem,
+  TassyirProduct,
 } from "./schemas.js";
 import {
   TassyirClient,
@@ -66,6 +68,154 @@ export function parseEd25519PublicKey(secret: string): KeyObject | null {
     return null;
   }
   return null;
+}
+
+/**
+ * Strips product name prefixes, delimiters, and default placeholders from a variant string.
+ * Example:
+ *   cleanVariantString("nike ensemble - M", "nike ensemble") => "M"
+ *   cleanVariantString("nike ensemble - Rouge / XL", "nike ensemble") => "Rouge / XL"
+ *   cleanVariantString("M", "nike ensemble") => "M"
+ *   cleanVariantString("nike ensemble", "nike ensemble") => "Standard"
+ *   cleanVariantString("nike ensemble - Default Title", "nike ensemble") => "Standard"
+ */
+export function cleanVariantString(
+  rawVariant: string | null | undefined,
+  productName?: string | null
+): string {
+  if (!rawVariant || typeof rawVariant !== "string") {
+    return "Standard";
+  }
+
+  let cleaned = rawVariant.trim();
+  if (!cleaned) return "Standard";
+
+  const pName = (productName || "").trim();
+
+  // 1. If raw starts with product name, strip it
+  if (pName && cleaned.toLowerCase().startsWith(pName.toLowerCase())) {
+    const remainder = cleaned.slice(pName.length).replace(/^[\s\-–—/|:;,]+/, "").trim();
+    if (!remainder) {
+      return "Standard";
+    }
+    cleaned = remainder;
+  } else if (cleaned.includes(" - ") || cleaned.includes(" – ") || cleaned.includes(" — ")) {
+    // 2. If it has a delimiter " - ", check if first part matches or if trailing part is a variant
+    const parts = cleaned.split(/\s*[-–—]\s*/);
+    if (parts.length > 1) {
+      const firstPart = parts[0];
+      if (pName && firstPart && firstPart.toLowerCase() === pName.toLowerCase()) {
+        cleaned = parts.slice(1).join(" - ").trim();
+      } else if (!pName) {
+        cleaned = parts.slice(1).join(" - ").trim();
+      }
+    }
+  }
+
+  // 3. Check for standard / default placeholders
+  if (
+    /^(?:default(?:\s+title)?|standard|valeur\s+par\s+d[eé]faut)$/i.test(
+      cleaned
+    )
+  ) {
+    return "Standard";
+  }
+
+  return cleaned || "Standard";
+}
+
+/**
+ * Extracts a normalized variant name (e.g. "M", "42", "Noir / L") from a Tassyir item.
+ */
+export function extractVariantFromItem(
+  item: TassyirItem | undefined,
+  fallbackProductName?: string | null
+): string {
+  if (!item) return "Standard";
+
+  const productName = item.title || item.name || fallbackProductName;
+
+  // 1. Direct candidate fields (variantTitle, variant, size)
+  const candidates = [
+    item.variantTitle,
+    item.variant_title,
+    item.variant,
+    item.size,
+  ];
+
+  for (const c of candidates) {
+    if (c && typeof c === "string" && c.trim()) {
+      const cleaned = cleanVariantString(c, productName);
+      if (cleaned !== "Standard") return cleaned;
+    }
+  }
+
+  // 2. Check options array/object
+  if (Array.isArray(item.options) && item.options.length > 0) {
+    const optStr = item.options.map(String).filter(Boolean).join(" / ");
+    const cleaned = cleanVariantString(optStr, productName);
+    if (cleaned !== "Standard") return cleaned;
+  }
+
+  // 3. Tassyir standard variantName / variant_name (e.g. "nike ensemble - M")
+  const variantName = item.variantName || item.variant_name;
+  if (variantName && typeof variantName === "string" && variantName.trim()) {
+    const cleaned = cleanVariantString(variantName, productName);
+    return cleaned;
+  }
+
+  return "Standard";
+}
+
+/**
+ * Extracts allowed sizes/variants from a Tassyir product object.
+ */
+export function extractAllowedSizesFromProduct(
+  product: TassyirProduct | null | undefined
+): string[] {
+  if (!product) return [];
+
+  const sizes: string[] = [];
+
+  // 1. Inspect options array (e.g. { name: "Taille", values: ["S", "M", "L"] })
+  if (Array.isArray(product.options) && product.options.length > 0) {
+    const sizeOpt = product.options.find(
+      (opt) =>
+        opt?.name &&
+        /^(?:size|taille|pointure|مقاس)$/i.test(opt.name.trim()) &&
+        Array.isArray(opt.values) &&
+        opt.values.length > 0
+    );
+
+    const targetOpt =
+      sizeOpt ||
+      product.options.find(
+        (opt) => Array.isArray(opt?.values) && opt.values.length > 0
+      );
+
+    if (targetOpt?.values) {
+      for (const val of targetOpt.values) {
+        const cleaned = cleanVariantString(String(val), product.name);
+        if (cleaned && cleaned !== "Standard" && !sizes.includes(cleaned)) {
+          sizes.push(cleaned);
+        }
+      }
+    }
+  }
+
+  // 2. Inspect variants array
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    for (const v of product.variants) {
+      if (v?.name) {
+        const cleaned = cleanVariantString(v.name, product.name);
+        if (cleaned && cleaned !== "Standard" && !sizes.includes(cleaned)) {
+          sizes.push(cleaned);
+        }
+      }
+    }
+  }
+
+  return sizes;
 }
 
 export class TassyirProvider implements IEcommerceProvider {
@@ -239,8 +389,16 @@ export class TassyirProvider implements IEcommerceProvider {
 
   /**
    * Parses and normalizes an inbound Tassyir orders/created webhook payload into a canonical StandardizedDzOrder.
+   * Extracts clean variant from Tassyir items (supporting variantName: "Product - Variant", variantTitle, etc.),
+   * and populates allowedSizes from live product variants (if credentials or client provided) or order line items.
    */
-  async parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder> {
+  async parseWebhookOrder(
+    payload: unknown,
+    options?: {
+      credentials?: Record<string, string>;
+      client?: TassyirClient;
+    }
+  ): Promise<StandardizedDzOrder> {
     const rawData = TassyirWebhookPayloadSchema.parse(payload);
     const orderData = (rawData.data?.order ?? rawData) as TassyirOrder;
 
@@ -322,17 +480,56 @@ export class TassyirProvider implements IEcommerceProvider {
         ? "Stop-Desk / Bureau"
         : undefined);
 
-    const firstItem = orderData.items?.[0];
+    const items = orderData.items || [];
+    const firstItem = items[0];
     const itemName =
       firstItem?.title || firstItem?.name || orderData.product_name || "Article";
 
-    const currentSize =
-      firstItem?.variantTitle ||
-      firstItem?.variant ||
-      (Array.isArray(firstItem?.options) ? firstItem.options.join(" / ") : undefined) ||
-      firstItem?.size ||
-      orderData.size ||
-      "Standard";
+    const currentSize = extractVariantFromItem(firstItem, itemName);
+
+    let allowedSizes: string[] = [];
+
+    // Optional: fetch live product variants if credentials or client are provided
+    let client = options?.client;
+    if (!client && options?.credentials) {
+      try {
+        const validCreds = TassyirCredentialsSchema.parse(options.credentials);
+        client = new TassyirClient(validCreds, this.customFetch);
+      } catch {
+        // Continue without client
+      }
+    }
+
+    if (client && firstItem?.productId) {
+      try {
+        const product = await client.getProduct(firstItem.productId);
+        if (product) {
+          const productSizes = extractAllowedSizesFromProduct(product);
+          if (productSizes.length > 0) {
+            allowedSizes.push(...productSizes);
+          }
+        }
+      } catch {
+        // Fallback gracefully if product fetch fails
+      }
+    }
+
+    // Also collect variants from any line items present in the order
+    for (const it of items) {
+      const v = extractVariantFromItem(it, it.title || it.name || itemName);
+      if (v && v !== "Standard" && !allowedSizes.includes(v)) {
+        allowedSizes.push(v);
+      }
+    }
+
+    // Ensure currentSize is included
+    if (currentSize && currentSize !== "Standard" && !allowedSizes.includes(currentSize)) {
+      allowedSizes.unshift(currentSize);
+    }
+
+    if (allowedSizes.length === 0) {
+      allowedSizes = [currentSize];
+    }
 
     return createStandardizedDzOrder({
       orderId,
@@ -345,6 +542,7 @@ export class TassyirProvider implements IEcommerceProvider {
       rawWilaya,
       rawCommune,
       currentAddressNote,
+      allowedSizes,
     });
   }
 

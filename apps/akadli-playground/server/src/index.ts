@@ -13,7 +13,7 @@ import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { TassyirProvider, TassyirClient } from '@akadli/provider-tassyir';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
-import { IEcommerceProvider, OrderConstraints } from '@akadli/adapter-contract';
+import { IEcommerceProvider, OrderConstraints, StandardizedDzOrder } from '@akadli/adapter-contract';
 import { config, getLocalIpAddress } from './config.js';
 import {
   CallState,
@@ -477,7 +477,13 @@ async function handleWebhookIngress(
       }
     }
 
-    const standardizedOrder = await desc.provider.parseWebhookOrder(req.body);
+    let standardizedOrder: StandardizedDzOrder;
+    if (desc.key === 'tassyir') {
+      const creds = desc.getMutationCredentials();
+      standardizedOrder = await (desc.provider as TassyirProvider).parseWebhookOrder(req.body, { credentials: creds });
+    } else {
+      standardizedOrder = await desc.provider.parseWebhookOrder(req.body);
+    }
     console.log(
       `[${desc.displayName} Webhook] Ingested live order #${standardizedOrder.orderId} for customer "${standardizedOrder.customerName}" (${standardizedOrder.currentWilaya} - ${standardizedOrder.currentCommune})`
     );
@@ -562,7 +568,13 @@ async function handleWebhookSimulate(
       secret
     );
 
-    const standardizedOrder = await desc.provider.parseWebhookOrder(parsedPayload);
+    let standardizedOrder: StandardizedDzOrder;
+    if (desc.key === 'tassyir') {
+      const creds = desc.getMutationCredentials();
+      standardizedOrder = await (desc.provider as TassyirProvider).parseWebhookOrder(parsedPayload, { credentials: creds });
+    } else {
+      standardizedOrder = await desc.provider.parseWebhookOrder(parsedPayload);
+    }
     const orderPayload = standardizedDzOrderToOrderPayload(standardizedOrder, desc.key);
     orderPayload.raw_order = parsedPayload;
 
