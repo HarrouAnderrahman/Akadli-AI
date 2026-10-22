@@ -56,14 +56,25 @@ pnpm add @akadli/core @akadli/dz-geo @akadli/provider-shopify
 - Full context bundle for LLM ingestion: https://akadli.me/llms-full.txt
 `;
 
-fs.writeFileSync(path.join(publicDir, "llms.txt"), llmsTxtContent, "utf-8");
-console.log("  ✓ Created public/llms.txt");
+function writeIfChanged(filePath, newContent, label) {
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, "utf-8");
+    if (existing === newContent) {
+      console.log(`  ✓ Unchanged ${label}`);
+      return;
+    }
+  }
+  fs.writeFileSync(filePath, newContent, "utf-8");
+  console.log(`  ✓ Updated ${label}`);
+}
+
+writeIfChanged(path.join(publicDir, "llms.txt"), llmsTxtContent, "public/llms.txt");
 
 // 2. Generate llms-full.txt
 const sections = [
   {
     title: "# Akadli-AI Full Repository Context for LLMs",
-    body: `This file contains the complete, unedited architectural specifications, agent invariants, and documentation for all packages in the Akadli-AI monorepo (https://akadli.me).\nGenerated at: ${new Date().toISOString()}`
+    body: `This file contains the complete, unedited architectural specifications, agent invariants, and documentation for all packages in the Akadli-AI monorepo (https://akadli.me).`
   }
 ];
 
@@ -102,6 +113,9 @@ for (const pkg of packages) {
 }
 
 const llmsFullContent = sections.map((s) => `${s.title}\n\n${s.body}`).join("\n");
-fs.writeFileSync(path.join(publicDir, "llms-full.txt"), llmsFullContent, "utf-8");
-console.log(`  ✓ Created public/llms-full.txt (${(Buffer.byteLength(llmsFullContent, 'utf-8') / 1024).toFixed(1)} KB)`);
+writeIfChanged(
+  path.join(publicDir, "llms-full.txt"),
+  llmsFullContent,
+  `public/llms-full.txt (${(Buffer.byteLength(llmsFullContent, 'utf-8') / 1024).toFixed(1)} KB)`
+);
 console.log("[generate-llms] Complete.");

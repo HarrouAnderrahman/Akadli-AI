@@ -1,7 +1,6 @@
 # Akadli-AI Full Repository Context for LLMs
 
 This file contains the complete, unedited architectural specifications, agent invariants, and documentation for all packages in the Akadli-AI monorepo (https://akadli.me).
-Generated at: 2026-10-22T22:11:35.092Z
 
 
 ================================================================================
