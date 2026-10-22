@@ -8,7 +8,7 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for Algerian mer
 
 ---
 
-## 🚀 Tassyir Developer CLI & Dev Store Setup
+##  Tassyir Developer CLI & Dev Store Setup
 
 You can configure and test your store connection directly using Tassyir's official Developer CLI:
 
@@ -31,7 +31,7 @@ When creating an API access token in Tassyir, configure the following scopes:
 
 ---
 
-## ⚙️ Features & Architecture
+##  Features & Architecture
 
 - **Official 2026-10 Admin API:** Connects directly to `https://api.tassyir.io/apps/2026-10`.
 - **Standard Webhook Verification (`v1a` Ed25519):** Validates `webhook-id`, `webhook-timestamp` (with 5-minute replay window), and `webhook-signature` using Node 20+ `node:crypto`. Also supports HMAC-SHA256 for local playground simulations.
@@ -41,7 +41,7 @@ When creating an API access token in Tassyir, configure the following scopes:
 
 ---
 
-## 🔑 Credentials Configuration (`TassyirCredentialsSchema`)
+##  Credentials Configuration (`TassyirCredentialsSchema`)
 
 | Field | Type | Required | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -52,7 +52,7 @@ When creating an API access token in Tassyir, configure the following scopes:
 
 ---
 
-## 💻 Usage Example
+##  Usage Example
 
 ```typescript
 import { TassyirProvider } from "@akadli/provider-tassyir";

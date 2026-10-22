@@ -10,7 +10,7 @@
 
 ---
 
-## 🚀 إعداد متجر التطوير عبر واجهة أوامر تسيير (Tassyir CLI)
+##  إعداد متجر التطوير عبر واجهة أوامر تسيير (Tassyir CLI)
 
 يمكنك ربط واختبار المتجر والـ Webhooks محلياً باستخدام أداة المطورين الرسمية:
 
@@ -33,7 +33,7 @@ npx tassyir@latest webhook trigger orders/created
 
 ---
 
-## ⚙️ المميزات والبنية التقنية
+##  المميزات والبنية التقنية
 
 - **واجهة تسيير الرسمية (`2026-10`):** اتصال مباشر مع `https://api.tassyir.io/apps/2026-10`.
 - **التحقق المعياري من الـ Webhooks (`v1a` Ed25519):** فحص ترويسات `webhook-id` و `webhook-timestamp` (ضمن نافذة 5 دقائق لمنع هجمات إعادة التشغيل) و `webhook-signature` باستخدام مكتبة `node:crypto`. يدعم أيضاً HMAC-SHA256 لمحاكاة البيئة التجريبية المحلية.
@@ -43,7 +43,7 @@ npx tassyir@latest webhook trigger orders/created
 
 ---
 
-## 🔑 جدول بيانات الاعتماد (`TassyirCredentialsSchema`)
+##  جدول بيانات الاعتماد (`TassyirCredentialsSchema`)
 
 | الحقل | النوع | إلزامي | القيمة الافتراضية | الوصف |
 | :--- | :--- | :--- | :--- | :--- |
@@ -54,7 +54,7 @@ npx tassyir@latest webhook trigger orders/created
 
 ---
 
-## 💻 مثال تطبيقي في TypeScript
+##  مثال تطبيقي في TypeScript
 
 </div>
 
