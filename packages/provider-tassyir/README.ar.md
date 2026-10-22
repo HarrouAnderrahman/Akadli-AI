@@ -1,60 +1,108 @@
-**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+**[English](./README.md) | [العربية](./README.ar.md)**
 
 <div dir="rtl" align="right">
 
 # @akadli/provider-tassyir
 
-> محول نظام تسيير الرسمي (Tassyir Admin API `2026-10`) مع دعم Webhooks المعيارية (`v1a` Ed25519 وتوقيع HMAC)، وتأكيد الطلبيات بدون تكرار (`Idempotency-Key`)، وتطبيع عناوين الدفع عند الاستلام في الجزائر (69 ولاية).
+> محول نظام تسيير الرسمي (Tassyir Admin API 2026-10) مع التحقق المعياري من Webhooks عبر المفاتيح العامة (معيار v1a Ed25519 بدون أسرار)، ونظام المصادقة للتطبيقات الخارجية عبر رمز التثبيت (tsy_ic_...) والمصادقة الأساسية HTTP Basic Auth، وتأكيد الطلبيات بدون تكرار (Idempotency-Key)، وتطبيع عناوين الدفع عند الاستلام في الجزائر (69 ولاية).
 
-ينفذ واجهة `IEcommerceProvider` من حزمة `@akadli/adapter-contract` للتكامل المباشر مع واجهة برمجة تطبيقات منصة **تسيير** (`api.tassyir.io`) لخدمة التجارة الإلكترونية ومراكز التوصيل في الجزائر.
+ينفذ واجهة `IEcommerceProvider` من حزمة `@akadli/adapter-contract` للتكامل المباشر مع منصة **تسيير** (`api.tassyir.io`) لمتاجر التجارة الإلكترونية ومراكز التوصيل في الجزائر.
 
 ---
 
-##  إعداد متجر التطوير عبر واجهة أوامر تسيير (Tassyir CLI)
+## إعداد ملف التطبيق في تسيير (tassyir.app.toml)
 
-يمكنك ربط واختبار المتجر والـ Webhooks محلياً باستخدام أداة المطورين الرسمية:
+عند بناء تطبيق خارجي في منصة مطوري تسيير (`developers.tassyir.io`)، يتم ضبط إعدادات التطبيق عبر ملف `tassyir.app.toml`:
 
-```bash
-# 1. تسجيل الدخول إلى حساب مطوري تسيير
-npx tassyir@latest login
+</div>
 
-# 2. إنشاء متجر تجريبي للمطورين
-npx tassyir@latest store create --name "Akadli Dev Store"
+<div dir="ltr" align="left">
 
-# 3. محاكاة وإرسال إشعار الويب (orders/created) إلى منصة Akadli Playground
-npx tassyir@latest webhook trigger orders/created
+```toml
+[app]
+name = "Akadli-AI Voice Confirmation"
+handle = "akadli-ai"
+client_id = "app_..."
+
+[auth]
+callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
+scopes = [
+  "read_orders",
+  "write_orders",
+  "read_customer_contact"
+]
+
+[webhooks]
+url = "https://<tunnel>/api/webhooks/tassyir"
+events = [
+  "orders/created"
+]
 ```
 
+</div>
+
+<div dir="rtl" align="right">
+
 ### الصلاحيات المطلوبة للتطبيق (App Scopes)
-عند إنشاء رمز الوصول (Access Token) في لوحة تحكم تسيير، يجب تحديد الصلاحيات التالية:
-- `read_orders`: قراءة تفاصيل الطلبيات الواردة وبيانات الشحن.
-- `write_orders`: تحديث ملاحظات الطلبية، وتأكيدها (`/confirm`) أو إلغائها (`/cancel`).
-- `read_customer_contact`: **إلزامية للتأكيد الصوتي.** في حال عدم منح هذه الصلاحية (أو تجاوز باقة المتجر)، يتم حجب رقم هاتف الزبون كـ `"**********"` وتدخل الطلبية في حالة الانتظار `waiting: true`. يتعامل المحول مع هذه الحالة برمي خطأ استباقي واضح للمستخدم.
+- `read_orders`: قراءة تفاصيل الطلبيات الواردة وبيانات الزبون وعناوين الشحن.
+- `write_orders`: تعديل ملاحظات الطلبيات، وتأكيدها (`/confirm`) أو إلغائها (`/cancel`).
+- `read_customer_contact`: **إلزامية للتأكيد الصوتي.** في حال عدم منح هذه الصلاحية (أو تجاوز باقة المتجر)، يتم حجب رقم هاتف الزبون كـ `"**********"` وتدخل الطلبية في حالة الانتظار `waiting: true`.
 
 ---
 
-##  المميزات والبنية التقنية
+## بنية المصادقة ورمز التثبيت (OAuth Install Flow)
 
-- **واجهة تسيير الرسمية (`2026-10`):** اتصال مباشر مع `https://api.tassyir.io/apps/2026-10`.
-- **التحقق المعياري من الـ Webhooks (`v1a` Ed25519):** فحص ترويسات `webhook-id` و `webhook-timestamp` (ضمن نافذة 5 دقائق لمنع هجمات إعادة التشغيل) و `webhook-signature` باستخدام مكتبة `node:crypto`. يدعم أيضاً HMAC-SHA256 لمحاكاة البيئة التجريبية المحلية.
-- **التقسيم الإداري الجزائري 2026:** استخراج وتطبيع الولايات (من 01 إلى 69) والبلديات تلقائياً عبر `@akadli/dz-geo`.
-- **منع تكرار العمليات (`Idempotency-Key`):** إرسال ترويسة فريدة `Idempotency-Key: akadli-{action}-{orderId}` مع كل طلب `POST` (`/confirm` أو `/cancel`) لضمان عدم تكرار التأكيد أو الإلغاء عند انقطاع الشبكة وإعادة المحاولة.
-- **إدارة حدود الاستخدام والضغط:** معالجة ترويسات `429 RATE_LIMITED` و `BUSINESS_RATE_LIMITED` و `503 API_BUSY` مع انتظار `Retry-After`.
+لا تعتمد تطبيقات تسيير الخارجية على مفاتيح سرية ثابتة للويب هوك، بل تستخدم نظام OAuth 2.0 عبر الخطوات التالية:
+
+1. **تثبيت التطبيق:** عند قيام التاجر بتثبيت التطبيق على متجره، يتم توجيه المتصفح إلى رابط إعادة التوجيه `callback_url` مرفقاً برمز التثبيت:
+   ```text
+   GET https://<tunnel>/api/webhooks/tassyir/callback?code=tsy_ic_...
+   ```
+2. **استبدال رمز التثبيت:** يقوم الخادم باستبدال `tsy_ic_...` عبر `POST https://api.tassyir.io/apps/oauth/token`:
+   - ترويسة المصادقة: `Authorization: Basic base64(client_id:client_secret)`
+   - نوع المحتوى: `Content-Type: application/x-www-form-urlencoded`
+   - نص الطلب: `grant_type=authorization_code&code=tsy_ic_...` (ملاحظة: لا يُرسل `client_secret` في نص الطلب أبداً).
+   - النتيجة:
+     ```json
+     {
+       "access_token": "tsy_at_...",
+       "refresh_token": "tsy_rt_...",
+       "expires_in": 3600,
+       "token_type": "Bearer",
+       "installation_id": "inst_..."
+     }
+     ```
+3. **تجديد رمز الوصول:** عند انتهاء صلاحية الرمز، يتم تجديده تلقائياً بإرسال `grant_type=refresh_token&refresh_token=tsy_rt_...`.
 
 ---
 
-##  جدول بيانات الاعتماد (`TassyirCredentialsSchema`)
+## التحقق من Webhooks المعيارية بدون أسرار (Public Key Ed25519)
+
+توقع منصة تسيير إشعارات الويب باستخدام معيار **Standard Webhooks (`v1a` Ed25519)**. لا توفر المنصة سراً مشتركاً (Webhook Secret)، بل تنشر المفاتيح العامة على الرابط:
+```text
+GET https://api.tassyir.io/apps/webhook-keys
+```
+يقوم المحول بفك تشفير المفتاح العام المكون من 32 بايت (`whpk_<base64>`) باستخدام بادئة ASN.1 SPKI DER القياسية المكونة من 12 بايت (`302a300506032b6570032100` بالنظام الست عشري) وتحويله إلى كائن مفتاح عام `crypto.KeyObject` دون الحاجة لأي مكتبات خارجية. ويتم تخزين المفاتيح العامة في الذاكرة لمدة ساعة كاملة مع مفتاح احتياطي مدمج.
+
+---
+
+## جدول بيانات الاعتماد (TassyirCredentialsSchema)
 
 | الحقل | النوع | إلزامي | القيمة الافتراضية | الوصف |
 | :--- | :--- | :--- | :--- | :--- |
-| `accessToken` | `string` | نعم* | — | رمز Bearer لوصول واجهة Tassyir Admin API (يُقبل `apiKey` أيضاً للتوافق) |
-| `baseUrl` | `string` | لا | `"https://api.tassyir.io/apps/2026-10"` | الرابط الأساسي لواجهة Tassyir REST API |
-| `confirmOnModified` | `string` | لا | `"true"` | تأكيد الطلبية تلقائياً في تسيير عبر `/confirm` عند تعديل المقاس أو العنوان |
-| `cancelOnRefused` | `string` | لا | `"true"` | إلغاء الطلبية عبر `/cancel` عند رفض الزبون للطلب خلال المكالمة |
+| `accessToken` | `string` | اختياري* | — | رمز الوصول المباشر من تسيير (`tsy_at_...`) |
+| `clientId` | `string` | اختياري* | — | معرف التطبيق (`app_...`) من لوحة تحكم المطورين |
+| `clientSecret` | `string` | اختياري* | — | الرمز السري للتطبيق (`tsy_cs_...`) |
+| `refreshToken` | `string` | اختياري | — | رمز التجديد (`tsy_rt_...`) للتجديد التلقائي |
+| `baseUrl` | `string` | لا | `"https://api.tassyir.io/apps/2026-10"` | الرابط الأساسي لواجهة تسيير |
+| `confirmOnModified` | `string` | لا | `"true"` | تأكيد الطلبية تلقائياً عبر `/confirm` عند تعديل المقاس أو العنوان |
+| `cancelOnRefused` | `string` | لا | `"true"` | إلغاء الطلبية عبر `/cancel` عند رفض الزبون للطلب |
+
+\* يجب توفير إما `accessToken` أو (`clientId` و `clientSecret`).
 
 ---
 
-##  مثال تطبيقي في TypeScript
+## مثال تطبيقي في TypeScript
 
 </div>
 
@@ -65,32 +113,29 @@ import { TassyirProvider } from "@akadli/provider-tassyir";
 
 const provider = new TassyirProvider();
 
-// 1. التحقق من توقيع Webhook (معيار v1a Ed25519 أو HMAC)
-const isValid = await provider.verifyWebhook(
-  headers,
-  rawBody,
-  process.env.TASSYIR_WEBHOOK_PUBLIC_KEY!
-);
+// 1. التحقق من توقيع الويب هوك باستخدام المفاتيح العامة المعيارية
+const isValid = await provider.verifyWebhook(headers, rawBody);
+if (!isValid) {
+  throw new Error("Invalid Tassyir Ed25519 signature");
+}
 
-// 2. تحليل الطلبية وتطبيع بيانات الدفع عند الاستلام الجزائرية
+// 2. تحليل وتطبيع بيانات الطلبية للدفع عند الاستلام في الجزائر
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تطبيق قرار المكالمة على واجهة تسيير 2026-10
+// 3. تطبيق قرار المكالمة على واجهة تسيير
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
-    reasonOrNotes: "تم تأكيد الطلبية عبر مكالمة الوكيل الصوتي ElevenAgents"
+    reasonOrNotes: "تم تأكيد الطلبية عبر مكالمة صوتية",
   },
   {
-    accessToken: process.env.TASSYIR_ACCESS_TOKEN!,
-    confirmOnModified: "true",
-    cancelOnRefused: "true"
+    clientId: process.env.TASSYIR_CLIENT_ID!,
+    clientSecret: process.env.TASSYIR_CLIENT_SECRET!,
+    refreshToken: process.env.TASSYIR_REFRESH_TOKEN!,
   }
 );
-
-console.log("نتيجة التعديل:", result.externalStatus); // "CONFIRMED"
 ```
 
 </div>

@@ -4,37 +4,53 @@ This document defines the technical specification, authentication, Standard Webh
 
 ---
 
-## 1. Tassyir Developer CLI & Store Setup
+## 1. Tassyir App Setup (`tassyir.app.toml`) & Scopes
 
-Developers can rapidly configure and test store integrations using the official Tassyir Developer CLI:
+External headless apps on the Tassyir Developer platform (`developers.tassyir.io`) are configured via `tassyir.app.toml`:
 
-```bash
-# 1. Authenticate with Tassyir Developer platform
-npx tassyir@latest login
+```toml
+[app]
+name = "Akadli-AI Voice Confirmation"
+handle = "akadli-ai"
+client_id = "app_..."
 
-# 2. Create a development store sandbox
-npx tassyir@latest store create --name "Akadli Dev Store"
+[auth]
+callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
+scopes = [
+  "read_orders",
+  "write_orders",
+  "read_customer_contact"
+]
 
-# 3. Simulate and trigger inbound order webhooks to your local Akadli playground
-npx tassyir@latest webhook trigger orders/created
+[webhooks]
+url = "https://<tunnel>/api/webhooks/tassyir"
+events = [
+  "orders/created"
+]
 ```
 
 ### Required OAuth / App Scopes
-When generating an app token in Tassyir App Console, you must request:
 - `read_orders`: Allows reading incoming order details, items, and shipping destinations.
 - `write_orders`: Allows patching order notes, confirming orders (`/confirm`), and cancelling refused orders (`/cancel`).
 - `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), `buyer.phone` is masked as `"**********"` and `waiting: true` is flagged. The adapter enforces this guard immediately.
 
 ---
 
-## 2. Base URL & Authentication
+## 2. Base URL & Authentication Flow
 
-- **Base URL:** `https://api.tassyir.io/apps/2026-10`
-- **Authentication Header:**
-  ```http
-  Authorization: Bearer {accessToken}
-  ```
-  *(For backwards compatibility, `apiKey` is also accepted and maps to Bearer token authentication).*
+- **Admin API Base URL:** `https://api.tassyir.io/apps/2026-10`
+- **OAuth Token Endpoint:** `POST https://api.tassyir.io/apps/oauth/token`
+- **Webhook Public Keys:** `GET https://api.tassyir.io/apps/webhook-keys`
+
+### External App OAuth Installation Flow
+1. Merchant installs app; browser redirects to `callback_url?code=tsy_ic_...`.
+2. Backend redeems code via `POST /apps/oauth/token`:
+   - Header: `Authorization: Basic base64(client_id:client_secret)`
+   - Header: `Content-Type: application/x-www-form-urlencoded`
+   - Body: `grant_type=authorization_code&code=tsy_ic_...`
+   - (Note: `client_secret` must NOT be in the body).
+   - Response: `{ access_token: "tsy_at_...", refresh_token: "tsy_rt_...", expires_in: 3600 }`.
+3. To refresh: `grant_type=refresh_token&refresh_token=tsy_rt_...` with Basic Auth.
 
 ### Idempotency Keys on Write Routes
 Every `POST` write operation (`/confirm`, `/cancel`) sends an `Idempotency-Key` header:
@@ -42,13 +58,11 @@ Every `POST` write operation (`/confirm`, `/cancel`) sends an `Idempotency-Key` 
 - `MODIFIED`: `Idempotency-Key: akadli-confirm-mod-{orderId}`
 - `REFUSED`: `Idempotency-Key: akadli-cancel-{orderId}`
 
-This ensures safe automatic retries without duplicating actions in Tassyir's fulfillment pipeline.
-
 ---
 
 ## 3. Webhook Signature Verification (`verifyWebhook`)
 
-Tassyir supports the modern **Standard Webhooks (`v1a` Ed25519)** specification as well as HMAC-SHA256 signatures for testing environments.
+Tassyir signs all inbound webhooks using the **Standard Webhooks (`v1a` Ed25519)** specification. Tassyir has **no** shared webhook secret.
 
 ### Standard Webhooks (`v1a` Ed25519)
 - **Headers:**
@@ -60,11 +74,12 @@ Tassyir supports the modern **Standard Webhooks (`v1a` Ed25519)** specification 
   ${webhookId}.${webhookTimestamp}.${rawBody}
   ```
 - **Replay Protection:** Webhook timestamp must be within 5 minutes (`300` seconds) of the current system time.
-- **Verification:** Computed using Node.js `node:crypto.verify(null, messageBuffer, publicKey, sigBuffer)`. The `secret` parameter can be an Ed25519 raw base64 public key (32 bytes), SPKI DER (44 bytes), or PEM string.
+- **Verification:** Public keys (`whpk_<base64_raw_32_byte_ed25519_key>`) are fetched from `GET https://api.tassyir.io/apps/webhook-keys` (cached for 1 hour).
+  The adapter decodes raw 32-byte Ed25519 public keys using the standard 12-byte ASN.1 SPKI DER prefix (`302a300506032b6570032100` in hex) via Node's native `crypto.createPublicKey`.
+  Fallback key `whpk_1BaNZhSk1qxT/1RugRT9eucQWvfo1ufg0o1u5qZejAA=` is embedded for resilience.
 
 ### HMAC-SHA256 Fallback
-- **Headers:** `x-tassyir-signature`, `x-akadli-signature`, or `webhook-signature`.
-- **Verification:** Computed with `crypto.createHmac("sha256", secret)` over `rawBody` (or standard webhook message) and compared via `crypto.timingSafeEqual`.
+- Used strictly when a custom non-`whpk_` secret is passed in local tests and sandbox simulation.
 
 ---
 
