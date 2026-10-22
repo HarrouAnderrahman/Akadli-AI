@@ -79,6 +79,26 @@ export const config = {
   get gsheetsWebhookSecret(): string {
     return (process.env.GSHEETS_WEBHOOK_SECRET || '').trim();
   },
+  get tassyirClientId(): string {
+    return (process.env.TASSYIR_CLIENT_ID || '').trim();
+  },
+  get tassyirClientSecret(): string {
+    return (
+      process.env.TASSYIR_CLIENT_SECRET ||
+      (process.env.TASSYIR_API_KEY?.startsWith('tsy_cs_') ? process.env.TASSYIR_API_KEY : '') ||
+      ''
+    ).trim();
+  },
+  get tassyirAccessToken(): string {
+    return (
+      process.env.TASSYIR_ACCESS_TOKEN ||
+      (process.env.TASSYIR_API_KEY?.startsWith('tsy_at_') ? process.env.TASSYIR_API_KEY : '') ||
+      ''
+    ).trim();
+  },
+  get tassyirRefreshToken(): string {
+    return (process.env.TASSYIR_REFRESH_TOKEN || '').trim();
+  },
   get tassyirApiKey(): string {
     return (process.env.TASSYIR_API_KEY || '').trim();
   },

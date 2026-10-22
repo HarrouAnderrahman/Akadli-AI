@@ -10,7 +10,7 @@ import { ShopifyProvider } from '@akadli/provider-shopify';
 import { YouCanProvider } from '@akadli/provider-youcan';
 import { WooCommerceProvider, isWooCommerceWebhookPing } from '@akadli/provider-woocommerce';
 import { GSheetsProvider } from '@akadli/provider-gsheets';
-import { TassyirProvider } from '@akadli/provider-tassyir';
+import { TassyirProvider, TassyirClient } from '@akadli/provider-tassyir';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
 import { handleFinalizeOrderToolCall } from '@akadli/core';
 import { IEcommerceProvider, OrderConstraints } from '@akadli/adapter-contract';
@@ -252,8 +252,8 @@ const providerRegistry: ProviderDescriptor[] = [
     key: 'tassyir',
     displayName: 'Tassyir',
     provider: tassyirProvider,
-    getWebhookSecret: () => config.tassyirWebhookSecret,
-    secretEnvVarName: 'TASSYIR_WEBHOOK_SECRET',
+    getWebhookSecret: () => undefined,
+    secretEnvVarName: 'TASSYIR_PUBLIC_KEY',
     webhookReceivedType: 'TASSYIR_WEBHOOK_RECEIVED',
     mutationResultType: 'TASSYIR_MUTATION_RESULT',
     getLiveStoreLabel: () => config.tassyirApiBaseUrl || 'https://api.tassyir.io/apps/2026-10',
@@ -271,18 +271,40 @@ const providerRegistry: ProviderDescriptor[] = [
       };
     },
     isTargetOrder: (order) => order?.source === 'tassyir',
-    getMutationCredentials: () => ({
-      accessToken: config.tassyirApiKey || 'simulated_tassyir_api_key',
-      apiKey: config.tassyirApiKey || 'simulated_tassyir_api_key',
-      baseUrl: config.tassyirApiBaseUrl || 'https://api.tassyir.io/apps/2026-10',
-      confirmOnModified: 'true',
-      cancelOnRefused: 'true',
-    }),
+    getMutationCredentials: () => {
+      const credentials: Record<string, string> = {
+        baseUrl: config.tassyirApiBaseUrl || 'https://api.tassyir.io/apps/2026-10',
+        confirmOnModified: 'true',
+        cancelOnRefused: 'true',
+      };
+      const token = inMemoryTassyirAccessToken || config.tassyirAccessToken || config.tassyirApiKey;
+      if (token) {
+        credentials.accessToken = token;
+      }
+      if (config.tassyirClientId) {
+        credentials.clientId = config.tassyirClientId;
+      }
+      if (config.tassyirClientSecret) {
+        credentials.clientSecret = config.tassyirClientSecret;
+      }
+      const refreshToken = inMemoryTassyirRefreshToken || config.tassyirRefreshToken;
+      if (refreshToken) {
+        credentials.refreshToken = refreshToken;
+      }
+      if (!credentials.accessToken && !credentials.clientId) {
+        credentials.accessToken = 'simulated_tassyir_access_token';
+      }
+      return credentials;
+    },
   },
 ];
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
+
+// In-memory Tassyir OAuth token storage (acquired via /api/webhooks/tassyir/callback)
+let inMemoryTassyirAccessToken: string | null = config.tassyirAccessToken || null;
+let inMemoryTassyirRefreshToken: string | null = config.tassyirRefreshToken || null;
 
 // Global State
 let adminSockets = new Set<WebSocket>();
@@ -362,7 +384,12 @@ app.get('/api/status', (req, res) => {
           ? 'apps_script'
           : null,
     gsheetsSpreadsheetId: config.gsheetsSpreadsheetId || null,
-    tassyirConfigured: Boolean(config.tassyirApiKey),
+    tassyirConfigured: Boolean(
+      inMemoryTassyirAccessToken ||
+      config.tassyirAccessToken ||
+      (config.tassyirClientId && config.tassyirClientSecret) ||
+      config.tassyirApiKey
+    ),
     tassyirApiBaseUrl: config.tassyirApiBaseUrl,
   });
 });
@@ -403,30 +430,51 @@ async function handleWebhookIngress(
       });
     }
 
-    const secret = desc.getWebhookSecret();
-    if (secret) {
-      const isValid = await desc.provider.verifyWebhook(headers, rawBody, secret);
+    if (desc.key === 'tassyir') {
+      // Tassyir signs with Ed25519 using public keys (whpk_...) from https://api.tassyir.io/apps/webhook-keys.
+      // Zero secret is required in .env!
+      const isValid = await desc.provider.verifyWebhook(headers, rawBody, '');
       if (!isValid) {
-        const receivedSignature =
-          headers['x-wc-webhook-signature'] ||
-          headers['x-shopify-hmac-sha256'] ||
-          headers['x-youcan-signature'] ||
-          headers['x-tassyir-signature'] ||
-          headers['x-akadli-signature'];
+        const receivedSig =
+          headers['webhook-signature'] ||
+          headers['x-webhook-signature'] ||
+          headers['x-tassyir-signature'];
         console.warn(
-          `[${desc.displayName} Webhook] Rejected request: Invalid HMAC-SHA256 signature. ` +
+          `[Tassyir Webhook] Rejected request: Invalid Ed25519 signature. ` +
           `ContentType: "${req.headers['content-type']}", ` +
           `UserAgent: "${req.headers['user-agent']}", ` +
-          `SignatureHeader: "${receivedSignature ? 'present' : 'MISSING'}"`
+          `SignatureHeader: "${receivedSig ? 'present' : 'MISSING'}"`
         );
         return res.status(401).json({
-          error: `Invalid ${desc.displayName} HMAC-SHA256 signature`,
+          error: 'Invalid Tassyir Ed25519 webhook signature',
         });
       }
     } else {
-      console.log(
-        `[${desc.displayName} Webhook] ${desc.secretEnvVarName} not set in .env; skipping HMAC check for testing.`
-      );
+      const secret = desc.getWebhookSecret();
+      if (secret) {
+        const isValid = await desc.provider.verifyWebhook(headers, rawBody, secret);
+        if (!isValid) {
+          const receivedSignature =
+            headers['x-wc-webhook-signature'] ||
+            headers['x-shopify-hmac-sha256'] ||
+            headers['x-youcan-signature'] ||
+            headers['x-tassyir-signature'] ||
+            headers['x-akadli-signature'];
+          console.warn(
+            `[${desc.displayName} Webhook] Rejected request: Invalid HMAC-SHA256 signature. ` +
+            `ContentType: "${req.headers['content-type']}", ` +
+            `UserAgent: "${req.headers['user-agent']}", ` +
+            `SignatureHeader: "${receivedSignature ? 'present' : 'MISSING'}"`
+          );
+          return res.status(401).json({
+            error: `Invalid ${desc.displayName} HMAC-SHA256 signature`,
+          });
+        }
+      } else {
+        console.log(
+          `[${desc.displayName} Webhook] ${desc.secretEnvVarName} not set in .env; skipping HMAC check for testing.`
+        );
+      }
     }
 
     const standardizedOrder = await desc.provider.parseWebhookOrder(req.body);
@@ -568,6 +616,69 @@ for (const desc of providerRegistry) {
     await handleWebhookSimulate(desc, req, res);
   });
 }
+
+// Tassyir Headless External App OAuth Callback Route
+app.get('/api/webhooks/tassyir/callback', async (req, res) => {
+  const code = req.query.code as string | undefined;
+  if (!code) {
+    return res.status(400).send('<h1>Missing install code (?code=...)</h1>');
+  }
+
+  const clientId = config.tassyirClientId;
+  const clientSecret = config.tassyirClientSecret;
+  if (!clientId || !clientSecret) {
+    return res
+      .status(500)
+      .send('<h1>TASSYIR_CLIENT_ID or TASSYIR_CLIENT_SECRET not configured in .env</h1>');
+  }
+
+  try {
+    const tassyirClient = new TassyirClient({
+      clientId,
+      clientSecret,
+      baseUrl: config.tassyirApiBaseUrl,
+    });
+    const tokens = await tassyirClient.redeemInstallCode(clientId, clientSecret, code);
+    inMemoryTassyirAccessToken = tokens.access_token;
+    if (tokens.refresh_token) {
+      inMemoryTassyirRefreshToken = tokens.refresh_token;
+    }
+
+    console.log('[Tassyir OAuth] Successfully acquired OAuth tokens for store installation:');
+    console.log(`  Access Token: ${tokens.access_token}`);
+    if (tokens.refresh_token) {
+      console.log(
+        `  Refresh Token: ${tokens.refresh_token} (Optionally save as TASSYIR_REFRESH_TOKEN in .env to persist across server restarts)`
+      );
+    }
+
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Akadli-AI Connected to Tassyir</title>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            .card { background: #1e293b; padding: 2.5rem; border-radius: 1rem; border: 1px solid #334155; max-width: 520px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+            h1 { color: #10b981; font-size: 1.5rem; margin-bottom: 1rem; }
+            p { color: #94a3b8; line-height: 1.6; }
+            code { background: #0f172a; color: #38bdf8; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.875rem; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>Akadli-AI connected to Tassyir store!</h1>
+            <p>Access &amp; Refresh tokens acquired. You can now trigger <code>orders/created</code> webhooks.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err: any) {
+    console.error('[Tassyir OAuth Callback Error]:', err);
+    res.status(500).send(`<h1>Failed to redeem Tassyir install code</h1><p>${err.message}</p>`);
+  }
+});
 
 app.post('/api/trigger-call', (req, res) => {
   const { payload, config: vConfig } = req.body;
