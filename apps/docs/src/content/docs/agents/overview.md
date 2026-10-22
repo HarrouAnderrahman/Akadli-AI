@@ -1,5 +1,5 @@
 ---
-title: AI Agent Portal & llms.txt Integration
+title: AI Agent Portal
 description: Instructions, agent prompt templates, and architectural invariants for Cursor, Antigravity, Claude Code, and Codex.
 ---
 

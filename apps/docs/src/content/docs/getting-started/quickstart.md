@@ -1,5 +1,5 @@
 ---
-title: End-to-End TypeScript Quickstart
+title: Quickstart
 description: Step-by-step guide to integrating Akadli-AI voice confirmation into your backend.
 ---
 

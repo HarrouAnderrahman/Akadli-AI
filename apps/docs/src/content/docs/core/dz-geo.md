@@ -1,5 +1,5 @@
 ---
-title: Algerian Geo & Phone Normalizer (@akadli/dz-geo)
+title: Algerian Geography & Phone
 description: Official 2026 Algerian 69 Wilayas, 1,708 Communes, postal code matching, and +213 phone normalizer.
 ---
 

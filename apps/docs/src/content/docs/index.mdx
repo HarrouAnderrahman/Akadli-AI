@@ -106,15 +106,15 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ---
 
-## Monorepo Package Matrix
+## Packages & Modules
 
-| Package | Version | Purpose | Docs |
+| Module | Package | Description | Guide |
 | :--- | :--- | :--- | :--- |
-| **`@akadli/adapter-contract`** | `0.1.0` | Zod contracts (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`) | [Read Docs](/core/adapter-contract/) |
-| **`@akadli/dz-geo`** | `0.1.0` | 2026 69 Wilayas, 1,708 Communes, postal codes & `+213` phone normalizer | [Read Docs](/core/dz-geo/) |
-| **`@akadli/core`** | `0.1.0` | Dynamic prompt variables & `handleFinalizeOrderToolCall` voice orchestrator | [Read Docs](/core/engine/) |
-| **`@akadli/provider-shopify`** | `0.1.0` | Shopify HMAC, missing-province fallback, OAuth & order REST mutations | [Read Docs](/providers/shopify/) |
-| **`@akadli/provider-youcan`** | `0.1.0` | YouCan `.shop` webhooks, 1-page checkout `extra_fields` & status mutations | [Read Docs](/providers/youcan/) |
-| **`@akadli/provider-woocommerce`** | `0.1.0` | WooCommerce REST v3, `DZ-XX` state codes & COD plugin `meta_data` parser | [Read Docs](/providers/woocommerce/) |
-| **`@akadli/provider-gsheets`** | `0.1.0` | Universal Google Sheets v4 & Zero-OAuth Apps Script for SetShop / JustSell | [Read Docs](/providers/gsheets/) |
-| **`@akadli/provider-tassyir`** | `0.1.0` | Tassyir Admin API (`2026-10`), Standard Webhooks (`v1a` Ed25519) & OAuth | [Read Docs](/providers/tassyir/) |
+| **Adapter Contract** | `@akadli/adapter-contract` | Domain models, Zod validation schemas & provider interface | [Overview](/core/adapter-contract/) |
+| **Algerian Geography** | `@akadli/dz-geo` | 2026 69 Wilayas, 1,708 Communes & +213 phone normalizer | [Overview](/core/dz-geo/) |
+| **Voice Engine** | `@akadli/core` | Dynamic prompt variables & post-call decision orchestrator | [Overview](/core/engine/) |
+| **Shopify** | `@akadli/provider-shopify` | HMAC verification, missing-province resolution & order mutations | [Guide](/providers/shopify/) |
+| **YouCan** | `@akadli/provider-youcan` | 1-page checkout extra_fields extraction & order updates | [Guide](/providers/youcan/) |
+| **WooCommerce** | `@akadli/provider-woocommerce` | REST v3 Basic Auth, DZ-XX states & COD plugin meta_data | [Guide](/providers/woocommerce/) |
+| **Google Sheets** | `@akadli/provider-gsheets` | Universal Sheets v4 & Zero-OAuth Apps Script bridge | [Guide](/providers/gsheets/) |
+| **Tassyir ERP** | `@akadli/provider-tassyir` | Admin API (2026-10), Ed25519 webhooks & OAuth install codes | [Guide](/providers/tassyir/) |

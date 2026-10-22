@@ -34,7 +34,7 @@ pnpm add @akadli/core @akadli/dz-geo @akadli/provider-shopify
 
 - [Overview](https://akadli.me/getting-started/overview): Architectural lifecycle, webhook ingress, and order mutation flow.
 - [Quickstart](https://akadli.me/getting-started/quickstart): 20-line end-to-end TypeScript integration example.
-- [Playground Sandbox](https://akadli.me/getting-started/playground): Local HTTPS WebRTC phone simulator (/phone) and admin console (/admin) over LAN Wi-Fi.
+- [Playground](https://akadli.me/getting-started/playground): Local HTTPS WebRTC phone simulator (/phone) and admin console (/admin) over LAN Wi-Fi.
 
 ## Core Packages
 

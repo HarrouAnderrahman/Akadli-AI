@@ -1,5 +1,5 @@
 ---
-title: العقود البرمجية (@akadli/adapter-contract)
+title: العقود البرمجية
 description: مخططات Zod وواجهات TypeScript التي تحدد معايير التكامل عبر منظومة Akadli-AI.
 ---
 

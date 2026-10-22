@@ -1,5 +1,5 @@
 ---
-title: محول ووكومرس (@akadli/provider-woocommerce)
+title: WooCommerce
 description: محول تأكيد طلبيات الدفع عند الاستلام لمنصة WooCommerce في ووردبريس، وتطبيع رموز DZ-XX وحقول meta_data لإضافات COD.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: محول يوكان (@akadli/provider-youcan)
+title: YouCan
 description: محول تأكيد طلبيات الدفع عند الاستلام لمنصة YouCan (.shop) ودعم استخراج حقول extra_fields والتحقق من التوقيع.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Tassyir ERP Adapter (@akadli/provider-tassyir)
+title: Tassyir ERP
 description: Official Tassyir Admin API (2026-10), Standard Webhooks (v1a Ed25519 zero-secret), OAuth install code flow, and courier dispatch.
 ---
 

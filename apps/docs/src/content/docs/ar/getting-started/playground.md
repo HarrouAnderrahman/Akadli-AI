@@ -1,5 +1,5 @@
 ---
-title: بيئة الاختبار التفاعلية (@akadli/playground)
+title: بيئة التجارب
 description: اختبار المكالمات الصوتية المباشرة بالدارجة عبر Wi-Fi وربط الـ Webhooks بواسطة نفق Cloudflare.
 ---
 

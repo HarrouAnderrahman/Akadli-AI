@@ -1,5 +1,5 @@
 ---
-title: Interactive Playground Sandbox (@akadli/playground)
+title: Playground
 description: Testing live WebRTC Darja phone calls over LAN Wi-Fi and real store webhooks with Cloudflare Tunnel.
 ---
 

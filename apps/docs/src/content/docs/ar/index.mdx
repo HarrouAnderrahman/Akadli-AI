@@ -106,15 +106,15 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ---
 
-## مصفوفة حزم المستودع
+## الحزم والوحدات البرمجية
 
-| الحزمة | الإصدار | الوظيفة | التوثيق |
+| الوحدة | الحزمة | الوصف | الدليل |
 | :--- | :--- | :--- | :--- |
-| **`@akadli/adapter-contract`** | `0.1.0` | عقود Zod النقية (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`) | [عرض التوثيق](/ar/core/adapter-contract/) |
-| **`@akadli/dz-geo`** | `0.1.0` | التقسيم الإداري 2026 (69 ولاية، 1708 بلدية)، الرموز البريدية وتطبيع هواتف `+213` | [عرض التوثيق](/ar/core/dz-geo/) |
-| **`@akadli/core`** | `0.1.0` | منشئ المتغيرات الديناميكية ومنسق قرارات المكالمات `handleFinalizeOrderToolCall` | [عرض التوثيق](/ar/core/engine/) |
-| **`@akadli/provider-shopify`** | `0.1.0` | التحقق من HMAC لشوبيفاي، معالجة الولاية المفقودة، مصادقة OAuth والتحديثات عبر REST | [عرض التوثيق](/ar/providers/shopify/) |
-| **`@akadli/provider-youcan`** | `0.1.0` | التحقق من Webhooks ليوكان، تحليل حقول `extra_fields` وتحديث حالات الطلب | [عرض التوثيق](/ar/providers/youcan/) |
-| **`@akadli/provider-woocommerce`** | `0.1.0` | ووكومرس REST v3، تطبيع رموز `DZ-XX` وحقول `meta_data` لإضافات الدفع عند الاستلام | [عرض التوثيق](/ar/providers/woocommerce/) |
-| **`@akadli/provider-gsheets`** | `0.1.0` | ربط Google Sheets و Apps Script لمتاجر SetShop و JustSell وصفحات الهبوط | [عرض التوثيق](/ar/providers/gsheets/) |
-| **`@akadli/provider-tassyir`** | `0.1.0` | ربط Tassyir Admin API (`2026-10`) وتوقيعات Ed25519 ومصادقة OAuth ورمز التثبيت | [عرض التوثيق](/ar/providers/tassyir/) |
+| **العقود البرمجية** | `@akadli/adapter-contract` | نماذج البيانات القياسية ومخططات Zod وواجهة المحولات | [التفاصيل](/ar/core/adapter-contract/) |
+| **الجغرافيا والهاتف** | `@akadli/dz-geo` | التقسيم الإداري 2026 (69 ولاية و 1708 بلدية) وتطبيع هواتف 213+ | [التفاصيل](/ar/core/dz-geo/) |
+| **المحرك الصوتي** | `@akadli/core` | متغيرات الموجهات وتنسيق قرارات المكالمات الصوتية | [التفاصيل](/ar/core/engine/) |
+| **Shopify** | `@akadli/provider-shopify` | التحقق المشفر، معالجة الولاية وتحديثات الطلبات | [الدليل](/ar/providers/shopify/) |
+| **YouCan** | `@akadli/provider-youcan` | استخراج حقول الشراء بصفحة واحدة وتحديث الحالات | [الدليل](/ar/providers/youcan/) |
+| **WooCommerce** | `@akadli/provider-woocommerce` | واجهة REST v3 وتطبيع رموز DZ-XX وإضافات الدفع | [الدليل](/ar/providers/woocommerce/) |
+| **Google Sheets** | `@akadli/provider-gsheets` | جسر الربط لصفحات الهبوط وجداول Google Sheets | [الدليل](/ar/providers/gsheets/) |
+| **Tassyir ERP** | `@akadli/provider-tassyir` | واجهة تسيير (2026-10) وتوقيعات Ed25519 ومسار OAuth | [الدليل](/ar/providers/tassyir/) |

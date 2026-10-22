@@ -1,5 +1,5 @@
 ---
-title: محول تسيير (@akadli/provider-tassyir)
+title: Tassyir ERP
 description: محول واجهة Tassyir Admin API (إصدار 2026-10) ونظام التحقق Ed25519 بدون مفاتيح سرية ومسار تثبيت OAuth.
 ---
 

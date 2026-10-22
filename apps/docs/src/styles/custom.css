@@ -1,25 +1,150 @@
-/* Akadli-AI Minimalist Emerald Accent Theme */
+/* Akadli-AI Minimalist Monochrome Technical Theme (Shades of White / Zinc) */
 
 :root {
-  --sl-color-accent-low: #064e3b;
-  --sl-color-accent: #10b981;
-  --sl-color-accent-high: #6ee7b7;
-  --sl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Crisp minimalist monochrome with shades of white */
+  --sl-color-accent-low: #27272a;
+  --sl-color-accent: #f4f4f5;
+  --sl-color-accent-high: #ffffff;
+  
+  --sl-color-white: #fafafa;
+  --sl-color-gray-1: #f4f4f5;
+  --sl-color-gray-2: #d4d4d8;
+  --sl-color-gray-3: #a1a1aa;
+  --sl-color-gray-4: #52525b;
+  --sl-color-gray-5: #27272a;
+  --sl-color-gray-6: #18181b;
+  --sl-color-black: #09090b;
+
+  --sl-font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sl-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #d1fae5;
-  --sl-color-accent: #059669;
-  --sl-color-accent-high: #065f46;
+  --sl-color-accent-low: #f4f4f5;
+  --sl-color-accent: #18181b;
+  --sl-color-accent-high: #09090b;
+
+  --sl-color-white: #09090b;
+  --sl-color-gray-1: #18181b;
+  --sl-color-gray-2: #3f3f46;
+  --sl-color-gray-3: #71717a;
+  --sl-color-gray-4: #a1a1aa;
+  --sl-color-gray-5: #e4e4e7;
+  --sl-color-gray-6: #f4f4f5;
+  --sl-color-black: #ffffff;
 }
 
-/* Subtle border and card styling */
-.card, .starlight-aside {
+/* Minimalist layout refinements */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Subtle hairline cards */
+.card {
+  border: 1px solid var(--sl-color-gray-5) !important;
   border-radius: 8px;
+  background-color: color-mix(in srgb, var(--sl-color-black) 94%, var(--sl-color-gray-6)) !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease;
 }
 
-/* RTL Typography adjustments */
+.card:hover {
+  border-color: var(--sl-color-gray-4) !important;
+}
+
+/* Minimalist Starlight Aside / Callouts */
+.starlight-aside {
+  border: 1px solid var(--sl-color-gray-5) !important;
+  border-left-width: 3px !important;
+  border-radius: 6px;
+  box-shadow: none !important;
+}
+
+/* Primary CTA button - sleek shade of white / monochrome */
+:root[data-theme='dark'] .action.primary {
+  background-color: #f4f4f5 !important;
+  color: #09090b !important;
+  border: 1px solid #ffffff !important;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+:root[data-theme='dark'] .action.primary:hover {
+  background-color: #ffffff !important;
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+:root[data-theme='light'] .action.primary {
+  background-color: #09090b !important;
+  color: #f4f4f5 !important;
+  border: 1px solid #000000 !important;
+  font-weight: 500;
+}
+
+:root[data-theme='light'] .action.primary:hover {
+  background-color: #18181b !important;
+  transform: translateY(-1px);
+}
+
+/* Secondary CTA button */
+.action.secondary {
+  border: 1px solid var(--sl-color-gray-5) !important;
+  background: transparent !important;
+  color: var(--sl-color-gray-1) !important;
+}
+
+.action.secondary:hover {
+  background: var(--sl-color-gray-6) !important;
+  border-color: var(--sl-color-gray-4) !important;
+}
+
+/* Clean Understated Sidebar */
+nav.sidebar {
+  border-right: 1px solid var(--sl-color-gray-5);
+}
+
+.sidebar-content a[aria-current="page"] {
+  font-weight: 500;
+  color: var(--sl-color-white) !important;
+  background-color: var(--sl-color-gray-6);
+  border-radius: 6px;
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 6px;
+  margin: 1.5rem 0;
+}
+
+th {
+  background: var(--sl-color-gray-6);
+  font-weight: 600;
+  color: var(--sl-color-white);
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  padding: 0.75rem 1rem;
+}
+
+td {
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  padding: 0.75rem 1rem;
+}
+
+/* RTL Typography refinements */
 [dir="rtl"] {
-  font-feature-settings: "cv05", "cv08", "cv11";
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
+  letter-spacing: normal;
+}
+
+[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3 {
   letter-spacing: normal;
 }

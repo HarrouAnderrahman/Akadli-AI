@@ -1,5 +1,5 @@
 ---
-title: محول جداول جوجل (@akadli/provider-gsheets)
+title: Google Sheets
 description: جسر ربط جداول جوجل (Google Sheets) ومتاجر SetShop و JustSell وصفحات الهبوط عبر Apps Script بدون تعقيد OAuth.
 ---
 

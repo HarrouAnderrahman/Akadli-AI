@@ -1,5 +1,5 @@
 ---
-title: محرك المحادثة الصوتية (@akadli/core)
+title: المحرك الصوتي
 description: محرك التنسيق بدون حالة (Stateless) لربط وكلاء ElevenLabs بمحولات المتاجر الإلكترونية.
 ---
 
