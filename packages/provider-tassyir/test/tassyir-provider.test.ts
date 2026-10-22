@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { TassyirProvider } from "../src/index.js";
+import {
+  TassyirProvider,
+  TassyirClient,
+  fetchTassyirWebhookPublicKeys,
+  clearWebhookKeysCache,
+  ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY,
+  parseEd25519PublicKey,
+} from "../src/index.js";
 
 const __dirname = resolve(fileURLToPath(import.meta.url), "..");
 
@@ -40,10 +47,12 @@ const { publicKey: edPublicKey, privateKey: edPrivateKey } =
 const edPublicDer = edPublicKey.export({ type: "spki", format: "der" });
 const edPublicRawBase64 = edPublicDer.subarray(12).toString("base64");
 const edPublicSpkiPem = edPublicKey.export({ type: "spki", format: "pem" }).toString();
+const edPublicWhpk = `whpk_${edPublicRawBase64}`;
 
 let capturedPatchRequests: Array<{ url: string; headers: Headers; body: any }> = [];
 let capturedConfirmRequests: Array<{ url: string; headers: Headers; body: any }> = [];
 let capturedCancelRequests: Array<{ url: string; headers: Headers; body: any }> = [];
+let capturedOAuthRequests: Array<{ url: string; headers: Headers; body: string }> = [];
 
 const server = setupServer(
   http.patch(`${BASE_URL}/orders/:orderId`, async ({ request, params }) => {
@@ -84,6 +93,44 @@ const server = setupServer(
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
     });
+  }),
+  http.get("https://api.tassyir.io/apps/webhook-keys", async () => {
+    return HttpResponse.json({
+      keys: [
+        {
+          kid: "whk-test-mock-key-1",
+          scheme: "v1a",
+          publicKey: edPublicWhpk,
+        },
+      ],
+    });
+  }),
+  http.post("https://api.tassyir.io/apps/oauth/token", async ({ request }) => {
+    const rawText = await request.text();
+    capturedOAuthRequests.push({
+      url: request.url,
+      headers: request.headers,
+      body: rawText,
+    });
+    const params = new URLSearchParams(rawText);
+    const grantType = params.get("grant_type");
+    if (grantType === "authorization_code") {
+      return HttpResponse.json({
+        access_token: "tsy_at_mock_token_code_123",
+        refresh_token: "tsy_rt_mock_token_code_456",
+        token_type: "Bearer",
+        expires_in: 3600,
+        installation_id: "inst_mock_001",
+      });
+    } else if (grantType === "refresh_token") {
+      return HttpResponse.json({
+        access_token: "tsy_at_mock_refreshed_789",
+        refresh_token: "tsy_rt_mock_refreshed_999",
+        token_type: "Bearer",
+        expires_in: 3600,
+      });
+    }
+    return HttpResponse.json({ error: "unsupported_grant_type" }, { status: 400 });
   })
 );
 
@@ -92,6 +139,8 @@ afterEach(() => {
   capturedPatchRequests = [];
   capturedConfirmRequests = [];
   capturedCancelRequests = [];
+  capturedOAuthRequests = [];
+  clearWebhookKeysCache();
   server.resetHandlers();
 });
 afterAll(() => server.close());
@@ -99,25 +148,37 @@ afterAll(() => server.close());
 describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)", () => {
   const provider = new TassyirProvider();
 
-  it("1. verifies official Tassyir Standard Webhooks (v1a Ed25519) and handles timestamp tolerance & tampering", async () => {
+  it("1. verifies official Tassyir Standard Webhooks (v1a Ed25519) with whpk_ keys and zero-secret fetching", async () => {
     const webhookId = "msg_741000000000000001";
     const webhookTimestamp = Math.floor(Date.now() / 1000).toString();
     const messageToSign = `${webhookId}.${webhookTimestamp}.${standardRawBody}`;
     const sigBase64 = sign(null, Buffer.from(messageToSign, "utf8"), edPrivateKey).toString("base64");
 
-    // A. Valid with raw base64 public key
-    const isValidRawKey = await provider.verifyWebhook(
+    // A. Valid with whpk_<base64> raw 32-byte Ed25519 public key passed as secret
+    const isValidWhpk = await provider.verifyWebhook(
       {
         "webhook-id": webhookId,
         "webhook-timestamp": webhookTimestamp,
         "webhook-signature": `v1a,${sigBase64}`,
       },
       standardRawBody,
-      edPublicRawBase64
+      edPublicWhpk
     );
-    expect(isValidRawKey).toBe(true);
+    expect(isValidWhpk).toBe(true);
 
-    // B. Valid with SPKI PEM public key
+    // B. Valid with empty secret using zero-secret public key fetching from GET /apps/webhook-keys
+    const isValidZeroSecret = await provider.verifyWebhook(
+      {
+        "webhook-id": webhookId,
+        "webhook-timestamp": webhookTimestamp,
+        "webhook-signature": `v1a,${sigBase64}`,
+      },
+      standardRawBody,
+      ""
+    );
+    expect(isValidZeroSecret).toBe(true);
+
+    // C. Valid with SPKI PEM public key
     const isValidPemKey = await provider.verifyWebhook(
       {
         "Webhook-Id": webhookId,
@@ -129,7 +190,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     );
     expect(isValidPemKey).toBe(true);
 
-    // C. Rejects expired timestamp (> 5 minutes old)
+    // D. Rejects expired timestamp (> 5 minutes old)
     const oldTimestamp = (Math.floor(Date.now() / 1000) - 301).toString();
     const oldMessage = `${webhookId}.${oldTimestamp}.${standardRawBody}`;
     const oldSig = sign(null, Buffer.from(oldMessage, "utf8"), edPrivateKey).toString("base64");
@@ -140,11 +201,11 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
         "webhook-signature": `v1a,${oldSig}`,
       },
       standardRawBody,
-      edPublicRawBase64
+      edPublicWhpk
     );
     expect(isExpired).toBe(false);
 
-    // D. Rejects tampered rawBody
+    // E. Rejects tampered rawBody
     const isTampered = await provider.verifyWebhook(
       {
         "webhook-id": webhookId,
@@ -152,11 +213,11 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
         "webhook-signature": `v1a,${sigBase64}`,
       },
       standardRawBody + "tamper",
-      edPublicRawBase64
+      edPublicWhpk
     );
     expect(isTampered).toBe(false);
 
-    // E. Rejects wrong public key
+    // F. Rejects wrong public key
     const { publicKey: otherPub } = generateKeyPairSync("ed25519");
     const otherPubRawB64 = otherPub.export({ type: "spki", format: "der" }).subarray(12).toString("base64");
     const isWrongKey = await provider.verifyWebhook(
@@ -166,12 +227,133 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
         "webhook-signature": `v1a,${sigBase64}`,
       },
       standardRawBody,
-      otherPubRawB64
+      `whpk_${otherPubRawB64}`
     );
     expect(isWrongKey).toBe(false);
   });
 
-  it("2. verifies HMAC-SHA256 signatures (x-tassyir-signature and webhook-signature simulations)", async () => {
+  it("2. decodes raw 32-byte Ed25519 whpk_ public key into crypto.KeyObject using native ASN.1 SPKI prefix", () => {
+    const keyObject = parseEd25519PublicKey(edPublicWhpk);
+    expect(keyObject).not.toBeNull();
+    expect(keyObject?.asymmetricKeyType).toBe("ed25519");
+
+    // Also decodes active live fallback public key
+    const activeKeyObject = parseEd25519PublicKey(ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY);
+    expect(activeKeyObject).not.toBeNull();
+    expect(activeKeyObject?.asymmetricKeyType).toBe("ed25519");
+  });
+
+  it("3. caches webhook public keys from GET /apps/webhook-keys and falls back gracefully", async () => {
+    clearWebhookKeysCache();
+    const keys = await fetchTassyirWebhookPublicKeys();
+    expect(keys).toContain(edPublicWhpk);
+
+    // Verify cache hit (does not re-request when cached)
+    server.use(
+      http.get("https://api.tassyir.io/apps/webhook-keys", () =>
+        HttpResponse.json({ error: "server_down" }, { status: 500 })
+      )
+    );
+    const cached = await fetchTassyirWebhookPublicKeys();
+    expect(cached).toContain(edPublicWhpk);
+
+    // Clear cache, server fails -> returns default fallback key
+    clearWebhookKeysCache();
+    const fallbackKeys = await fetchTassyirWebhookPublicKeys();
+    expect(fallbackKeys).toContain(ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY);
+  });
+
+  it("4. redeems install code via POST /apps/oauth/token using HTTP Basic Auth", async () => {
+    const client = new TassyirClient({
+      clientId: "app_test_client_id",
+      clientSecret: "tsy_cs_test_client_secret",
+      baseUrl: BASE_URL,
+    });
+
+    const tokens = await client.redeemInstallCode(
+      "app_test_client_id",
+      "tsy_cs_test_client_secret",
+      "tsy_ic_order_auth_code_123"
+    );
+
+    expect(tokens.access_token).toBe("tsy_at_mock_token_code_123");
+    expect(tokens.refresh_token).toBe("tsy_rt_mock_token_code_456");
+    expect(tokens.expires_in).toBe(3600);
+
+    expect(capturedOAuthRequests.length).toBe(1);
+    const req = capturedOAuthRequests[0];
+    expect(req.url).toBe("https://api.tassyir.io/apps/oauth/token");
+
+    // HTTP Basic Auth header check
+    const expectedBasic = Buffer.from("app_test_client_id:tsy_cs_test_client_secret").toString("base64");
+    expect(req.headers.get("Authorization")).toBe(`Basic ${expectedBasic}`);
+    expect(req.headers.get("Content-Type")).toBe("application/x-www-form-urlencoded");
+
+    // Body check: grant_type=authorization_code & code (and NO client_secret in body)
+    const bodyParams = new URLSearchParams(req.body);
+    expect(bodyParams.get("grant_type")).toBe("authorization_code");
+    expect(bodyParams.get("code")).toBe("tsy_ic_order_auth_code_123");
+    expect(bodyParams.get("client_secret")).toBeNull();
+
+    // Client credentials updated
+    expect(client.getCredentials().accessToken).toBe("tsy_at_mock_token_code_123");
+    expect(client.getCredentials().refreshToken).toBe("tsy_rt_mock_token_code_456");
+  });
+
+  it("5. refreshes access token via POST /apps/oauth/token using HTTP Basic Auth", async () => {
+    const client = new TassyirClient({
+      clientId: "app_test_client_id",
+      clientSecret: "tsy_cs_test_client_secret",
+      refreshToken: "tsy_rt_mock_token_code_456",
+      baseUrl: BASE_URL,
+    });
+
+    const tokens = await client.refreshAccessToken(
+      "app_test_client_id",
+      "tsy_cs_test_client_secret",
+      "tsy_rt_mock_token_code_456"
+    );
+
+    expect(tokens.access_token).toBe("tsy_at_mock_refreshed_789");
+    expect(tokens.refresh_token).toBe("tsy_rt_mock_refreshed_999");
+
+    expect(capturedOAuthRequests.length).toBe(1);
+    const req = capturedOAuthRequests[0];
+    expect(req.url).toBe("https://api.tassyir.io/apps/oauth/token");
+
+    const expectedBasic = Buffer.from("app_test_client_id:tsy_cs_test_client_secret").toString("base64");
+    expect(req.headers.get("Authorization")).toBe(`Basic ${expectedBasic}`);
+
+    const bodyParams = new URLSearchParams(req.body);
+    expect(bodyParams.get("grant_type")).toBe("refresh_token");
+    expect(bodyParams.get("refresh_token")).toBe("tsy_rt_mock_token_code_456");
+    expect(bodyParams.get("client_secret")).toBeNull();
+
+    expect(client.getCredentials().accessToken).toBe("tsy_at_mock_refreshed_789");
+  });
+
+  it("6. auto-refreshes token on request when only clientId, clientSecret, and refreshToken are provided", async () => {
+    const client = new TassyirClient({
+      clientId: "app_test_client_id",
+      clientSecret: "tsy_cs_test_client_secret",
+      refreshToken: "tsy_rt_initial_refresh",
+      baseUrl: BASE_URL,
+    });
+
+    // updateOrder has no accessToken initially -> auto-refreshes before PATCH
+    const result = await client.updateOrder("741000000000000001", {
+      note: "Auto-refresh test note",
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedOAuthRequests.length).toBe(1);
+    expect(capturedPatchRequests.length).toBe(1);
+    expect(capturedPatchRequests[0].headers.get("Authorization")).toBe(
+      "Bearer tsy_at_mock_refreshed_789"
+    );
+  });
+
+  it("7. verifies HMAC-SHA256 signatures (x-tassyir-signature and webhook-signature simulations)", async () => {
     const validHmacHex = createHmac("sha256", HMAC_SECRET)
       .update(Buffer.from(standardRawBody, "utf8"))
       .digest("hex");
@@ -205,7 +387,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(isWrongSecret).toBe(false);
   });
 
-  it("3. parses real 2026-10 orders/created webhook envelope into a canonical StandardizedDzOrder", async () => {
+  it("8. parses real 2026-10 orders/created webhook envelope into a canonical StandardizedDzOrder", async () => {
     // Standard fixture: Wilaya 25 (Constantine)
     const order = await provider.parseWebhookOrder(standardPayload);
 
@@ -243,8 +425,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(stopdeskOrder.constraints.allowedSizes).toEqual(["Black"]);
   });
 
-  it("4. throws descriptive error when buyer phone is masked or order is in waiting state", async () => {
-    // Masked phone due to missing read_customer_contact scope
+  it("9. throws descriptive error when buyer phone is masked or order is in waiting state", async () => {
     const maskedPayload = {
       apiVersion: "2026-10",
       data: {
@@ -265,7 +446,6 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       "Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."
     );
 
-    // Order waiting: true (past merchant plan allowance)
     const waitingPayload = {
       apiVersion: "2026-10",
       data: {
@@ -288,7 +468,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     );
   });
 
-  it("5. executes applyOrderDecision for CONFIRMED (PATCH /orders/{id} + POST /orders/{id}/confirm with Idempotency-Key)", async () => {
+  it("10. executes applyOrderDecision for CONFIRMED (PATCH /orders/{id} + POST /orders/{id}/confirm with Idempotency-Key)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -302,7 +482,6 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(result.success).toBe(true);
     expect(result.externalStatus).toBe("CONFIRMED");
 
-    // 1. PATCH request
     expect(capturedPatchRequests.length).toBe(1);
     const patchReq = capturedPatchRequests[0];
     expect(patchReq.url).toBe(`${BASE_URL}/orders/741000000000000001`);
@@ -312,7 +491,6 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       note: "[Akadli-AI] Order CONFIRMED by customer (akadli-confirmed).",
     });
 
-    // 2. POST /confirm request with Idempotency-Key
     expect(capturedConfirmRequests.length).toBe(1);
     const confirmReq = capturedConfirmRequests[0];
     expect(confirmReq.url).toBe(`${BASE_URL}/orders/741000000000000001/confirm`);
@@ -320,7 +498,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(confirmReq.headers.get("Idempotency-Key")).toBe("akadli-confirm-741000000000000001");
   });
 
-  it("6. executes applyOrderDecision for MODIFIED (PATCH with buyer.provinceCode, buyer.address, note + POST /confirm)", async () => {
+  it("11. executes applyOrderDecision for MODIFIED (PATCH with buyer.provinceCode, buyer.address, note + POST /confirm)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -338,7 +516,6 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(result.success).toBe(true);
     expect(result.externalStatus).toBe("MODIFIED");
 
-    // 1. PATCH request
     expect(capturedPatchRequests.length).toBe(1);
     const patchReq = capturedPatchRequests[0];
     expect(patchReq.url).toBe(`${BASE_URL}/orders/741000000000000001`);
@@ -350,14 +527,13 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       note: "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-size-L) — Commune: Maghnia | Size: L | Address: Cite Imama | Notes: Customer changed to size L and Maghnia",
     });
 
-    // 2. POST /confirm request with confirm-mod Idempotency-Key
     expect(capturedConfirmRequests.length).toBe(1);
     const confirmReq = capturedConfirmRequests[0];
     expect(confirmReq.url).toBe(`${BASE_URL}/orders/741000000000000001/confirm`);
     expect(confirmReq.headers.get("Idempotency-Key")).toBe("akadli-confirm-mod-741000000000000001");
   });
 
-  it("7. executes applyOrderDecision for REFUSED (POST /orders/{id}/cancel with note and Idempotency-Key)", async () => {
+  it("12. executes applyOrderDecision for REFUSED (POST /orders/{id}/cancel with note and Idempotency-Key)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -371,7 +547,6 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(result.success).toBe(true);
     expect(result.externalStatus).toBe("REFUSED");
 
-    // POST /cancel request
     expect(capturedCancelRequests.length).toBe(1);
     const cancelReq = capturedCancelRequests[0];
     expect(cancelReq.url).toBe(`${BASE_URL}/orders/741000000000000001/cancel`);
@@ -381,11 +556,10 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       note: "[Akadli-AI] Order REFUSED by customer (akadli-refused): Customer cancelled during voice call",
     });
 
-    // Confirm must NOT be called for REFUSED
     expect(capturedConfirmRequests.length).toBe(0);
   });
 
-  it("8. handles rate limits (429 RATE_LIMITED, BUSINESS_RATE_LIMITED), 503 API_BUSY with Retry-After, and 401 UNAUTHORIZED", async () => {
+  it("13. handles rate limits (429 RATE_LIMITED, BUSINESS_RATE_LIMITED), 503 API_BUSY with Retry-After, and 401 UNAUTHORIZED", async () => {
     // 401 Unauthorized
     server.use(
       http.patch(`${BASE_URL}/orders/:orderId`, () =>
