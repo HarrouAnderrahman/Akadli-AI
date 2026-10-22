@@ -138,7 +138,7 @@ Tassyir emits `orders/created` events with a nested envelope (`data.order`) or f
 5. **Item & Variant Extraction:**
    - Name: `items[0].title` or `items[0].name`.
    - Size / Variant: Cleaned from `items[0].variantName` (e.g. `"nike ensemble - M"` -> `"M"`), `variantTitle`, `variant`, or `options`.
-   - Constraints (`allowedSizes`):
+   - Constraints (`allowedVariants`):
      - If credentials or client are provided to `parseWebhookOrder` and `items[0].productId` is present, the adapter queries `GET /products/{productId}` to populate all available variants (`product.options` / `product.variants`).
      - Defaults gracefully to the ordered variant(s) across line items if offline or without `read_products` scope.
 
@@ -182,7 +182,7 @@ Returns `externalStatus: "CONFIRMED"`.
        "provinceCode": 13,
        "address": "Maghnia - Cite Imama"
      },
-     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-size-L) — Commune: Maghnia | Size: L | Address: Cite Imama | Notes: Customer changed size"
+     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed size"
    }
    ```
 3. If `credentials.confirmOnModified !== "false"`:

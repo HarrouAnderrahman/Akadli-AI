@@ -30,12 +30,12 @@ const DEFAULT_ORDER: OrderPayload = {
   customer_phone: '0550123456',
   item_name: 'Oversized Hoodie Black',
   price_da: 4500,
-  current_size: 'M',
+  current_variant: 'M',
   current_wilaya: '13 - Tlemcen',
   current_commune: 'Mansourah',
   current_address_note: 'Cite Imama',
   constraints: {
-    allowed_sizes: ['S', 'M', 'L', 'XL'],
+    allowed_variants: ['S', 'M', 'L', 'XL'],
     allowed_wilayas: ['13 - Tlemcen', '16 - Alger', '31 - Oran', '68 - Bou Saada'],
     allowed_communes: [
       'Mansourah',
@@ -526,8 +526,8 @@ export class AdminPage {
                     <input id="field-item-name" type="text" value="${this.order.item_name}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600" />
                   </div>
                   <div>
-                    <label class="block text-[11px] text-zinc-400 mb-1">Size</label>
-                    <input id="field-item-size" type="text" value="${this.order.current_size}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 uppercase focus:outline-none focus:border-zinc-600" />
+                    <label class="block text-[11px] text-zinc-400 mb-1">Variant</label>
+                    <input id="field-item-variant" type="text" value="${this.order.current_variant}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 uppercase focus:outline-none focus:border-zinc-600" />
                   </div>
                 </div>
 
@@ -711,7 +711,7 @@ export class AdminPage {
       const name = (this.container.querySelector('#field-customer-name') as HTMLInputElement)?.value;
       const phone = (this.container.querySelector('#field-customer-phone') as HTMLInputElement)?.value;
       const item = (this.container.querySelector('#field-item-name') as HTMLInputElement)?.value;
-      const size = (this.container.querySelector('#field-item-size') as HTMLInputElement)?.value;
+      const variant = (this.container.querySelector('#field-item-variant') as HTMLInputElement)?.value;
       const price = parseFloat((this.container.querySelector('#field-price') as HTMLInputElement)?.value || '0');
       const store = (this.container.querySelector('#field-store-name') as HTMLInputElement)?.value;
       const note = (this.container.querySelector('#field-address-note') as HTMLInputElement)?.value;
@@ -727,7 +727,7 @@ export class AdminPage {
         customer_name: name,
         customer_phone: phone,
         item_name: item,
-        current_size: size,
+        current_variant: variant,
         price_da: price,
         store_name: store,
         current_address_note: note,
@@ -867,7 +867,7 @@ export class AdminPage {
         (this.container.querySelector('#field-customer-name') as HTMLInputElement).value = this.order.customer_name;
         (this.container.querySelector('#field-customer-phone') as HTMLInputElement).value = this.order.customer_phone;
         (this.container.querySelector('#field-item-name') as HTMLInputElement).value = this.order.item_name;
-        (this.container.querySelector('#field-item-size') as HTMLInputElement).value = this.order.current_size;
+        (this.container.querySelector('#field-item-variant') as HTMLInputElement).value = this.order.current_variant;
         (this.container.querySelector('#field-price') as HTMLInputElement).value = String(this.order.price_da);
         (this.container.querySelector('#field-store-name') as HTMLInputElement).value = this.order.store_name;
         (this.container.querySelector('#field-address-note') as HTMLInputElement).value = this.order.current_address_note || '';
@@ -1233,8 +1233,8 @@ export class AdminPage {
       <div class="space-y-3 pt-1 text-xs">
         <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
           <div>
-            <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Final Size</span>
-            <span class="text-zinc-200 font-medium">${d.final_size}</span>
+            <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Final Variant</span>
+            <span class="text-zinc-200 font-medium">${d.final_variant}</span>
           </div>
           <div>
             <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Verified Location</span>
@@ -1396,7 +1396,7 @@ export class AdminPage {
     const nameInp = this.container.querySelector('#field-customer-name') as HTMLInputElement | null;
     const phoneInp = this.container.querySelector('#field-customer-phone') as HTMLInputElement | null;
     const itemInp = this.container.querySelector('#field-item-name') as HTMLInputElement | null;
-    const sizeInp = this.container.querySelector('#field-item-size') as HTMLInputElement | null;
+    const variantInp = this.container.querySelector('#field-item-variant') as HTMLInputElement | null;
     const priceInp = this.container.querySelector('#field-price') as HTMLInputElement | null;
     const storeInp = this.container.querySelector('#field-store-name') as HTMLInputElement | null;
     const noteInp = this.container.querySelector('#field-address-note') as HTMLInputElement | null;
@@ -1406,7 +1406,7 @@ export class AdminPage {
     if (nameInp) nameInp.value = this.order.customer_name;
     if (phoneInp) phoneInp.value = this.order.customer_phone;
     if (itemInp) itemInp.value = this.order.item_name;
-    if (sizeInp) sizeInp.value = this.order.current_size;
+    if (variantInp) variantInp.value = this.order.current_variant;
     if (priceInp) priceInp.value = String(this.order.price_da);
     if (storeInp) storeInp.value = this.order.store_name;
     if (noteInp) noteInp.value = this.order.current_address_note || '';

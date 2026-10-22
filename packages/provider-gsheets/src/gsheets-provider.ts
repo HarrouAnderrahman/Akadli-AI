@@ -209,11 +209,11 @@ export class GSheetsProvider implements IEcommerceProvider {
     const currentAddressNote =
       extract(COLUMN_CANDIDATE_KEYS.address) || "";
 
-    // 6. Product, Size, Price
+    // 6. Product, Variant, Price
     const itemName =
       extract(COLUMN_CANDIDATE_KEYS.product) || "Article";
-    const currentSize =
-      extract(COLUMN_CANDIDATE_KEYS.size) || "Standard";
+    const currentVariant =
+      extract(COLUMN_CANDIDATE_KEYS.variant) || "Standard";
 
     const rawPrice = extract(COLUMN_CANDIDATE_KEYS.price);
     const numPrice = rawPrice ? Number(rawPrice.replace(/[^\d.]/g, "")) : 0;
@@ -230,7 +230,7 @@ export class GSheetsProvider implements IEcommerceProvider {
       rawCustomerPhone,
       itemName,
       priceDa,
-      currentSize,
+      currentVariant,
       rawWilaya,
       rawCommune,
       currentAddressNote
@@ -281,9 +281,9 @@ export class GSheetsProvider implements IEcommerceProvider {
       ];
 
       if (decision.status === "MODIFIED") {
-        if (decision.finalSize) {
-          const sizeCol = credentials.sizeColumn || "H";
-          updates.push({ column: sizeCol, value: decision.finalSize });
+        if (decision.finalVariant) {
+          const variantCol = credentials.variantColumn || credentials.sizeColumn || "H";
+          updates.push({ column: variantCol, value: decision.finalVariant });
         }
         if (decision.finalWilaya) {
           const wilayaCol = credentials.wilayaColumn || "I";
@@ -328,7 +328,7 @@ export class GSheetsProvider implements IEcommerceProvider {
         rowNumber: rowNumber ?? null,
         status: decision.status,
         externalStatus: decision.status,
-        finalSize: decision.finalSize ?? null,
+        finalVariant: decision.finalVariant ?? null,
         finalWilaya: decision.finalWilaya ?? null,
         finalCommune: decision.finalCommune ?? null,
         finalAddressNote: decision.finalAddressNote ?? null,

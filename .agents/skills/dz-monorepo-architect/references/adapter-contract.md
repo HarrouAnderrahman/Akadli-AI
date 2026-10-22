@@ -48,7 +48,7 @@ export const DzPhoneSchema = z
  * unavailable sizes, unsupported Wilayas, or invalid communes.
  */
 export const OrderConstraintsSchema = z.object({
-  allowedSizes: z.array(z.string().min(1)).min(1),
+  allowedVariants: z.array(z.string().min(1)).min(1),
   allowedWilayas: z.array(WilayaCodeSchema).min(1),
   allowedCommunes: z.array(z.string().min(1)).min(1)
 });
@@ -65,7 +65,7 @@ export const StandardizedDzOrderSchema = z.object({
   customerPhone: DzPhoneSchema,
   itemName: z.string().min(1),
   priceDa: z.number().int().nonnegative(),
-  currentSize: z.string().min(1),
+  currentVariant: z.string().min(1),
   currentWilaya: WilayaCodeSchema,
   currentCommune: z.string().min(1),
   currentAddressNote: z.string().optional().default(""),
@@ -81,7 +81,7 @@ export const FinalizedOrderDecisionSchema = z
   .object({
     orderId: z.string().min(1),
     status: z.enum(["CONFIRMED", "REFUSED", "MODIFIED"]),
-    finalSize: z.string().optional(),
+    finalVariant: z.string().optional(),
     finalWilaya: WilayaCodeSchema.optional(),
     finalCommune: z.string().optional(),
     finalAddressNote: z.string().optional(),
@@ -90,7 +90,7 @@ export const FinalizedOrderDecisionSchema = z
   .superRefine((data, ctx) => {
     if (data.status === "MODIFIED") {
       const hasModification =
-        Boolean(data.finalSize) ||
+        Boolean(data.finalVariant) ||
         Boolean(data.finalWilaya) ||
         Boolean(data.finalCommune) ||
         Boolean(data.finalAddressNote);
@@ -99,7 +99,7 @@ export const FinalizedOrderDecisionSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            "A decision with status 'MODIFIED' must specify at least one changed field (finalSize, finalWilaya, finalCommune, or finalAddressNote)."
+            "A decision with status 'MODIFIED' must specify at least one changed field (finalVariant, finalWilaya, finalCommune, or finalAddressNote)."
         });
       }
     }
@@ -175,9 +175,9 @@ When configuring the ElevenAgents voice agent in `@akadli/core`, register `final
         "enum": ["CONFIRMED", "REFUSED", "MODIFIED"],
         "description": "CONFIRMED if unchanged, MODIFIED if size/Wilaya/commune/note changed, REFUSED if customer cancelled."
       },
-      "finalSize": {
+      "finalVariant": {
         "type": "string",
-        "description": "Selected size constrained to {{allowed_sizes_enum}}"
+        "description": "Selected variant constrained to {{allowed_variants_enum}}"
       },
       "finalWilaya": {
         "type": "string",

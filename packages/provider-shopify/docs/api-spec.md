@@ -78,7 +78,7 @@ Shopify `orders/create` payloads for Algerian cash-on-delivery merchants arrive 
    - `orderId`: `String(payload.id)`
    - `storeName`: `payload.shop_name || payload.store_name || "Shopify Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.title || "Article"`)
-   - `currentSize`: First line item variant title (`payload.line_items?.[0]?.variant_title || "Standard"`)
+   - `currentVariant`: First line item variant title (`payload.line_items?.[0]?.variant_title || "Standard"`)
    - `priceDa`: `Math.round(Number(payload.total_price || 0))`
 
 2. **Dual-Source Address & Phone Fallback:**
@@ -93,7 +93,7 @@ Shopify `orders/create` payloads for Algerian cash-on-delivery merchants arrive 
    - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
    - Wilaya is matched against all 69 official 2026 Wilayas via `normalizeWilaya(...)`.
    - Commune is resolved and verified for that Wilaya via `normalizeCommune(..., wilayaCode)`.
-   - Constraints (`allowedWilayas`, `allowedCommunes`, `allowedSizes`) are populated and validated using `createStandardizedDzOrder(...)`.
+   - Constraints (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) are populated and validated using `createStandardizedDzOrder(...)`.
 
 ---
 
@@ -135,8 +135,8 @@ export interface ShopifyProviderCredentials {
 {
   "order": {
     "id": 1029384756,
-    "tags": "akadli-modified, akadli-size-43",
-    "note": "[Akadli-AI] Order MODIFIED: Size -> 43; Commune -> Maghnia; Note -> Près de la mosquée.",
+    "tags": "akadli-modified, akadli-variant-43",
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Commune -> Maghnia; Note -> Près de la mosquée.",
     "shipping_address": {
       "province": "13",
       "city": "Maghnia",

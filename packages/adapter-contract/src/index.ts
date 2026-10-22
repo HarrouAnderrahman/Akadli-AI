@@ -36,10 +36,10 @@ export const DzPhoneSchema = z
 
 /**
  * Dynamic guardrails passed into ElevenAgents so the LLM cannot hallucinate
- * unavailable sizes, unsupported Wilayas, or invalid communes.
+ * unavailable variants, unsupported Wilayas, or invalid communes.
  */
 export const OrderConstraintsSchema = z.object({
-  allowedSizes: z.array(z.string().min(1)).min(1),
+  allowedVariants: z.array(z.string().min(1)).min(1),
   allowedWilayas: z.array(WilayaCodeSchema).min(1),
   allowedCommunes: z.array(z.string().min(1)).min(1)
 });
@@ -56,7 +56,7 @@ export const StandardizedDzOrderSchema = z.object({
   customerPhone: DzPhoneSchema,
   itemName: z.string().min(1),
   priceDa: z.number().nonnegative(),
-  currentSize: z.string().min(1),
+  currentVariant: z.string().min(1),
   currentWilaya: WilayaCodeSchema,
   currentCommune: z.string().min(1),
   currentAddressNote: z.string().default(""),
@@ -84,7 +84,7 @@ export const FinalizedOrderDecisionSchema = z
   .object({
     orderId: z.string().min(1),
     status: OrderDecisionStatusSchema,
-    finalSize: z.string().min(1).optional(),
+    finalVariant: z.string().min(1).optional(),
     finalWilaya: WilayaCodeSchema.optional(),
     finalCommune: z.string().min(1).optional(),
     finalAddressNote: z.string().optional(),
@@ -93,7 +93,7 @@ export const FinalizedOrderDecisionSchema = z
   .superRefine((decision, ctx) => {
     if (decision.status === "MODIFIED") {
       const hasModification =
-        decision.finalSize !== undefined ||
+        decision.finalVariant !== undefined ||
         decision.finalWilaya !== undefined ||
         decision.finalCommune !== undefined ||
         decision.finalAddressNote !== undefined;
@@ -101,7 +101,7 @@ export const FinalizedOrderDecisionSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            'When status is "MODIFIED", at least one of finalSize, finalWilaya, finalCommune, or finalAddressNote must be provided.'
+            'When status is "MODIFIED", at least one of finalVariant, finalWilaya, finalCommune, or finalAddressNote must be provided.'
         });
       }
     }

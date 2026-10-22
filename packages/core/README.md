@@ -13,7 +13,7 @@
 | Function | Signature | Description |
 | :--- | :--- | :--- |
 | `createStandardizedDzOrder(params)` | `StandardizedDzOrder` | Normalizes phone, Wilaya, and commune via `@akadli/dz-geo` and sets validation constraints |
-| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | Generates prompt variables (`customer_phone_e164`, `price_da`, `allowed_sizes`, `allowed_wilayas`, `allowed_communes`) |
+| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | Generates prompt variables (`customer_phone_e164`, `price_da`, `allowed_variants`, `allowed_wilayas`, `allowed_communes`) |
 | `handleFinalizeOrderToolCall(payload, provider, creds, constraints)` | `Promise<FinalizeOrderToolResult>` | Validates `finalize_order_decision` tool calls, checks constraints, and calls `provider.applyOrderDecision` |
 
 ---
@@ -44,10 +44,10 @@ const order = createStandardizedDzOrder({
   rawCustomerPhone: "0550123456",
   itemName: "Sneakers Air Max",
   priceDa: 4500,
-  currentSize: "42",
+  currentVariant: "42",
   rawWilaya: "Barika",
   rawCommune: "Barika",
-  allowedSizes: ["41", "42", "43"]
+  allowedVariants: ["41", "42", "43"]
 });
 
 // 2. Build dynamic variables for ElevenAgents prompt

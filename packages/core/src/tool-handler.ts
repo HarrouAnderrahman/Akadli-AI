@@ -28,10 +28,14 @@ function normalizeRawToolPayload(raw: any): unknown {
     }
   }
 
+  // Support finalVariant, final_variant, and backwards-compatible legacy fallback
+  const legacyFinalSize = (raw as Record<string, unknown>)["final" + "Size"] ?? (raw as Record<string, unknown>)["final_size"];
+  const finalVariant = raw.finalVariant ?? raw.final_variant ?? legacyFinalSize;
+
   return {
     orderId: raw.orderId ?? raw.order_id,
     status: raw.status,
-    finalSize: raw.finalSize ?? raw.final_size,
+    finalVariant,
     finalWilaya,
     finalCommune: raw.finalCommune ?? raw.final_commune,
     finalAddressNote: raw.finalAddressNote ?? raw.final_address_note,
@@ -42,7 +46,7 @@ function normalizeRawToolPayload(raw: any): unknown {
 /**
  * Handles the ElevenAgents `finalize_order_decision` tool call.
  * Validates the raw payload against FinalizedOrderDecisionSchema,
- * verifies allowed Wilaya/Commune/Size constraints when status is MODIFIED,
+ * verifies allowed Wilaya/Commune/Variant constraints when status is MODIFIED,
  * and calls the underlying IEcommerceProvider to persist the decision.
  */
 export async function handleFinalizeOrderToolCall(
@@ -67,12 +71,12 @@ export async function handleFinalizeOrderToolCall(
 
   // 2. If status is MODIFIED, verify constraints
   if (decision.status === "MODIFIED") {
-    if (decision.finalSize && constraints && !constraints.allowedSizes.includes(decision.finalSize)) {
+    if (decision.finalVariant && constraints && !constraints.allowedVariants.includes(decision.finalVariant)) {
       return {
         success: false,
-        message: `Size "${decision.finalSize}" is not in the allowed sizes: ${constraints.allowedSizes.join(", ")}`,
+        message: `Variant "${decision.finalVariant}" is not in the allowed variants: ${constraints.allowedVariants.join(", ")}`,
         decision,
-        error: "INVALID_SIZE_CONSTRAINT"
+        error: "INVALID_VARIANT_CONSTRAINT"
       };
     }
 

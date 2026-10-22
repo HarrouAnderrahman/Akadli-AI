@@ -65,10 +65,21 @@ export const COLUMN_CANDIDATE_KEYS = {
     "article",
     "item"
   ],
-  size: [
+  variant: [
+    "variant",
+    "variation",
     "size",
     "taille",
+    "المقاس",
+    "الحجم",
+    "pointure",
+    "dimension"
+  ],
+  size: [
     "variant",
+    "variation",
+    "size",
+    "taille",
     "المقاس",
     "الحجم",
     "pointure",
@@ -108,7 +119,8 @@ export const GSheetsApiCredentialsSchema = z.object({
   accessToken: z.string().min(1),
   sheetName: z.string().default("Sheet1"),
   statusColumn: z.string().default("G"),
-  sizeColumn: z.string().default("H"),
+  variantColumn: z.string().default("H"),
+  sizeColumn: z.string().optional(),
   wilayaColumn: z.string().default("I"),
   communeColumn: z.string().default("J"),
   addressColumn: z.string().default("K"),

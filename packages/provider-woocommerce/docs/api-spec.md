@@ -59,7 +59,7 @@ WooCommerce `order.created` or `order.updated` payloads for Algerian COD merchan
    - `orderId`: `String(payload.id)`
    - `storeName`: `payload.store_name || "WooCommerce Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.name || "Article"`)
-   - `currentSize`: Extracted by scanning `line_items[0]?.meta_data` for keys matching `/(?:pa_size|size|taille|pointure)/i` or variant name/title, defaulting to `"Standard"`.
+   - `currentVariant`: Extracted by scanning `line_items[0]?.meta_data` for keys matching `/(?:pa_size|size|taille|pointure|variant|pa_variant)/i` or variant name/title, defaulting to `"Standard"`.
    - `priceDa`: `Math.round(Number(payload.total || 0))`
 
 2. **Multi-Source Address & Phone Extraction (Standard + COD Plugin Meta):**
@@ -82,7 +82,7 @@ WooCommerce `order.created` or `order.updated` payloads for Algerian COD merchan
    - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) or E.164 (`+213...`).
    - Wilaya is resolved across all 69 Algerian Wilayas (2026 administrative division) via `normalizeWilaya(...)`.
    - Commune is resolved against valid communes for the resolved Wilaya via `normalizeCommune(..., wilayaCode)`.
-   - Populates constraints (`allowedWilayas`, `allowedCommunes`, `allowedSizes`) and builds a canonical `StandardizedDzOrder`.
+   - Populates constraints (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) and builds a canonical `StandardizedDzOrder`.
 
 ---
 
@@ -141,14 +141,14 @@ Base endpoint: `{siteUrl}/wp-json/wc/v3`
     },
     "meta_data": [
       { "key": "_akadli_status", "value": "akadli-modified" },
-      { "key": "_akadli_size", "value": "XL" }
+      { "key": "_akadli_variant", "value": "XL" }
     ]
   }
   ```
 - `POST /wp-json/wc/v3/orders/{orderId}/notes`:
   ```json
   {
-    "note": "[Akadli-AI] Order MODIFIED: Size -> XL; Wilaya -> 13; Commune -> Maghnia",
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Maghnia",
     "customer_note": false
   }
   ```

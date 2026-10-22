@@ -16,7 +16,7 @@
 | :--- | :--- | :--- |
 | `StandardizedDzOrderSchema` | `StandardizedDzOrder` | نموذج الطلبية الموحد بعد استخراجه وتطبيعه من أي متجر |
 | `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | هيكل قرار ElevenAgents النهائي (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
-| `OrderConstraintsSchema` | `OrderConstraints` | قيود منع الهلوسة الصوتية (`allowedSizes`, `allowedWilayas`, `allowedCommunes`) |
+| `OrderConstraintsSchema` | `OrderConstraints` | قيود منع الهلوسة الصوتية (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
 | `OrderDecisionStatusSchema` | `OrderDecisionStatus` | قيم الحالات المسموحة: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
 | `WilayaCodeSchema` | `WilayaCode` | رموز الولايات الجزائرية الرسمية من خانتين (`"01"` إلى `"69"`) |
 | `DzPhoneSchema` | `string` | التحقق من أرقام الهاتف الجزائري محلياً `05/06/07XXXXXXXX` أو دولياً `+213[567]XXXXXXXX` |

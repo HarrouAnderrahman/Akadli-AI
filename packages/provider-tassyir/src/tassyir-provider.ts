@@ -168,27 +168,27 @@ export function extractVariantFromItem(
 }
 
 /**
- * Extracts allowed sizes/variants from a Tassyir product object.
+ * Extracts allowed variants from a Tassyir product object.
  */
-export function extractAllowedSizesFromProduct(
+export function extractAllowedVariantsFromProduct(
   product: TassyirProduct | null | undefined
 ): string[] {
   if (!product) return [];
 
-  const sizes: string[] = [];
+  const variants: string[] = [];
 
   // 1. Inspect options array (e.g. { name: "Taille", values: ["S", "M", "L"] })
   if (Array.isArray(product.options) && product.options.length > 0) {
-    const sizeOpt = product.options.find(
+    const variantOpt = product.options.find(
       (opt) =>
         opt?.name &&
-        /^(?:size|taille|pointure|مقاس)$/i.test(opt.name.trim()) &&
+        /^(?:size|taille|pointure|مقاس|variant)$/i.test(opt.name.trim()) &&
         Array.isArray(opt.values) &&
         opt.values.length > 0
     );
 
     const targetOpt =
-      sizeOpt ||
+      variantOpt ||
       product.options.find(
         (opt) => Array.isArray(opt?.values) && opt.values.length > 0
       );
@@ -196,8 +196,8 @@ export function extractAllowedSizesFromProduct(
     if (targetOpt?.values) {
       for (const val of targetOpt.values) {
         const cleaned = cleanVariantString(String(val), product.name);
-        if (cleaned && cleaned !== "Standard" && !sizes.includes(cleaned)) {
-          sizes.push(cleaned);
+        if (cleaned && cleaned !== "Standard" && !variants.includes(cleaned)) {
+          variants.push(cleaned);
         }
       }
     }
@@ -208,15 +208,17 @@ export function extractAllowedSizesFromProduct(
     for (const v of product.variants) {
       if (v?.name) {
         const cleaned = cleanVariantString(v.name, product.name);
-        if (cleaned && cleaned !== "Standard" && !sizes.includes(cleaned)) {
-          sizes.push(cleaned);
+        if (cleaned && cleaned !== "Standard" && !variants.includes(cleaned)) {
+          variants.push(cleaned);
         }
       }
     }
   }
 
-  return sizes;
+  return variants;
 }
+
+export const extractAllowedSizesFromProduct = extractAllowedVariantsFromProduct;
 
 export class TassyirProvider implements IEcommerceProvider {
   private readonly customFetch?: typeof fetch;
@@ -390,7 +392,7 @@ export class TassyirProvider implements IEcommerceProvider {
   /**
    * Parses and normalizes an inbound Tassyir orders/created webhook payload into a canonical StandardizedDzOrder.
    * Extracts clean variant from Tassyir items (supporting variantName: "Product - Variant", variantTitle, etc.),
-   * and populates allowedSizes from live product variants (if credentials or client provided) or order line items.
+   * and populates allowedVariants from live product variants (if credentials or client provided) or order line items.
    */
   async parseWebhookOrder(
     payload: unknown,
@@ -485,9 +487,9 @@ export class TassyirProvider implements IEcommerceProvider {
     const itemName =
       firstItem?.title || firstItem?.name || orderData.product_name || "Article";
 
-    const currentSize = extractVariantFromItem(firstItem, itemName);
+    const currentVariant = extractVariantFromItem(firstItem, itemName);
 
-    let allowedSizes: string[] = [];
+    let allowedVariants: string[] = [];
 
     // Optional: fetch live product variants if credentials or client are provided
     let client = options?.client;
@@ -504,9 +506,9 @@ export class TassyirProvider implements IEcommerceProvider {
       try {
         const product = await client.getProduct(firstItem.productId);
         if (product) {
-          const productSizes = extractAllowedSizesFromProduct(product);
-          if (productSizes.length > 0) {
-            allowedSizes.push(...productSizes);
+          const productVariants = extractAllowedVariantsFromProduct(product);
+          if (productVariants.length > 0) {
+            allowedVariants.push(...productVariants);
           }
         }
       } catch {
@@ -517,18 +519,18 @@ export class TassyirProvider implements IEcommerceProvider {
     // Also collect variants from any line items present in the order
     for (const it of items) {
       const v = extractVariantFromItem(it, it.title || it.name || itemName);
-      if (v && v !== "Standard" && !allowedSizes.includes(v)) {
-        allowedSizes.push(v);
+      if (v && v !== "Standard" && !allowedVariants.includes(v)) {
+        allowedVariants.push(v);
       }
     }
 
-    // Ensure currentSize is included
-    if (currentSize && currentSize !== "Standard" && !allowedSizes.includes(currentSize)) {
-      allowedSizes.unshift(currentSize);
+    // Ensure currentVariant is included
+    if (currentVariant && currentVariant !== "Standard" && !allowedVariants.includes(currentVariant)) {
+      allowedVariants.unshift(currentVariant);
     }
 
-    if (allowedSizes.length === 0) {
-      allowedSizes = [currentSize];
+    if (allowedVariants.length === 0) {
+      allowedVariants = [currentVariant];
     }
 
     return createStandardizedDzOrder({
@@ -538,11 +540,11 @@ export class TassyirProvider implements IEcommerceProvider {
       rawCustomerPhone: rawPhone,
       itemName,
       priceDa,
-      currentSize,
+      currentVariant,
       rawWilaya,
       rawCommune,
       currentAddressNote,
-      allowedSizes,
+      allowedVariants,
     });
   }
 
@@ -598,16 +600,16 @@ export class TassyirProvider implements IEcommerceProvider {
       ].filter(Boolean);
       const address = addressParts.length > 0 ? addressParts.join(" - ") : undefined;
 
-      const tagsStr = validDecision.finalSize
-        ? `(akadli-modified, akadli-size-${validDecision.finalSize})`
+      const tagsStr = validDecision.finalVariant
+        ? `(akadli-modified, akadli-variant-${validDecision.finalVariant})`
         : `(akadli-modified)`;
 
       const detailParts: string[] = [];
       if (validDecision.finalCommune) {
         detailParts.push(`Commune: ${validDecision.finalCommune}`);
       }
-      if (validDecision.finalSize) {
-        detailParts.push(`Size: ${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        detailParts.push(`Variant: ${validDecision.finalVariant}`);
       }
       if (validDecision.finalAddressNote) {
         detailParts.push(`Address: ${validDecision.finalAddressNote}`);

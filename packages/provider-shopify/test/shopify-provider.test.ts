@@ -128,7 +128,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(order.customerName).toBe("Karim Mansouri");
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Chaussures de Sport Orthopédiques");
-    expect(order.currentSize).toBe("42");
+    expect(order.currentVariant).toBe("42");
     expect(order.priceDa).toBe(4500);
     expect(order.currentWilaya).toBe("13"); // Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
@@ -138,7 +138,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(order.constraints.allowedWilayas).toContain("13");
     expect(order.constraints.allowedCommunes).toContain("Maghnia");
     expect(order.constraints.allowedCommunes).toContain("Tlemcen");
-    expect(order.constraints.allowedSizes).toEqual(["42"]);
+    expect(order.constraints.allowedVariants).toEqual(["42"]);
   });
 
   it("3. parses Algerian COD form (note_attributes) fixture into a valid StandardizedDzOrder (Wilaya 60 - Barika)", async () => {
@@ -148,7 +148,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(order.customerName).toBe("Karim Benali");
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Robe Traditionnelle Kabyle");
-    expect(order.currentSize).toBe("L");
+    expect(order.currentVariant).toBe("L");
     expect(order.priceDa).toBe(6800);
     expect(order.currentWilaya).toBe("60"); // Barika (2026 delegated wilaya)
     expect(order.currentCommune).toBe("Barika");
@@ -157,7 +157,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     // Constraints derived from Wilaya 60
     expect(order.constraints.allowedWilayas).toContain("60");
     expect(order.constraints.allowedCommunes).toContain("Barika");
-    expect(order.constraints.allowedSizes).toEqual(["L"]);
+    expect(order.constraints.allowedVariants).toEqual(["L"]);
   });
 
   it("4. executes applyOrderDecision for CONFIRMED and verifies outbound PUT request headers and body", async () => {
@@ -192,7 +192,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
       {
         orderId: "1029384756",
         status: "MODIFIED",
-        finalSize: "43",
+        finalVariant: "43",
         finalWilaya: "13",
         finalCommune: "Maghnia",
         finalAddressNote: "Nouvelle adresse près du stade",
@@ -210,8 +210,8 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(putReq.body).toEqual({
       order: {
         id: 1029384756,
-        tags: "akadli-modified, akadli-size-43",
-        note: "[Akadli-AI] Order MODIFIED: Size -> 43; Wilaya -> 13; Commune -> Maghnia; Note -> Nouvelle adresse près du stade; Details: Taille changée de 42 à 43",
+        tags: "akadli-modified, akadli-variant-43",
+        note: "[Akadli-AI] Order MODIFIED: Variant -> 43; Wilaya -> 13; Commune -> Maghnia; Note -> Nouvelle adresse près du stade; Details: Taille changée de 42 à 43",
         shipping_address: {
           city: "Maghnia (13)",
           address1: "Nouvelle adresse près du stade",

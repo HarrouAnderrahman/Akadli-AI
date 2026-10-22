@@ -318,25 +318,25 @@ export class WooCommerceProvider implements IEcommerceProvider {
       (shippingAddressLines.length > 0 ? shippingAddressLines : undefined) ||
       findInMeta(addressPatterns);
 
-    // 6. Items, Size & Pricing
+    // 6. Items, Variant & Pricing
     const firstItem = data.line_items[0];
     const itemName = firstItem?.name || "Article";
 
-    // Extract size from item meta_data (e.g. pa_size, size, taille, pointure)
-    let currentSize = "Standard";
+    // Extract variant from item meta_data (e.g. pa_size, size, taille, pointure, variant)
+    let currentVariant = "Standard";
     if (firstItem?.meta_data) {
-      const sizePatterns = [/(?:pa_size|size|taille|pointure)/i];
+      const variantPatterns = [/(?:pa_size|size|taille|pointure|variant|pa_variant)/i];
       for (const m of firstItem.meta_data) {
         if (m.value === null || m.value === undefined) continue;
         const val = String(m.value).trim();
         if (!val) continue;
-        for (const pat of sizePatterns) {
+        for (const pat of variantPatterns) {
           if (pat.test(m.key)) {
-            currentSize = val;
+            currentVariant = val;
             break;
           }
         }
-        if (currentSize !== "Standard") break;
+        if (currentVariant !== "Standard") break;
       }
     }
 
@@ -361,7 +361,7 @@ export class WooCommerceProvider implements IEcommerceProvider {
       rawCustomerPhone,
       itemName,
       priceDa,
-      currentSize,
+      currentVariant,
       rawWilaya,
       rawCommune,
       currentAddressNote
@@ -409,10 +409,10 @@ export class WooCommerceProvider implements IEcommerceProvider {
       const metaDataUpdates: Array<{ key: string; value: unknown }> = [
         { key: "_akadli_status", value: "akadli-modified" }
       ];
-      if (validDecision.finalSize) {
+      if (validDecision.finalVariant) {
         metaDataUpdates.push({
-          key: "_akadli_size",
-          value: validDecision.finalSize
+          key: "_akadli_variant",
+          value: validDecision.finalVariant
         });
       }
 
@@ -448,8 +448,8 @@ export class WooCommerceProvider implements IEcommerceProvider {
       }
 
       const noteParts: string[] = [];
-      if (validDecision.finalSize) {
-        noteParts.push(`Size -> ${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }
       if (validDecision.finalWilaya) {
         noteParts.push(`Wilaya -> ${validDecision.finalWilaya}`);

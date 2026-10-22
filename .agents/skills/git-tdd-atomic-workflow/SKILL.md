@@ -56,11 +56,11 @@ Every provider package (`@akadli/provider-<name>`) must include a `vitest` + `ms
    - Returns `true` for a valid cryptographic HMAC/token signature over the raw fixture buffer.
    - Returns `false` for a tampered payload, wrong secret, or missing signature header.
 2. **Order Normalization (`parseWebhookOrder`)**:
-   - Loads `fixtures/webhook-order-created.json` and asserts that `customerPhone` is normalized (`05/06/07XXXXXXXX` or `+213...`), `currentWilaya` is a 2-digit code (`"01"`-`"69"`), and `constraints` (`allowedSizes`, `allowedWilayas`, `allowedCommunes`) are populated.
+   - Loads `fixtures/webhook-order-created.json` and asserts that `customerPhone` is normalized (`05/06/07XXXXXXXX` or `+213...`), `currentWilaya` is a 2-digit code (`"01"`-`"69"`), and `constraints` (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) are populated.
 3. **`CONFIRMED` Decision API Call (`applyOrderDecision`)**:
    - Intercepts the outbound HTTP call via MSW and verifies the confirmation status/tag payload returns `{ success: true, externalStatus: "CONFIRMED" }`.
 4. **`MODIFIED` Decision API Call (`applyOrderDecision`)**:
-   - Passes a modified `finalSize` and `finalCommune` (plus optional `finalWilaya` and `finalAddressNote`), intercepts the outbound request via MSW, and asserts the request body updates both the variant/size and shipping commune/Wilaya.
+   - Passes a modified `finalVariant` and `finalCommune` (plus optional `finalWilaya` and `finalAddressNote`), intercepts the outbound request via MSW, and asserts the request body updates both the variant and shipping commune/Wilaya.
 5. **`REFUSED` Decision API Call (`applyOrderDecision`)**:
    - Passes `status: "REFUSED"` with `reasonOrNotes`, intercepts the cancellation/refusal endpoint via MSW, and asserts clean cancellation handling.
 

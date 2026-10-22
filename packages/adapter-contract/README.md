@@ -14,7 +14,7 @@
 | :--- | :--- | :--- |
 | `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers |
 | `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
-| `OrderConstraintsSchema` | `OrderConstraints` | Anti-hallucination guardrails (`allowedSizes`, `allowedWilayas`, `allowedCommunes`) |
+| `OrderConstraintsSchema` | `OrderConstraints` | Anti-hallucination guardrails (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
 | `OrderDecisionStatusSchema` | `OrderDecisionStatus` | Enum: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
 | `WilayaCodeSchema` | `WilayaCode` | Official zero-padded 2-digit codes (`"01"` to `"69"`) |
 | `DzPhoneSchema` | `string` | Regex: `05/06/07XXXXXXXX` (local 10-digit) or `+213[567]XXXXXXXX` (E.164) |

@@ -18,14 +18,16 @@ export interface CreateDzOrderParams {
   rawCustomerPhone: string;
   itemName: string;
   priceDa: number;
-  currentSize: string;
+  currentVariant: string;
   rawWilaya: string | number;
   rawCommune: string;
   currentAddressNote?: string;
-  allowedSizes?: string[];
+  allowedVariants?: string[];
   allowedWilayas?: WilayaCode[];
   allowedCommunes?: string[];
 }
+
+export type CreateStandardizedDzOrderInput = CreateDzOrderParams;
 
 /**
  * Creates and validates a canonical StandardizedDzOrder using @akadli/dz-geo
@@ -45,9 +47,9 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
   const currentCommune = normCommune.canonicalCommune;
 
   // 4. Derive constraints if not explicitly provided
-  const allowedSizes = params.allowedSizes && params.allowedSizes.length > 0
-    ? params.allowedSizes
-    : [params.currentSize];
+  const allowedVariants = params.allowedVariants && params.allowedVariants.length > 0
+    ? params.allowedVariants
+    : [params.currentVariant];
 
   const allowedWilayas = params.allowedWilayas && params.allowedWilayas.length > 0
     ? params.allowedWilayas
@@ -58,7 +60,7 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
     : [...getCommunesForWilaya(currentWilaya)];
 
   const constraints: OrderConstraints = {
-    allowedSizes,
+    allowedVariants,
     allowedWilayas,
     allowedCommunes: allowedCommunes.length > 0 ? allowedCommunes : [currentCommune]
   };
@@ -70,7 +72,7 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
     customerPhone,
     itemName: params.itemName,
     priceDa: params.priceDa,
-    currentSize: params.currentSize,
+    currentVariant: params.currentVariant,
     currentWilaya,
     currentCommune,
     currentAddressNote: params.currentAddressNote || "",

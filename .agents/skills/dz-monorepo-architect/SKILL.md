@@ -39,7 +39,7 @@ Initialize, scaffold, and maintain the `akadli-ai` Turborepo + pnpm monorepo, in
    - Load `{{SKILL_PATH}}/references/adapter-contract.md` and follow **Step 2** to update `packages/adapter-contract/`.
    - Never add platform-specific SDKs to `@akadli/adapter-contract`; keep `zod` as its sole runtime dependency.
 3. **Are you modifying ElevenAgents outbound call triggers or the `finalize_order_decision` webhook tool?**
-   - Follow **Step 3** to update `packages/core/` while preserving strict dynamic variable injection (`allowed_sizes_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`).
+   - Follow **Step 3** to update `packages/core/` while preserving strict dynamic variable injection (`allowed_variants_enum`, `allowed_wilayas_enum`, `allowed_communes_enum`).
 4. **Are you adding a new e-commerce provider package?**
    - Ensure `@akadli/adapter-contract` and `@akadli/dz-geo` exist first, then hand off implementation details to `dz-ecommerce-provider-builder`.
 
@@ -91,8 +91,8 @@ packages:
 3. Implement `src/index.ts` using the exact schemas from `{{SKILL_PATH}}/references/adapter-contract.md`:
    - `WilayaCodeSchema`: Literal union or regex enforcing Algerian Wilaya codes `"01"` through `"69"`.
    - `DzPhoneSchema`: Validates Algerian mobile (`05/06/07XXXXXXXX`) or E.164 (`+213[567]XXXXXXXX`).
-   - `StandardizedDzOrderSchema` and `StandardizedDzOrder`: Canonical inbound order structure (`orderId`, `storeName`, `customerName`, `customerPhone`, `itemName`, `priceDa`, `currentSize`, `currentWilaya`, `currentCommune`, `currentAddressNote`, `constraints`).
-   - `FinalizedOrderDecisionSchema` and `FinalizedOrderDecision`: Canonical voice agent output (`orderId`, `status` as `"CONFIRMED" | "REFUSED" | "MODIFIED"`, `finalSize`, `finalWilaya`, `finalCommune`, `finalAddressNote`, `reasonOrNotes`).
+   - `StandardizedDzOrderSchema` and `StandardizedDzOrder`: Canonical inbound order structure (`orderId`, `storeName`, `customerName`, `customerPhone`, `itemName`, `priceDa`, `currentVariant`, `currentWilaya`, `currentCommune`, `currentAddressNote`, `constraints`).
+   - `FinalizedOrderDecisionSchema` and `FinalizedOrderDecision`: Canonical voice agent output (`orderId`, `status` as `"CONFIRMED" | "REFUSED" | "MODIFIED"`, `finalVariant`, `finalWilaya`, `finalCommune`, `finalAddressNote`, `reasonOrNotes`).
    - `IEcommerceProvider`: Standard interface with `verifyWebhook`, `parseWebhookOrder`, and `applyOrderDecision`.
 
 ### Step 3: Implement `@akadli/core` (ElevenAgents Engine)
@@ -101,7 +101,7 @@ packages:
 2. Implement `buildElevenAgentsDynamicVariables(order: StandardizedDzOrder)` in `packages/core/src/dynamic-variables.ts`:
    - Convert `order.customerPhone` to E.164 (`+213...`) for outbound SIP/Twilio dialing.
    - Format `price_da` as an integer string in Algerian Dinars (DZD).
-   - Serialize `order.constraints.allowedSizes`, `order.constraints.allowedWilayas`, and `order.constraints.allowedCommunes` into deterministic JSON/CSV strings for the ElevenAgents system prompt and `finalize_order_decision` tool constraints.
+   - Serialize `order.constraints.allowedVariants`, `order.constraints.allowedWilayas`, and `order.constraints.allowedCommunes` into deterministic JSON/CSV strings for the ElevenAgents system prompt and `finalize_order_decision` tool constraints.
 3. Implement `handleFinalizeOrderToolCall(rawToolPayload: unknown, provider: IEcommerceProvider, credentials: Record<string, string>)` in `packages/core/src/tool-handler.ts`:
    - Validate `rawToolPayload` against `FinalizedOrderDecisionSchema`.
    - If `status === "MODIFIED"`, verify that `finalWilaya` (`"01"`-`"69"`) and `finalCommune` belong to the allowed constraints before invoking `provider.applyOrderDecision(...)`.

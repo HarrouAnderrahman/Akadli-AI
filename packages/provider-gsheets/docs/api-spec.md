@@ -179,7 +179,7 @@ export interface GSheetsAppsScriptCredentials {
   "rowNumber": 42,
   "status": "CONFIRMED",
   "externalStatus": "CONFIRMED",
-  "finalSize": "43",
+  "finalVariant": "43",
   "finalWilaya": "16",
   "finalCommune": "Bab Ezzouar",
   "finalAddressNote": "Cité 8 Mai 1945",

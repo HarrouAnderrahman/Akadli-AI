@@ -83,7 +83,7 @@ Every provider package must follow this exact directory layout:
 2. Normalize the customer's phone number and Wilaya/Commune using `@akadli/dz-geo` (see `dz-geo-address-normalizer` skill):
    - Normalize `customerPhone` to `05/06/07XXXXXXXX` or `+213[567]XXXXXXXX`.
    - Normalize messy Wilaya input (`"Alger"`, `"16"`, `"تلمسان"`, `"بوسعادة"`) to its 2-digit code (`"01"`-`"69"`).
-   - Populate `constraints.allowedWilayas` (`"01"`-`"69"`), `constraints.allowedCommunes` (valid communes for `currentWilaya`), and `constraints.allowedSizes` (available product variants or `[currentSize]`).
+   - Populate `constraints.allowedWilayas` (`"01"`-`"69"`), `constraints.allowedCommunes` (valid communes for `currentWilaya`), and `constraints.allowedVariants` (available product variants or `[currentVariant]`).
 3. Validate the final object with `StandardizedDzOrderSchema.parse(...)` from `@akadli/adapter-contract`.
 
 ### Step 4: Implement `applyOrderDecision`
@@ -91,7 +91,7 @@ Every provider package must follow this exact directory layout:
 1. Validate `decision` with `FinalizedOrderDecisionSchema.parse(decision)`.
 2. Execute the mutation according to the platform's pattern (`Pattern A`, `Pattern B`, or `Pattern C` in `{{SKILL_PATH}}/references/provider-patterns.md`):
    - `CONFIRMED`: Mark order confirmed / append `"akadli-confirmed"` tag / trigger courier parcel creation or sheet status update.
-   - `MODIFIED`: Update shipping province/Wilaya (`finalWilaya`), city/commune (`finalCommune`), address note (`finalAddressNote`), and variant/size (`finalSize`), then mark confirmed.
+   - `MODIFIED`: Update shipping province/Wilaya (`finalWilaya`), city/commune (`finalCommune`), address note (`finalAddressNote`), and variant (`finalVariant`), then mark confirmed.
    - `REFUSED`: Cancel/refuse order and record `decision.reasonOrNotes`.
 3. Implement resilient HTTP error handling in `src/client.ts`:
    - **401 / 403 Unauthorized**: Fail fast without retrying and return a descriptive error in `rawResponse`.
@@ -104,4 +104,4 @@ Delegate to `git-tdd-atomic-workflow` to write the 5 mandatory Vitest + MSW test
 ## Gotchas
 
 - **Raw Body Preservation**: HMAC verification requires the exact unparsed `rawBody` (`string | Buffer`). Never pass `JSON.stringify(parsedBody)` to `verifyWebhook` because whitespace differences invalidate the HMAC signature.
-- **Line Item Variant Mutation**: In Shopify and WooCommerce, changing a customer's clothing/shoe size (`finalSize`) requires mapping `finalSize` to the store's `variant_id` or updating custom order attributes/notes when `variant_id` mapping is not provided in credentials. Always document the exact fallback behavior in `docs/api-spec.md`.
+- **Line Item Variant Mutation**: In Shopify and WooCommerce, changing a customer's item variant (`finalVariant`) requires mapping `finalVariant` to the store's `variant_id` or updating custom order attributes/notes when `variant_id` mapping is not provided in credentials. Always document the exact fallback behavior in `docs/api-spec.md`.

@@ -873,7 +873,7 @@ async function dispatchOrderMutation(
   try {
     const credentials = desc.getMutationCredentials();
     const constraints: OrderConstraints = {
-      allowedSizes: order.constraints?.allowed_sizes || [order.current_size],
+      allowedVariants: order.constraints?.allowed_variants || [order.current_variant],
       allowedWilayas: (order.constraints?.allowed_wilayas?.map((w) => {
         const match = w.match(/^(\d{2})/);
         return (match ? match[1] : w) as WilayaCode;
@@ -885,7 +885,7 @@ async function dispatchOrderMutation(
       {
         orderId: order.order_id || decision.order_id,
         status: decision.status,
-        finalSize: decision.final_size || undefined,
+        finalVariant: decision.final_variant || undefined,
         finalWilaya: decision.final_wilaya || undefined,
         finalCommune: decision.final_commune || undefined,
         finalAddressNote: decision.final_address_note || undefined,
@@ -901,7 +901,7 @@ async function dispatchOrderMutation(
     const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
       orderId: order.order_id || decision.order_id,
       status: decision.status,
-      finalSize: decision.final_size || undefined,
+      finalVariant: decision.final_variant || undefined,
       finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
       finalCommune: decision.final_commune || undefined,
       finalAddressNote: decision.final_address_note || undefined,
@@ -932,7 +932,7 @@ async function dispatchOrderMutation(
     const standardizedDecision: StandardizedFinalizedOrderDecision = {
       orderId: order.order_id || decision.order_id,
       status: decision.status,
-      finalSize: decision.final_size || undefined,
+      finalVariant: decision.final_variant || undefined,
       finalWilaya: fallbackWilaya,
       finalCommune: decision.final_commune || undefined,
       finalAddressNote: decision.final_address_note || undefined,

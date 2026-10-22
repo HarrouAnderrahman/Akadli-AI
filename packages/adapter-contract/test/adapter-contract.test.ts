@@ -59,12 +59,12 @@ describe("@akadli/adapter-contract", () => {
       customerPhone: "0550123456",
       itemName: "Veste Cuir Bomber Noir",
       priceDa: 6500,
-      currentSize: "XL",
+      currentVariant: "XL",
       currentWilaya: "16",
       currentCommune: "Bab El Oued",
       currentAddressNote: "Near the post office",
       constraints: {
-        allowedSizes: ["M", "L", "XL", "XXL"],
+        allowedVariants: ["M", "L", "XL", "XXL"],
         allowedWilayas: ["16", "09", "35"],
         allowedCommunes: ["Bab El Oued", "Casbah", "Hydra", "Kouba"]
       }
@@ -75,7 +75,7 @@ describe("@akadli/adapter-contract", () => {
       expect(parsed.orderId).toBe("ord_12345");
       expect(parsed.currentWilaya).toBe("16");
       expect(parsed.priceDa).toBe(6500);
-      expect(parsed.constraints.allowedSizes).toContain("XL");
+      expect(parsed.constraints.allowedVariants).toContain("XL");
     });
 
     it("should reject orders with missing required fields", () => {
@@ -92,7 +92,7 @@ describe("@akadli/adapter-contract", () => {
       const invalid = {
         ...validOrder,
         constraints: {
-          allowedSizes: [],
+          allowedVariants: [],
           allowedWilayas: ["16"],
           allowedCommunes: ["Bab El Oued"]
         }
@@ -110,7 +110,7 @@ describe("@akadli/adapter-contract", () => {
       };
       const parsed = FinalizedOrderDecisionSchema.parse(decision);
       expect(parsed.status).toBe("CONFIRMED");
-      expect(parsed.finalSize).toBeUndefined();
+      expect(parsed.finalVariant).toBeUndefined();
     });
 
     it("should validate REFUSED decision with cancellation reason", () => {
@@ -124,13 +124,13 @@ describe("@akadli/adapter-contract", () => {
     });
 
     it("should validate MODIFIED decision when at least one modification is provided", () => {
-      const sizeModified: FinalizedOrderDecision = {
+      const variantModified: FinalizedOrderDecision = {
         orderId: "ord_12345",
         status: "MODIFIED",
-        finalSize: "L",
+        finalVariant: "L",
         reasonOrNotes: "Customer requested L instead of XL"
       };
-      expect(FinalizedOrderDecisionSchema.parse(sizeModified).finalSize).toBe("L");
+      expect(FinalizedOrderDecisionSchema.parse(variantModified).finalVariant).toBe("L");
 
       const communeModified: FinalizedOrderDecision = {
         orderId: "ord_12345",
@@ -148,7 +148,7 @@ describe("@akadli/adapter-contract", () => {
         reasonOrNotes: "User claimed modification but none was specified"
       };
       expect(() => FinalizedOrderDecisionSchema.parse(invalidModified)).toThrow(
-        /When status is ["\\]+MODIFIED["\\]+, at least one of finalSize/
+        /When status is ["\\]+MODIFIED["\\]+, at least one of finalVariant/
       );
     });
   });

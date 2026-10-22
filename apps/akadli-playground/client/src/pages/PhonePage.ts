@@ -477,7 +477,7 @@ export class PhonePage {
               <!-- Order Summary Pill -->
               <div class="px-3.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 space-y-0.5">
                 <div class="font-medium text-white">
-                  ${this.currentOrder?.item_name || 'Article'} (${this.currentOrder?.current_size})
+                  ${this.currentOrder?.item_name || 'Article'} (${this.currentOrder?.current_variant})
                 </div>
                 <div class="text-zinc-400 text-[11px]">
                   ${this.currentOrder?.price_da} DA • ${this.currentOrder?.current_commune}

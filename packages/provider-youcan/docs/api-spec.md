@@ -91,17 +91,17 @@ YouCan webhook deliveries can arrive in several envelope formats:
      4. `variants[0]?.name` / `variants[0]?.title`
      5. `line_items[0]?.title` / `line_items[0]?.name`
      6. Fallback: `"Article"`
-   - **Selected Size (`currentSize`) Resolution (in priority order):**
-     1. Case-insensitive lookup in `variants[0]?.variant?.variations` (for keys matching `size`, `taille`, `pointure`, `مقاس`, or first non-default string value)
+   - **Selected Variant (`currentVariant`) Resolution (in priority order):**
+     1. Case-insensitive lookup in `variants[0]?.variant?.variations` (for keys matching `variant`, `size`, `taille`, `pointure`, `مقاس`, or first non-default string value)
      2. `variants[0]?.variant?.values?.[0]` (if not `"default"`)
      3. `variants[0]?.variation` (case-insensitive key lookup)
      4. `variants[0]?.title` / `variants[0]?.variant?.title` / `line_items[0]?.variant_title`
      5. Fallback: `"Standard"`
-   - **Allowed Sizes (`allowedSizes`) Extraction:**
+   - **Allowed Variants (`allowedVariants`) Extraction:**
      - Inspect `variants[0]?.variant?.product?.variant_options`
-     - Extract values from the option matching `/^(?:size|taille|pointure|مقاس)$/i` (or first option with non-empty string values array, e.g. `["M", "L", "XL"]`)
-     - Ensure `currentSize` is always included in `allowedSizes`
-     - Populates `constraints.allowedSizes` in `createStandardizedDzOrder`
+     - Extract values from the option matching `/^(?:size|taille|pointure|مقاس|variant)$/i` (or first option with non-empty string values array, e.g. `["M", "L", "XL"]`)
+     - Ensure `currentVariant` is always included in `allowedVariants`
+     - Populates `constraints.allowedVariants` in `createStandardizedDzOrder`
 
 3. **Resilient Multi-Candidate Algerian Address & Phone Extraction:**
    - **Phone Extraction:**
@@ -116,7 +116,7 @@ YouCan webhook deliveries can arrive in several envelope formats:
 
 4. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
    - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
-   - Populates `constraints` (`allowedWilayas`, `allowedCommunes`, `allowedSizes`) and builds a canonical `StandardizedDzOrder`.
+   - Populates `constraints` (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) and builds a canonical `StandardizedDzOrder`.
 
 ---
 
@@ -163,8 +163,8 @@ All requests include headers:
       "first_line": "Near Pharmacie Centrale"
     }
   },
-  "tags": ["akadli-modified", "akadli-size-XL"],
-  "notes": "[Akadli-AI] Order MODIFIED: Size -> XL; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
+  "tags": ["akadli-modified", "akadli-variant-XL"],
+  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
 }
 ```
 - **Returns:** `{ success: true, externalStatus: "UPDATED_AND_CONFIRMED", rawResponse: ... }`

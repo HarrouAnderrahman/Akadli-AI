@@ -14,11 +14,11 @@ describe("@akadli/core", () => {
     rawCustomerPhone: "+213 (0) 550 11 22 33",
     itemName: "Chaussures Cuir Oxford",
     priceDa: 8900,
-    currentSize: "42",
+    currentVariant: "42",
     rawWilaya: "13 - Tlemcen",
     rawCommune: "Mansoura",
     currentAddressNote: "Near the grand mosque",
-    allowedSizes: ["41", "42", "43", "44"]
+    allowedVariants: ["41", "42", "43", "44"]
   };
 
   describe("createStandardizedDzOrder", () => {
@@ -28,7 +28,7 @@ describe("@akadli/core", () => {
       expect(order.customerPhone).toBe("0550112233");
       expect(order.currentWilaya).toBe("13");
       expect(order.currentCommune).toBe("Mansourah");
-      expect(order.constraints.allowedSizes).toEqual(["41", "42", "43", "44"]);
+      expect(order.constraints.allowedVariants).toEqual(["41", "42", "43", "44"]);
       expect(order.constraints.allowedWilayas).toEqual(["13"]);
       expect(order.constraints.allowedCommunes.length).toBeGreaterThan(5);
       expect(order.constraints.allowedCommunes).toContain("Tlemcen");
@@ -46,11 +46,11 @@ describe("@akadli/core", () => {
       expect(vars.customer_phone_e164).toBe("+213550112233");
       expect(vars.item_name).toBe("Chaussures Cuir Oxford");
       expect(vars.price_da).toBe("8900");
-      expect(vars.current_size).toBe("42");
+      expect(vars.current_variant).toBe("42");
       expect(vars.current_wilaya).toBe("13");
       expect(vars.current_commune).toBe("Mansourah");
       expect(vars.current_address_note).toBe("Near the grand mosque");
-      expect(vars.allowed_sizes).toBe("41, 42, 43, 44");
+      expect(vars.allowed_variants).toBe("41, 42, 43, 44");
       expect(vars.allowed_wilayas).toBe("13");
       expect(vars.allowed_communes).toContain("Mansourah");
     });
@@ -93,9 +93,9 @@ describe("@akadli/core", () => {
       const payload = {
         orderId: "ord_dz_999",
         status: "MODIFIED",
-        finalSize: "43",
+        finalVariant: "43",
         finalCommune: "Mansoura",
-        reasonOrNotes: "Customer requested size 43"
+        reasonOrNotes: "Customer requested variant 43"
       };
 
       const result = await handleFinalizeOrderToolCall(
@@ -106,17 +106,17 @@ describe("@akadli/core", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.decision?.finalSize).toBe("43");
+      expect(result.decision?.finalVariant).toBe("43");
       expect(result.decision?.finalCommune).toBe("Mansourah");
     });
 
-    it("should reject MODIFIED decision if finalSize is not in allowedSizes", async () => {
+    it("should reject MODIFIED decision if finalVariant is not in allowedVariants", async () => {
       const order = createStandardizedDzOrder(baseOrderParams);
       const payload = {
         orderId: "ord_dz_999",
         status: "MODIFIED",
-        finalSize: "50", // Not allowed
-        reasonOrNotes: "Customer asked for size 50"
+        finalVariant: "50", // Not allowed
+        reasonOrNotes: "Customer asked for variant 50"
       };
 
       const result = await handleFinalizeOrderToolCall(
@@ -127,7 +127,7 @@ describe("@akadli/core", () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe("INVALID_SIZE_CONSTRAINT");
+      expect(result.error).toBe("INVALID_VARIANT_CONSTRAINT");
     });
 
     it("should reject malformed tool payloads", async () => {
@@ -151,7 +151,7 @@ describe("@akadli/core", () => {
       const snakePayload = {
         order_id: "ord_dz_999",
         status: "MODIFIED",
-        final_size: "42",
+        final_variant: "42",
         final_wilaya: "13 - Tlemcen",
         final_commune: "Mansoura",
         reason_or_notes: "Customer confirmed over voice"
@@ -166,8 +166,30 @@ describe("@akadli/core", () => {
 
       expect(result.success).toBe(true);
       expect(result.decision?.orderId).toBe("ord_dz_999");
+      expect(result.decision?.finalVariant).toBe("42");
       expect(result.decision?.finalWilaya).toBe("13");
       expect(result.decision?.finalCommune).toBe("Mansourah");
+    });
+
+    it("should support backwards-compatible final_size in tool payload", async () => {
+      const order = createStandardizedDzOrder(baseOrderParams);
+      const legacyPayload = {
+        order_id: "ord_dz_999",
+        status: "MODIFIED",
+        final_size: "42",
+        final_wilaya: "13 - Tlemcen",
+        reason_or_notes: "Legacy tool call"
+      };
+
+      const result = await handleFinalizeOrderToolCall(
+        legacyPayload,
+        mockProvider,
+        { apiKey: "test_key" },
+        order.constraints
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.decision?.finalVariant).toBe("42");
     });
   });
 });

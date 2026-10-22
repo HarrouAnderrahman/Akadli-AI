@@ -25,7 +25,7 @@ Use Pattern A when the platform provides both outbound order webhooks and authen
 
 ### 1. Inbound Flow (`verifyWebhook` + `parseWebhookOrder`)
 - Verify the platform's HMAC signature against the raw request body.
-- Extract `orderId`, `customerName`, `customerPhone` (from `shipping_address.phone` or `billing_address.phone`), `itemName` (first line item title), `priceDa` (total price in DZD), `currentSize` (variant title/option), `currentWilaya` (`shipping_address.province` or `state`), and `currentCommune` (`shipping_address.city`).
+- Extract `orderId`, `customerName`, `customerPhone` (from `shipping_address.phone` or `billing_address.phone`), `itemName` (first line item title), `priceDa` (total price in DZD), `currentVariant` (variant title/option), `currentWilaya` (`shipping_address.province` or `state`), and `currentCommune` (`shipping_address.city`).
 - Normalize `customerPhone` and `currentWilaya` using `@akadli/dz-geo`.
 
 ### 2. Outbound Flow (`applyOrderDecision`)
@@ -69,8 +69,8 @@ export async function applyPatternADecision(
       ...(decision.finalCommune ? { city: decision.finalCommune } : {}),
       ...(decision.finalAddressNote ? { address2: decision.finalAddressNote } : {})
     };
-    if (decision.finalSize) {
-      updatePayload.custom_attributes = [{ key: "confirmed_size", value: decision.finalSize }];
+    if (decision.finalVariant) {
+      updatePayload.custom_attributes = [{ key: "confirmed_variant", value: decision.finalVariant }];
     }
   }
 
@@ -162,7 +162,7 @@ export async function applyPatternCDecision(
       provider: providerName,
       orderId,
       status: decision.status,
-      finalSize: decision.finalSize ?? null,
+      finalVariant: decision.finalVariant ?? null,
       finalWilaya: decision.finalWilaya ?? null,
       finalCommune: decision.finalCommune ?? null,
       finalAddressNote: decision.finalAddressNote ?? null,

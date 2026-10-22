@@ -15,7 +15,7 @@
 | الدالة | نوع الإرجاع | الوصف |
 | :--- | :--- | :--- |
 | `createStandardizedDzOrder(params)` | `StandardizedDzOrder` | إنشاء طلب قياسي بعد تطبيع الهاتف والولاية والبلدية وتحديد قيود التحقق الجغرافية |
-| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | بناء متغيرات ElevenAgents الديناميكية (`price_da`، `allowed_sizes`، `allowed_wilayas`، إلخ) |
+| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | بناء متغيرات ElevenAgents الديناميكية (`price_da`، `allowed_variants`، `allowed_wilayas`، إلخ) |
 | `handleFinalizeOrderToolCall(payload, provider, creds, constraints)` | `Promise<FinalizeOrderToolResult>` | التحقق من صحة استدعاء أداة `finalize_order_decision` ومقارنتها بالقيود ثم استدعاء تحديث المتجر |
 
 ---
@@ -58,10 +58,10 @@ const order = createStandardizedDzOrder({
   rawCustomerPhone: "0550123456",
   itemName: "حذاء رياضي Air Max",
   priceDa: 4500,
-  currentSize: "42",
+  currentVariant: "42",
   rawWilaya: "بريكة",
   rawCommune: "بريكة",
-  allowedSizes: ["41", "42", "43"]
+  allowedVariants: ["41", "42", "43"]
 });
 
 // 2. توليد المتغيرات الديناميكية للمكالمة الصوتية

@@ -244,7 +244,7 @@ export class ShopifyProvider implements IEcommerceProvider {
     // 6. Items & Pricing
     const firstItem = data.line_items[0];
     const itemName = firstItem?.title || "Article";
-    const currentSize = firstItem?.variant_title || "Standard";
+    const currentVariant = firstItem?.variant_title || "Standard";
     const priceDa = Math.round(Number(data.total_price || 0));
     const storeName = data.shop_name || data.store_name || "Shopify Store";
 
@@ -261,7 +261,7 @@ export class ShopifyProvider implements IEcommerceProvider {
       rawCustomerPhone,
       itemName,
       priceDa,
-      currentSize,
+      currentVariant,
       rawWilaya,
       rawCommune,
       currentAddressNote
@@ -295,14 +295,14 @@ export class ShopifyProvider implements IEcommerceProvider {
 
     if (validDecision.status === "MODIFIED") {
       const tagsList = ["akadli-modified"];
-      if (validDecision.finalSize) {
-        tagsList.push(`akadli-size-${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        tagsList.push(`akadli-variant-${validDecision.finalVariant}`);
       }
       const tags = tagsList.join(", ");
 
       const noteParts: string[] = [];
-      if (validDecision.finalSize) {
-        noteParts.push(`Size -> ${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }
       if (validDecision.finalWilaya) {
         noteParts.push(`Wilaya -> ${validDecision.finalWilaya}`);

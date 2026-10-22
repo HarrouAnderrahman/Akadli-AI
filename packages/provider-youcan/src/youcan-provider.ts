@@ -358,24 +358,24 @@ export class YouCanProvider implements IEcommerceProvider {
       firstLineItem?.name?.trim() ||
       "Article";
 
-    // 7. Selected Variant / Size (currentSize) Resolution
+    // 7. Selected Variant (currentVariant) Resolution
     const isNonDefault = (val: unknown): val is string => {
       if (typeof val !== "string") return false;
       const trimmed = val.trim();
       return Boolean(trimmed && trimmed.toLowerCase() !== "default");
     };
 
-    const sizeKeyRegex = /(?:size|taille|pointure|مقاس)/i;
+    const variantKeyRegex = /(?:size|taille|pointure|مقاس|variant)/i;
 
-    const extractSizeFromMap = (
+    const extractVariantFromMap = (
       map: Record<string, unknown> | null | undefined
     ): string | undefined => {
       if (!map || typeof map !== "object") return undefined;
       const entries = Object.entries(map);
 
-      // Check for explicit size key
+      // Check for explicit variant/size key
       for (const [key, val] of entries) {
-        if (sizeKeyRegex.test(key) && isNonDefault(val)) {
+        if (variantKeyRegex.test(key) && isNonDefault(val)) {
           return val.trim();
         }
       }
@@ -390,30 +390,30 @@ export class YouCanProvider implements IEcommerceProvider {
       return undefined;
     };
 
-    let currentSize: string | undefined;
+    let currentVariant: string | undefined;
 
     // Priority 1: variant.variations
     if (firstVariant?.variant?.variations) {
-      currentSize = extractSizeFromMap(firstVariant.variant.variations);
+      currentVariant = extractVariantFromMap(firstVariant.variant.variations);
     }
 
     // Priority 2: variant.values[0]
-    if (!currentSize && firstVariant?.variant?.values?.length) {
+    if (!currentVariant && firstVariant?.variant?.values?.length) {
       const firstVal = firstVariant.variant.values[0];
       if (isNonDefault(firstVal)) {
-        currentSize = firstVal.trim();
+        currentVariant = firstVal.trim();
       }
     }
 
     // Priority 3: variation object (legacy or standard)
-    if (!currentSize && firstVariant?.variation) {
-      currentSize = extractSizeFromMap(
+    if (!currentVariant && firstVariant?.variation) {
+      currentVariant = extractVariantFromMap(
         firstVariant.variation as Record<string, unknown>
       );
     }
 
     // Priority 4: title / variant.title / line_item variant_title
-    if (!currentSize) {
+    if (!currentVariant) {
       const candidateTitles = [
         firstVariant?.title,
         firstVariant?.variant?.title,
@@ -421,31 +421,31 @@ export class YouCanProvider implements IEcommerceProvider {
       ];
       for (const title of candidateTitles) {
         if (isNonDefault(title)) {
-          currentSize = title.trim();
+          currentVariant = title.trim();
           break;
         }
       }
     }
 
-    if (!currentSize) {
-      currentSize = "Standard";
+    if (!currentVariant) {
+      currentVariant = "Standard";
     }
 
-    // 8. Allowed Sizes (allowedSizes) Extraction from variant_options
-    let allowedSizes: string[] | undefined;
+    // 8. Allowed Variants (allowedVariants) Extraction from variant_options
+    let allowedVariants: string[] | undefined;
     const variantOptions = firstVariant?.variant?.product?.variant_options;
 
     if (Array.isArray(variantOptions) && variantOptions.length > 0) {
-      const sizeOption = variantOptions.find(
+      const variantOption = variantOptions.find(
         (opt) =>
           opt?.name &&
-          /^(?:size|taille|pointure|مقاس)$/i.test(opt.name.trim()) &&
+          /^(?:size|taille|pointure|مقاس|variant)$/i.test(opt.name.trim()) &&
           Array.isArray(opt.values) &&
           opt.values.length > 0
       );
 
       const targetOption =
-        sizeOption ||
+        variantOption ||
         variantOptions.find(
           (opt) => Array.isArray(opt?.values) && opt.values.length > 0
         );
@@ -456,16 +456,16 @@ export class YouCanProvider implements IEcommerceProvider {
           .filter(Boolean);
 
         if (cleanedValues.length > 0) {
-          if (currentSize && !cleanedValues.includes(currentSize)) {
-            cleanedValues.push(currentSize);
+          if (currentVariant && !cleanedValues.includes(currentVariant)) {
+            cleanedValues.push(currentVariant);
           }
-          allowedSizes = Array.from(new Set(cleanedValues));
+          allowedVariants = Array.from(new Set(cleanedValues));
         }
       }
     }
 
-    if (!allowedSizes || allowedSizes.length === 0) {
-      allowedSizes = [currentSize];
+    if (!allowedVariants || allowedVariants.length === 0) {
+      allowedVariants = [currentVariant];
     }
 
     const priceDa = Math.round(Number(data.total || 0));
@@ -478,11 +478,11 @@ export class YouCanProvider implements IEcommerceProvider {
       rawCustomerPhone,
       itemName,
       priceDa,
-      currentSize,
+      currentVariant,
       rawWilaya,
       rawCommune,
       currentAddressNote,
-      allowedSizes
+      allowedVariants
     });
   }
 
@@ -515,13 +515,13 @@ export class YouCanProvider implements IEcommerceProvider {
 
     if (validDecision.status === "MODIFIED") {
       const tags = ["akadli-modified"];
-      if (validDecision.finalSize) {
-        tags.push(`akadli-size-${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        tags.push(`akadli-variant-${validDecision.finalVariant}`);
       }
 
       const noteParts: string[] = [];
-      if (validDecision.finalSize) {
-        noteParts.push(`Size -> ${validDecision.finalSize}`);
+      if (validDecision.finalVariant) {
+        noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }
       if (validDecision.finalWilaya) {
         noteParts.push(`Wilaya -> ${validDecision.finalWilaya}`);

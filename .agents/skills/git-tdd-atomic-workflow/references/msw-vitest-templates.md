@@ -111,7 +111,7 @@ describe("Provider Integration Suite (5 Mandatory Scenarios)", () => {
       {
         orderId: "ORD-1001",
         status: "MODIFIED",
-        finalSize: "XL",
+        finalVariant: "XL",
         finalWilaya: "13",
         finalCommune: "Mansourah",
         finalAddressNote: "Near Pharmacie Centrale",

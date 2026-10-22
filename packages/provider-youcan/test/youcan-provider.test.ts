@@ -149,7 +149,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.customerName).toBe("Yasmine Hadji");
     expect(order.customerPhone).toBe("0770987654");
     expect(order.itemName).toBe("Karakou Algérois Velours");
-    expect(order.currentSize).toBe("38");
+    expect(order.currentVariant).toBe("38");
     expect(order.priceDa).toBe(6400);
     expect(order.currentWilaya).toBe("31"); // Oran
     expect(order.currentCommune).toBe("Bir El Djir");
@@ -159,7 +159,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.constraints.allowedWilayas).toContain("31");
     expect(order.constraints.allowedCommunes).toContain("Bir El Djir");
     expect(order.constraints.allowedCommunes).toContain("Oran");
-    expect(order.constraints.allowedSizes).toEqual(["38"]);
+    expect(order.constraints.allowedVariants).toEqual(["38"]);
   });
 
   it("3. parses Algerian 1-page COD form (extra_fields) fixture into canonical StandardizedDzOrder (2026 Wilaya 68 - Bou Saada)", async () => {
@@ -170,7 +170,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.customerName).toBe("Lydia Saidi");
     expect(order.customerPhone).toBe("0661234567");
     expect(order.itemName).toBe("Robe Kabyle Moderne");
-    expect(order.currentSize).toBe("M");
+    expect(order.currentVariant).toBe("M");
     expect(order.priceDa).toBe(4800);
     expect(order.currentWilaya).toBe("68"); // Bou Saada (2026 division)
     expect(order.currentCommune).toBe("Bou Saada");
@@ -181,10 +181,10 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     // Constraints derived from Wilaya 68
     expect(order.constraints.allowedWilayas).toContain("68");
     expect(order.constraints.allowedCommunes).toContain("Bou Saada");
-    expect(order.constraints.allowedSizes).toEqual(["M"]);
+    expect(order.constraints.allowedVariants).toEqual(["M"]);
   });
 
-  it("4. unwraps official YouCan Resthook delivery envelope and extracts variant.product.name, variations size, and variant_options allowedSizes", async () => {
+  it("4. unwraps official YouCan Resthook delivery envelope and extracts variant.product.name, variations variant, and variant_options allowedVariants", async () => {
     // Delivery wrapper where root id is absent or delivery-level, and order data is in .data
     const order = await provider.parseWebhookOrder(resthookPayload);
 
@@ -195,9 +195,9 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.currentWilaya).toBe("13"); // Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
     expect(order.itemName).toBe("Ensemble Adidas");
-    expect(order.currentSize).toBe("XL");
+    expect(order.currentVariant).toBe("XL");
     expect(order.priceDa).toBe(4500);
-    expect(order.constraints.allowedSizes).toEqual(["M", "L", "XL"]);
+    expect(order.constraints.allowedVariants).toEqual(["M", "L", "XL"]);
   });
 
   it("5. unwraps App Webhook envelope ({ id: 'deliv-uuid', event: 'order.created', payload: { ... } }) and handles order.ref", async () => {
@@ -238,11 +238,11 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.currentWilaya).toBe("16"); // Alger
     expect(order.currentCommune).toBe("Bab El Oued");
     expect(order.itemName).toBe("Chemise Lin Homme");
-    expect(order.currentSize).toBe("L");
+    expect(order.currentVariant).toBe("L");
     expect(order.priceDa).toBe(5500);
   });
 
-  it("6. extracts currentSize and allowedSizes from variations using Arabic/French keys and fallback values", async () => {
+  it("6. extracts currentVariant and allowedVariants from variations using Arabic/French keys and fallback values", async () => {
     const arabicPayload = {
       event_name: "order.created",
       data: {
@@ -280,8 +280,8 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
 
     const order = await provider.parseWebhookOrder(arabicPayload);
     expect(order.itemName).toBe("Djellaba Homme");
-    expect(order.currentSize).toBe("XXL");
-    expect(order.constraints.allowedSizes).toEqual(["L", "XL", "XXL"]);
+    expect(order.currentVariant).toBe("XXL");
+    expect(order.constraints.allowedVariants).toEqual(["L", "XL", "XXL"]);
   });
 
   it("7. applies resilient multi-field Algerian Wilaya/Commune extraction when region/state are null", async () => {
@@ -368,7 +368,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
       {
         orderId: "ord_yc_882910",
         status: "MODIFIED",
-        finalSize: "40",
+        finalVariant: "40",
         finalWilaya: "31",
         finalCommune: "Bir El Djir",
         finalAddressNote: "Nouvelle adresse près du rond-point",
@@ -386,9 +386,9 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
       `Bearer ${ACCESS_TOKEN}`
     );
     expect(putReq.body).toEqual({
-      tags: ["akadli-modified", "akadli-size-40"],
+      tags: ["akadli-modified", "akadli-variant-40"],
       notes:
-        "[Akadli-AI] Order MODIFIED: Size -> 40; Wilaya -> 31; Commune -> Bir El Djir; Note -> Nouvelle adresse près du rond-point; Details: Taille changée de 38 à 40",
+        "[Akadli-AI] Order MODIFIED: Variant -> 40; Wilaya -> 31; Commune -> Bir El Djir; Note -> Nouvelle adresse près du rond-point; Details: Taille changée de 38 à 40",
       shipping: {
         address: {
           region: "31",

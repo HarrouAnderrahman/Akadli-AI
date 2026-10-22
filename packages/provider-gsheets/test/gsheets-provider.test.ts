@@ -195,10 +195,10 @@ describe("@akadli/provider-gsheets (GSheetsProvider Suite)", () => {
       expect(order.currentCommune).toBe("Bab Azzouar");
       expect(order.currentAddressNote).toBe("Cité 8 Mai 1945, Bâtiment C");
       expect(order.itemName).toBe("Sneakers Air Dz Sport");
-      expect(order.currentSize).toBe("42");
+      expect(order.currentVariant).toBe("42");
       expect(order.priceDa).toBe(5500);
 
-      expect(order.constraints.allowedSizes).toContain("42");
+      expect(order.constraints.allowedVariants).toContain("42");
       expect(order.constraints.allowedWilayas).toContain("16");
       expect(order.constraints.allowedCommunes).toContain("Bab Azzouar");
     });
@@ -216,10 +216,10 @@ describe("@akadli/provider-gsheets (GSheetsProvider Suite)", () => {
       expect(order.currentCommune).toBe("Barika");
       expect(order.currentAddressNote).toBe("حي النصر قرب المسجد العتيق");
       expect(order.itemName).toBe("قندورة عاصمية تقليدية");
-      expect(order.currentSize).toBe("XL");
+      expect(order.currentVariant).toBe("XL");
       expect(order.priceDa).toBe(8900);
 
-      expect(order.constraints.allowedSizes).toContain("XL");
+      expect(order.constraints.allowedVariants).toContain("XL");
       expect(order.constraints.allowedWilayas).toContain("60");
       expect(order.constraints.allowedCommunes).toContain("Barika");
     });
@@ -254,13 +254,13 @@ describe("@akadli/provider-gsheets (GSheetsProvider Suite)", () => {
       );
     });
 
-    it("executes MODIFIED mutation and updates size, address, commune, and wilaya cells", async () => {
+    it("executes MODIFIED mutation and updates variant, address, commune, and wilaya cells", async () => {
       const result = await provider.applyOrderDecision(
         "ROW-42",
         {
           orderId: "ROW-42",
           status: "MODIFIED",
-          finalSize: "43",
+          finalVariant: "43",
           finalWilaya: "13",
           finalCommune: "Maghnia",
           finalAddressNote: "Cité El Wafa",

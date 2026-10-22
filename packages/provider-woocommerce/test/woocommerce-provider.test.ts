@@ -139,7 +139,7 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     expect(order.customerName).toBe("Karim Mansouri");
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Chaussures de Sport Orthopédiques");
-    expect(order.currentSize).toBe("42");
+    expect(order.currentVariant).toBe("42");
     expect(order.priceDa).toBe(6500);
     expect(order.currentWilaya).toBe("13"); // Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
@@ -149,7 +149,7 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     expect(order.constraints.allowedWilayas).toContain("13");
     expect(order.constraints.allowedCommunes).toContain("Maghnia");
     expect(order.constraints.allowedCommunes).toContain("Tlemcen");
-    expect(order.constraints.allowedSizes).toEqual(["42"]);
+    expect(order.constraints.allowedVariants).toEqual(["42"]);
   });
 
   it("3. parses Algerian COD plugin meta_data fixture (Wilaya 60 - Barika) into canonical StandardizedDzOrder", async () => {
@@ -160,7 +160,7 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     expect(order.customerName).toBe("Amine Benali");
     expect(order.customerPhone).toBe("0660987654");
     expect(order.itemName).toBe("Robe Traditionnelle Chaouie");
-    expect(order.currentSize).toBe("L");
+    expect(order.currentVariant).toBe("L");
     expect(order.priceDa).toBe(8900);
     expect(order.currentWilaya).toBe("60"); // 60 - Barika
     expect(order.currentCommune).toBe("Barika");
@@ -169,7 +169,7 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     // Constraints derived from Wilaya 60
     expect(order.constraints.allowedWilayas).toContain("60");
     expect(order.constraints.allowedCommunes).toContain("Barika");
-    expect(order.constraints.allowedSizes).toEqual(["L"]);
+    expect(order.constraints.allowedVariants).toEqual(["L"]);
   });
 
   it("4. executes applyOrderDecision for CONFIRMED and verifies Basic Auth, PUT order meta, and POST order note", async () => {
@@ -204,13 +204,13 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     });
   });
 
-  it("5. executes applyOrderDecision for MODIFIED and asserts updated shipping/billing address, size meta, and order note", async () => {
+  it("5. executes applyOrderDecision for MODIFIED and asserts updated shipping/billing address, variant meta, and order note", async () => {
     const result = await provider.applyOrderDecision(
       "54321",
       {
         orderId: "54321",
         status: "MODIFIED",
-        finalSize: "43",
+        finalVariant: "43",
         finalWilaya: "13",
         finalCommune: "Maghnia",
         finalAddressNote: "Nouvelle adresse près du stade",
@@ -238,13 +238,13 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
       },
       meta_data: [
         { key: "_akadli_status", value: "akadli-modified" },
-        { key: "_akadli_size", value: "43" }
+        { key: "_akadli_variant", value: "43" }
       ]
     });
 
     expect(capturedNoteRequests.length).toBe(1);
     const noteReq = capturedNoteRequests[0];
-    expect(noteReq.body.note).toContain("Size -> 43");
+    expect(noteReq.body.note).toContain("Variant -> 43");
     expect(noteReq.body.note).toContain("Wilaya -> 13");
     expect(noteReq.body.note).toContain("Commune -> Maghnia");
     expect(noteReq.body.note).toContain("Details: Taille changée de 42 à 43");

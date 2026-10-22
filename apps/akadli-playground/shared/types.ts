@@ -15,7 +15,7 @@ export type {
 };
 
 export interface OrderConstraints {
-  allowed_sizes: string[];
+  allowed_variants: string[];
   allowed_wilayas: string[];
   allowed_communes: string[];
 }
@@ -27,7 +27,7 @@ export interface OrderPayload {
   customer_phone: string;
   item_name: string;
   price_da: number;
-  current_size: string;
+  current_variant: string;
   current_wilaya: string;
   current_commune: string;
   current_address_note: string;
@@ -44,12 +44,12 @@ export function orderPayloadToStandardizedDzOrder(order: OrderPayload): Standard
     customerPhone: order.customer_phone,
     itemName: order.item_name,
     priceDa: order.price_da,
-    currentSize: order.current_size,
+    currentVariant: order.current_variant,
     currentWilaya: order.current_wilaya as WilayaCode,
     currentCommune: order.current_commune,
     currentAddressNote: order.current_address_note || "",
     constraints: {
-      allowedSizes: order.constraints.allowed_sizes,
+      allowedVariants: order.constraints.allowed_variants,
       allowedWilayas: order.constraints.allowed_wilayas as WilayaCode[],
       allowedCommunes: order.constraints.allowed_communes
     }
@@ -67,12 +67,12 @@ export function standardizedDzOrderToOrderPayload(
     customer_phone: stdOrder.customerPhone,
     item_name: stdOrder.itemName,
     price_da: stdOrder.priceDa,
-    current_size: stdOrder.currentSize,
+    current_variant: stdOrder.currentVariant,
     current_wilaya: stdOrder.currentWilaya,
     current_commune: stdOrder.currentCommune,
     current_address_note: stdOrder.currentAddressNote || '',
     constraints: {
-      allowed_sizes: stdOrder.constraints.allowedSizes,
+      allowed_variants: stdOrder.constraints.allowedVariants,
       allowed_wilayas: stdOrder.constraints.allowedWilayas,
       allowed_communes: stdOrder.constraints.allowedCommunes
     },
@@ -82,12 +82,12 @@ export function standardizedDzOrderToOrderPayload(
 
 export type OrderDecisionStatus = 'CONFIRMED' | 'REFUSED' | 'MODIFIED';
 
-export type ModificationField = 'size' | 'wilaya' | 'commune' | 'address_note';
+export type ModificationField = 'variant' | 'wilaya' | 'commune' | 'address_note';
 
 export interface FinalizeOrderDecision {
   order_id: string;
   status: OrderDecisionStatus;
-  final_size: string;
+  final_variant: string;
   final_wilaya: string;
   final_commune: string;
   final_address_note: string;

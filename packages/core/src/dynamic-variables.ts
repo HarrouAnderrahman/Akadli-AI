@@ -8,11 +8,11 @@ export interface ElevenAgentsDynamicVariables {
   customer_phone_e164: string;
   item_name: string;
   price_da: string;
-  current_size: string;
+  current_variant: string;
   current_wilaya: string;
   current_commune: string;
   current_address_note: string;
-  allowed_sizes: string;
+  allowed_variants: string;
   allowed_wilayas: string;
   allowed_communes: string;
   [key: string]: string;
@@ -34,11 +34,11 @@ export function buildElevenAgentsDynamicVariables(
     customer_phone_e164: phoneE164,
     item_name: order.itemName,
     price_da: String(Math.round(order.priceDa)),
-    current_size: order.currentSize,
+    current_variant: order.currentVariant,
     current_wilaya: order.currentWilaya,
     current_commune: order.currentCommune,
     current_address_note: order.currentAddressNote || "",
-    allowed_sizes: order.constraints.allowedSizes.join(", "),
+    allowed_variants: order.constraints.allowedVariants.join(", "),
     allowed_wilayas: order.constraints.allowedWilayas.join(", "),
     allowed_communes: order.constraints.allowedCommunes.join(", ")
   };

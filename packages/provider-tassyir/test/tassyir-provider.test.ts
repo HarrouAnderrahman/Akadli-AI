@@ -399,7 +399,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(order.customerName).toBe("Khadija Benali");
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Robe Traditionnelle Constantinoise");
-    expect(order.currentSize).toBe("L");
+    expect(order.currentVariant).toBe("L");
     expect(order.priceDa).toBe(8500);
     expect(order.currentWilaya).toBe("25");
     expect(order.currentCommune).toBe("El Khroub");
@@ -407,7 +407,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
 
     expect(order.constraints.allowedWilayas).toContain("25");
     expect(order.constraints.allowedCommunes).toContain("El Khroub");
-    expect(order.constraints.allowedSizes).toEqual(["L"]);
+    expect(order.constraints.allowedVariants).toEqual(["L"]);
 
     // Stopdesk fixture: Wilaya 59 (Aflou - 2026 division)
     const stopdeskOrder = await provider.parseWebhookOrder(stopdeskPayload);
@@ -417,7 +417,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(stopdeskOrder.customerName).toBe("Walid Sahraoui");
     expect(stopdeskOrder.customerPhone).toBe("0661987654");
     expect(stopdeskOrder.itemName).toBe("Wireless Gaming Headset");
-    expect(stopdeskOrder.currentSize).toBe("Black");
+    expect(stopdeskOrder.currentVariant).toBe("Black");
     expect(stopdeskOrder.priceDa).toBe(6200);
     expect(stopdeskOrder.currentWilaya).toBe("59");
     expect(stopdeskOrder.currentCommune).toBe("Aflou");
@@ -425,7 +425,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
 
     expect(stopdeskOrder.constraints.allowedWilayas).toContain("59");
     expect(stopdeskOrder.constraints.allowedCommunes).toContain("Aflou");
-    expect(stopdeskOrder.constraints.allowedSizes).toEqual(["Black"]);
+    expect(stopdeskOrder.constraints.allowedVariants).toEqual(["Black"]);
   });
 
   it("9. parses Tassyir orders/created with numeric townOns, null address2, and orderNumber successfully", async () => {
@@ -493,7 +493,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(order.priceDa).toBe(4600);
     expect(order.currentAddressNote).toBe("12 Rue Didouche Mourad");
     expect(order.itemName).toBe("T-Shirt Algerie");
-    expect(order.currentSize).toBe("L");
+    expect(order.currentVariant).toBe("L");
   });
 
   it("10. throws descriptive error when buyer phone is masked or order is in waiting state", async () => {
@@ -575,7 +575,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       {
         orderId: "741000000000000001",
         status: "MODIFIED",
-        finalSize: "L",
+        finalVariant: "L",
         finalWilaya: "13",
         finalCommune: "Maghnia",
         finalAddressNote: "Cite Imama",
@@ -595,7 +595,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
         provinceCode: 13,
         address: "Maghnia - Cite Imama",
       },
-      note: "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-size-L) — Commune: Maghnia | Size: L | Address: Cite Imama | Notes: Customer changed to size L and Maghnia",
+      note: "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed to size L and Maghnia",
     });
 
     expect(capturedConfirmRequests.length).toBe(1);
@@ -751,8 +751,8 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     const order = await provider.parseWebhookOrder(liveOrderPayload);
     expect(order.orderId).toBe("768511937683136113");
     expect(order.itemName).toBe("nike ensemble");
-    expect(order.currentSize).toBe("M");
-    expect(order.constraints.allowedSizes).toEqual(["M"]);
+    expect(order.currentVariant).toBe("M");
+    expect(order.constraints.allowedVariants).toEqual(["M"]);
     expect(order.currentWilaya).toBe("13");
     expect(order.currentAddressNote).toBe("أولاد أحمد");
     expect(order.priceDa).toBe(4000);
@@ -812,8 +812,8 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       credentials: CREDENTIALS,
     });
 
-    expect(order.currentSize).toBe("M");
-    expect(order.constraints.allowedSizes).toEqual(["S", "M", "L", "XL"]);
+    expect(order.currentVariant).toBe("M");
+    expect(order.constraints.allowedVariants).toEqual(["S", "M", "L", "XL"]);
   });
 
   it("17. unit tests variant parsing helpers for multiple delimiters and edge cases", () => {
