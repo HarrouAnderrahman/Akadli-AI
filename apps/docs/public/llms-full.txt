@@ -1,0 +1,2057 @@
+# Akadli-AI Full Repository Context for LLMs
+
+This file contains the complete, unedited architectural specifications, agent invariants, and documentation for all packages in the Akadli-AI monorepo (https://akadli.me).
+Generated at: 2026-10-22T22:11:35.092Z
+
+
+================================================================================
+# FILE: AGENTS.md (Architectural Invariants & Agent Guidelines)
+================================================================================
+
+
+# Akadli-AI Agent Guidelines & Architectural Invariants
+
+Canonical architectural reference for stateless AI coding sessions across the Akadli-AI monorepo.
+
+## 1. Project Identity & Namespace
+- **Project:** Akadli-AI (Open-source Algerian COD Voice Confirmation Engine & Store Adapters).
+- **Scope & Namespaces:** Strictly `@akadli/*` (`@akadli/adapter-contract`, `@akadli/dz-geo`, `@akadli/core`, `@akadli/provider-<name>`, `@akadli/playground`). Never use legacy `@dz-voice/*` or `dz-*` tag prefixes.
+
+## 2. Monorepo Architecture & Package Boundaries
+- `packages/adapter-contract`: Pure Zod schemas & TypeScript interfaces (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`). Zero runtime logic.
+- `packages/dz-geo`: Official 2026 Algerian administrative divisions (**69 Wilayas, 1,708 Communes**) + `+213` phone normalization.
+- `packages/core`: Stateless voice orchestration (`createStandardizedDzOrder`, `buildElevenAgentsDynamicVariables`, `handleFinalizeOrderToolCall`). Note: ElevenLabs system prompts and tool definitions live in the ElevenLabs dashboard, NOT in local code.
+- `packages/provider-<name>`: Stateless e-commerce adapters implementing `IEcommerceProvider`. Each provider MUST have:
+  - `docs/api-spec.md` & `fixtures/*.json`
+  - `src/schemas.ts`, `src/<name>-client.ts`, `src/<name>-provider.ts`, `src/index.ts`
+  - `test/<name>-provider.test.ts` (Vitest + MSW `msw/node` covering all 5 mutation/verification scenarios)
+- `apps/akadli-playground`: Local HTTPS WebRTC phone & webhook testing sandbox (`/admin` and `/phone`). All store/ERP providers register via `providerRegistry` in `server/src/index.ts`.
+
+## 3. Strict Coding Invariants (Anti-Drift Rules)
+- **Zero Bloat Dependencies:** Use Node 20+ native `fetch` and `node:crypto` (`crypto.timingSafeEqual`). Never install `axios`, `node-fetch`, or `moment`.
+- **Canonical Order Tags & Notes:**
+  - Tags: Always use `akadli-confirmed`, `akadli-modified`, `akadli-refused`, and `akadli-variant-{variant}`.
+  - Notes: Always prefix automated notes with `[Akadli-AI]`. Zero leftover `dz-confirmed` strings anywhere in `packages/` or `apps/`.
+- **No Over-Engineering & Preserve Live Flows:** Keep adapters stateless. Do not break live-verified flows (such as `PhonePage.ts` `onModeChange` goodbye handling or Shopify Algeria `province: null` fallback).
+
+## 4. Mandatory Skills & Verification Gate
+- **Skills Reference:** Consult specialized skills in `.agents/skills/`:
+  - `dz-monorepo-architect`: Monorepo structure, core voice engine, and contract interfaces.
+  - `dz-ecommerce-provider-builder`: Scaffolding and implementing store/ERP providers.
+  - `dz-geo-address-normalizer`: Algerian Wilayas/Communes resolution and phone validation.
+  - `git-tdd-atomic-workflow`: Pre-commit verification and atomic Conventional Commits.
+- **Pre-Commit Verification Gate:** Every task must pass:
+  ```bash
+  pnpm turbo run build typecheck lint test
+  ```
+- **Commit Style:** Atomic Conventional Commits (`feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `chore(...)`).
+
+
+
+================================================================================
+# FILE: Root README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)** • [https://akadli.me](https://akadli.me)
+
+# Akadli-AI (`@akadli/*`)
+
+> Open-source Algerian Cash-on-Delivery (COD) Voice Confirmation Engine & E-Commerce Store Adapters.
+
+Akadli-AI automates post-checkout COD order confirmation calls in Algerian Darja via ElevenAgents (WebRTC / SIP / WhatsApp links), validates addresses against the official **2026 Algerian administrative division (69 Wilayas & 1,708 Communes)**, and mutates orders across Shopify, YouCan, WooCommerce, Google Sheets, and Tassyir.
+
+---
+
+## End-to-End Lifecycle
+
+```text
+Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilayas) -> @akadli/core (Darja Voice Call) -> applyOrderDecision() (Live Store Update)
+```
+
+---
+
+## Monorepo Packages
+
+| Package | Scope | Description |
+| :--- | :--- | :--- |
+| [`@akadli/adapter-contract`](./packages/adapter-contract) | Contracts | Pure Zod schemas & `IEcommerceProvider` contract |
+| [`@akadli/dz-geo`](./packages/dz-geo) | Geo / Phone | 2026 Algerian 69 Wilayas, 1,708 Communes & `+213` phone normalizer |
+| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder & `handleFinalizeOrderToolCall` orchestrator |
+| [`@akadli/provider-shopify`](./packages/provider-shopify) | Adapter | Shopify HMAC verification, Algeria missing-province fallback, OAuth `client_credentials` & REST mutations |
+| [`@akadli/provider-youcan`](./packages/provider-youcan) | Adapter | YouCan `.shop` webhook verification, 1-page COD `extra_fields` parser & order close/update API |
+| [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | Adapter | WooCommerce REST v3 Basic Auth, `DZ-XX` state & COD plugin `meta_data` adapter |
+| [`@akadli/provider-gsheets`](./packages/provider-gsheets) | Adapter | Universal Google Sheets v4 & Apps Script bridge for SetShop, JustSell, Foorweb & landing pages |
+| [`@akadli/provider-tassyir`](./packages/provider-tassyir) | Adapter / ERP | Tassyir Algerian COD ERP & two-phase courier expedition dispatch for Yalidine/Ecotrack/ZR |
+
+---
+
+## 30-Second Example
+
+```typescript
+import { ShopifyProvider } from "@akadli/provider-shopify";
+import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "@akadli/core";
+
+const provider = new ShopifyProvider();
+
+// 1. Verify webhook signature & parse standardized Algerian COD order
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 2. Inject dynamic prompt variables into ElevenAgents for Darja voice confirmation call
+const promptVars = buildElevenAgentsDynamicVariables(order);
+
+// 3. Handle ElevenAgents finalize_order_decision tool call & mutate live store
+const result = await handleFinalizeOrderToolCall(
+  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED" }
+  provider,
+  {
+    shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
+    accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
+  },
+  order.constraints
+);
+```
+
+---
+
+## Interactive Sandbox (`@akadli/playground`)
+
+Test live voice calls over local Wi-Fi with WebRTC audio streaming:
+
+```bash
+git clone https://github.com/Akadli-AI/Akadli-AI.git
+pnpm install
+pnpm build
+pnpm --filter @akadli/playground dev
+```
+
+- Open `https://localhost:3000/admin` to trigger calls, inspect payloads, and test webhook ingestion.
+- Open `https://localhost:3000/phone` on your smartphone to receive simulated customer voice calls.
+- See [`packages/provider-shopify/README.md`](./packages/provider-shopify/README.md) for live Shopify Dev Dashboard (`dev.shopify.com`) & Cloudflare Tunnel setup.
+
+---
+
+## For AI Coding Agents
+
+Review [`./AGENTS.md`](./AGENTS.md) and [`.agents/skills/`](./.agents/skills/) before modifying code:
+- Maintain `@akadli/*` package boundaries and zero-bloat runtime dependencies.
+- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`).
+- Enforce the pre-commit verification gate: `pnpm turbo run build typecheck lint test`.
+
+---
+
+## License
+
+[MIT](./LICENSE)
+
+
+
+================================================================================
+# FILE: Root README.ar.md (Arabic)
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)** • [https://akadli.me](https://akadli.me)
+
+<div dir="rtl" align="right">
+
+# Akadli-AI (`@akadli/*`)
+
+> محرك مفتوح المصدر لتأكيد طلبيات الدفع عند الاستلام (COD) صوتياً ومحولات ربط المتاجر الإلكترونية في الجزائر.
+
+يقوم **Akadli-AI** بأتمتة مكالمات تأكيد طلبيات الدفع عند الاستلام (COD) بعد إتمام الطلب بالدارجة الجزائرية عبر ElevenAgents (باستخدام روابط WebRTC / SIP / WhatsApp)، مع التحقق من صحة العناوين وتطبيعها وفق **التقسيم الإداري الجزائري الجديد 2026 (69 ولاية و 1708 بلدية)**، وتحديث بيانات وحالات الطلبات مباشرة عبر المتاجر: Shopify، YouCan، WooCommerce، Google Sheets و Tassyir.
+
+---
+
+## مسار العمل المتكامل (End-to-End Lifecycle)
+
+</div>
+
+<div dir="ltr" align="left">
+
+```text
+Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilayas) -> @akadli/core (Darja Voice Call) -> applyOrderDecision() (Live Store Update)
+```
+
+</div>
+
+<div dir="rtl" align="right">
+
+---
+
+## حزم المستودع (Monorepo Packages)
+
+| الحزمة | النطاق | الوصف |
+| :--- | :--- | :--- |
+| [`@akadli/adapter-contract`](./packages/adapter-contract) | العقود البرمجية | مخططات Zod نقية وواجهة `IEcommerceProvider` بدون تبعيات تشغيلية خارجية |
+| [`@akadli/dz-geo`](./packages/dz-geo) | الجغرافيا / الهاتف | التقسيم الإداري الجزائري 2026 (69 ولاية و 1708 بلدية) ومعالج أرقام الهاتف `+213` |
+| [`@akadli/core`](./packages/core) | المحرك الأساسي | منشئ المتغيرات الديناميكية لـ ElevenAgents ومنسق استدعاءات `handleFinalizeOrderToolCall` |
+| [`@akadli/provider-shopify`](./packages/provider-shopify) | محول المتجر | التحقق من توقيع HMAC لـ Shopify، معالجة غياب حقل الولاية، وتبادل OAuth `client_credentials` وتحديثات REST |
+| [`@akadli/provider-youcan`](./packages/provider-youcan) | محول المتجر | التحقق من Webhook لـ YouCan `.shop`، واستخراج حقول COD أحادية الصفحة وتحديث وحفظ الطلبات |
+| [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | محول المتجر | واجهة WooCommerce REST v3 وتطبيع رموز الولايات `DZ-XX` وحقول `meta_data` لإضافات COD |
+| [`@akadli/provider-gsheets`](./packages/provider-gsheets) | محول الجداول | جسر Google Sheets v4 و Apps Script الشامل لمتاجر SetShop و JustSell و Foorweb وصفحات الهبوط |
+| [`@akadli/provider-tassyir`](./packages/provider-tassyir) | محول / ERP | نظام Tassyir الجزائري لإدارة COD وتوزيع الشحنات ثنائي المراحل (Yalidine / Ecotrack / ZR) |
+
+---
+
+## مثال برمجي في 30 ثانية (TypeScript)
+
+</div>
+
+<div dir="ltr" align="left">
+
+```typescript
+import { ShopifyProvider } from "@akadli/provider-shopify";
+import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "@akadli/core";
+
+const provider = new ShopifyProvider();
+
+// 1. التحقق من توقيع Webhook وتحليل الطلبية وفق النموذج الجزائري القياسي
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 2. حقن المتغيرات الديناميكية في ElevenAgents لبدء المكالمة الصوتية بالدارجة
+const promptVars = buildElevenAgentsDynamicVariables(order);
+
+// 3. معالجة قرار أداة finalize_order_decision وتحديث المتجر مباشرة
+const result = await handleFinalizeOrderToolCall(
+  agentToolPayload, // مثلاً: { orderId: order.orderId, status: "CONFIRMED" }
+  provider,
+  {
+    shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
+    accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
+  },
+  order.constraints
+);
+```
+
+</div>
+
+<div dir="rtl" align="right">
+
+---
+
+## بيئة الاختبار التفاعلية (`@akadli/playground`)
+
+لاختبار المكالمات الصوتية الحية عبر شبكة Wi-Fi المحلية بصوت WebRTC:
+
+</div>
+
+<div dir="ltr" align="left">
+
+```bash
+git clone https://github.com/Akadli-AI/Akadli-AI.git
+pnpm install
+pnpm build
+pnpm --filter @akadli/playground dev
+```
+
+</div>
+
+<div dir="rtl" align="right">
+
+- افتح `https://localhost:3000/admin` لإرسال الطلبيات ومعاينة البيانات ومحاكاة الاتصال واختبار استلام الـ Webhooks.
+- افتح `https://localhost:3000/phone` على هاتفك الذكي لاستقبال المكالمة الصوتية كمشتري.
+- للاطلاع على خطوات ربط متجر تجريبي مباشر عبر لوحة مطوري Shopify (`dev.shopify.com`) ونفق Cloudflare، راجع [`packages/provider-shopify/README.md`](./packages/provider-shopify/README.md).
+
+---
+
+## للوكلاء البرمجيين (AI Coding Agents)
+
+يُرجى مراجعة [`./AGENTS.md`](./AGENTS.md) ومجلد [`.agents/skills/`](./.agents/skills/) قبل إجراء أي تعديل برمجي:
+- الحفاظ على حدود حزم `@akadli/*` والاعتماد حصرياً على دوال Node.js الأصلية بدون مكاتب زائدة.
+- الالتزام بتقسيم 2026 الإداري (`01`-`69`) والوسوم المعتمدة (`akadli-confirmed`، `akadli-modified`، `akadli-refused`).
+- تنفيذ بوابة التحقق الإلزامية قبل التثبيت: `pnpm turbo run build typecheck lint test`.
+
+---
+
+## الترخيص (License)
+
+رخصة [MIT](./LICENSE) مفتوحة المصدر.
+
+</div>
+
+
+
+================================================================================
+# FILE: @akadli/adapter-contract - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/adapter-contract
+
+> Zero-dependency canonical Zod schemas and TypeScript interfaces for Algerian COD e-commerce and voice confirmation workflows.
+
+`@akadli/adapter-contract` defines the shared contracts implemented by all store adapters (`@akadli/provider-*`) and consumed by the voice engine (`@akadli/core`).
+
+---
+
+## Exported Schemas & Contracts
+
+| Schema / Interface | Type | Description |
+| :--- | :--- | :--- |
+| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers |
+| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
+| `OrderConstraintsSchema` | `OrderConstraints` | Anti-hallucination guardrails (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
+| `OrderDecisionStatusSchema` | `OrderDecisionStatus` | Enum: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
+| `WilayaCodeSchema` | `WilayaCode` | Official zero-padded 2-digit codes (`"01"` to `"69"`) |
+| `DzPhoneSchema` | `string` | Regex: `05/06/07XXXXXXXX` (local 10-digit) or `+213[567]XXXXXXXX` (E.164) |
+| `IEcommerceProvider` | `interface` | Contract for webhook verification, parsing, and order mutation |
+| `ApplyOrderDecisionResult` | `interface` | Standardized result `{ success, externalStatus, rawResponse }` |
+
+---
+
+## Custom Provider Implementation Example
+
+```typescript
+import {
+  IEcommerceProvider,
+  StandardizedDzOrder,
+  FinalizedOrderDecision,
+  ApplyOrderDecisionResult
+} from "@akadli/adapter-contract";
+
+export class CustomStoreProvider implements IEcommerceProvider {
+  async verifyWebhook(
+    headers: Record<string, string>,
+    rawBody: string | Buffer,
+    secret: string
+  ): Promise<boolean> {
+    // Constant-time HMAC or token comparison
+    return headers["x-webhook-token"] === secret;
+  }
+
+  async parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder> {
+    // Normalize into canonical StandardizedDzOrder using @akadli/dz-geo
+    return payload as StandardizedDzOrder;
+  }
+
+  async applyOrderDecision(
+    orderId: string,
+    decision: FinalizedOrderDecision,
+    credentials: Record<string, string>
+  ): Promise<ApplyOrderDecisionResult> {
+    // Mutate store state based on decision.status (CONFIRMED / MODIFIED / REFUSED)
+    return { success: true, externalStatus: decision.status };
+  }
+}
+```
+
+---
+
+## Installation
+
+```bash
+pnpm add @akadli/adapter-contract
+```
+
+
+
+================================================================================
+# FILE: @akadli/dz-geo - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/dz-geo
+
+> 2026 Algerian Administrative Divisions (69 Wilayas & 1,708 Communes), fuzzy address resolver, and +213 phone normalizer.
+
+`@akadli/dz-geo` provides official 2026 Algerian geographic data and normalization logic across Arabic, French, and Arabizi inputs for e-commerce checkout forms and voice agent verification.
+
+---
+
+## Core Functions & Exports
+
+| Function / Constant | Returns | Description |
+| :--- | :--- | :--- |
+| `normalizeWilaya(input)` | `NormalizedWilayaResult` | 4-stage resolver: numbers, canonical script, aliases, Levenshtein fuzzy match |
+| `normalizeCommune(raw, code)` | `CommuneMatchResult` | Resolves commune variations against official communes of the Wilaya |
+| `normalizeDzPhone(phone, format)` | `string` | Converts Algerian numbers to local (`05/06/07XXXXXXXX`) or E.164 (`+213...`) |
+| `getCommunesForWilaya(code)` | `readonly string[]` | List of all official communes for a Wilaya code (`"01"` to `"69"`) |
+| `WILAYAS_69` / `WILAYAS_ALL` | `readonly WilayaRecord[]` | Complete 2026 dataset of 69 Wilayas with codes, Arabic/French names, and aliases |
+| `WILAYAS_58` | `readonly WilayaRecord[]` | 58-Wilaya backward compatibility slice for legacy couriers |
+
+---
+
+## 2026 Promoted Wilayas (Codes 59–69)
+
+Includes full support for the 11 promoted Wilayas:
+- **59**: El Aricha • **60**: Barika • **61**: Ksar Chellala • **62**: Ain Oussera • **63**: Messaad
+- **64**: Brizina • **65**: Bir El Ater • **66**: El Kantara • **67**: Ksar El Boukhari • **68**: Bou Saada • **69**: El Abiodh Sidi Cheikh
+
+---
+
+## Usage Example
+
+```typescript
+import {
+  normalizeWilaya,
+  normalizeCommune,
+  normalizeDzPhone,
+  getCommunesForWilaya
+} from "@akadli/dz-geo";
+
+// 1. Phone Normalization
+normalizeDzPhone("05 50 12 34 56", "local"); // => "0550123456"
+normalizeDzPhone("+213 (0) 661-23-45-67", "e164"); // => "+213661234567"
+
+// 2. Fuzzy Wilaya Matching (Arabic, French, Arabizi, or 5-digit postal code)
+normalizeWilaya("بريكة");        // => { code: "60", nameFr: "Barika", nameAr: "بريكة" }
+normalizeWilaya("bou saada");    // => { code: "68", nameFr: "Bou Saada", nameAr: "بوسعادة" }
+normalizeWilaya("13000");        // => { code: "13", nameFr: "Tlemcen", nameAr: "تلمسان" }
+
+// 3. Commune Resolution within Wilaya
+const result = normalizeCommune("maghnia", "13");
+console.log(result.canonicalCommune); // => "Maghnia"
+```
+
+---
+
+## Installation
+
+```bash
+pnpm add @akadli/dz-geo
+```
+
+
+
+================================================================================
+# FILE: @akadli/core - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/core
+
+> Stateless orchestration engine connecting ElevenLabs Conversational AI (ElevenAgents) with Algerian COD store providers.
+
+`@akadli/core` bridges incoming e-commerce orders, voice prompt variable injection, and post-call order finalization decisions without maintaining persistent server-side call state.
+
+---
+
+## Core Functions & Exports
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `createStandardizedDzOrder(params)` | `StandardizedDzOrder` | Normalizes phone, Wilaya, and commune via `@akadli/dz-geo` and sets validation constraints |
+| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | Generates prompt variables (`customer_phone_e164`, `price_da`, `allowed_variants`, `allowed_wilayas`, `allowed_communes`) |
+| `handleFinalizeOrderToolCall(payload, provider, creds, constraints)` | `Promise<FinalizeOrderToolResult>` | Validates `finalize_order_decision` tool calls, checks constraints, and calls `provider.applyOrderDecision` |
+
+---
+
+## ElevenAgents Integration Flow
+
+```text
+StandardizedDzOrder -> buildElevenAgentsDynamicVariables() -> ElevenLabs WebRTC Call -> finalize_order_decision Tool -> handleFinalizeOrderToolCall() -> Provider Mutation
+```
+
+---
+
+## Usage Example
+
+```typescript
+import {
+  createStandardizedDzOrder,
+  buildElevenAgentsDynamicVariables,
+  handleFinalizeOrderToolCall
+} from "@akadli/core";
+import { ShopifyProvider } from "@akadli/provider-shopify";
+
+// 1. Create a standardized Algerian COD order
+const order = createStandardizedDzOrder({
+  orderId: "1001",
+  storeName: "Algeria Store",
+  customerName: "Karim Ziani",
+  rawCustomerPhone: "0550123456",
+  itemName: "Sneakers Air Max",
+  priceDa: 4500,
+  currentVariant: "42",
+  rawWilaya: "Barika",
+  rawCommune: "Barika",
+  allowedVariants: ["41", "42", "43"]
+});
+
+// 2. Build dynamic variables for ElevenAgents prompt
+const promptVariables = buildElevenAgentsDynamicVariables(order);
+
+// 3. Handle finalize_order_decision tool call from the agent
+const provider = new ShopifyProvider();
+const result = await handleFinalizeOrderToolCall(
+  {
+    orderId: "1001",
+    status: "CONFIRMED",
+    reasonOrNotes: "Confirmed by Karim over phone"
+  },
+  provider,
+  {
+    shopDomain: "store.myshopify.com",
+    accessToken: "shpat_xxxxxxxx"
+  },
+  order.constraints
+);
+
+console.log(result.success, result.externalStatus);
+```
+
+---
+
+## Installation
+
+```bash
+pnpm add @akadli/core
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-shopify - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/provider-shopify
+
+> Shopify Cash-On-Delivery (COD) adapter with 2026 Algerian address resolution, HMAC-SHA256 verification, and REST order mutations.
+
+Implements `IEcommerceProvider` from `@akadli/adapter-contract` for Shopify stores using standard checkout or Algerian 1-page checkout apps (EasySell, Releasit, CodForm).
+
+---
+
+## 2026 Shopify Dev Dashboard Setup Guide
+
+1. **Create App:** Navigate to [dev.shopify.com](https://dev.shopify.com) -> **Apps** -> **Create an App**.
+   - App URL: `https://example.com` (leave **Embed app in Shopify admin** **UNCHECKED**).
+   - Scopes: In **API access**, grant `read_orders` and `write_orders`.
+2. **Enable Protected Customer Data Access (CRITICAL):**
+   - In **API access** -> **Protected customer data access**, enable **Name**, **Address**, and **Phone**.
+   - *Without this, Shopify redacts customer details from webhooks and blocks shipping address updates.*
+3. **Configure Webhook:**
+   - In Shopify Admin -> **Settings** -> **Notifications** -> **Webhooks**, create an `Order creation` JSON webhook pointing to `/api/webhooks/shopify`.
+4. **Algerian Address Fallback (`province: null`):**
+   - Standard Shopify checkout hides the state/province dropdown for Algeria. Customers input Wilayas in `city`, `address1`, or 5-digit `zip` (`13000` -> Wilaya `13`). COD apps store details in `note_attributes`. `@akadli/provider-shopify` extracts and normalizes all candidates via `@akadli/dz-geo`.
+
+---
+
+## Credentials Schema (`ShopifyCredentialsSchema`)
+
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `shopDomain` | `string` | Yes | — | Shopify domain (e.g., `store.myshopify.com`) |
+| `accessToken` | `string` | Optional* | — | Permanent Admin API token (`shpat_...`) |
+| `clientId` | `string` | Optional* | — | OAuth Client ID (auto-exchanged for token) |
+| `clientSecret` | `string` | Optional* | — | OAuth Client Secret |
+| `apiVersion` | `string` | No | `"2024-04"` | Shopify Admin REST API version |
+| `cancelOnRefused` | `string` | No | `"true"` | Cancels order on `REFUSED` decision |
+
+*\*Must provide either `accessToken` OR both `clientId` and `clientSecret`.*
+
+---
+
+## Usage Example
+
+```typescript
+import { ShopifyProvider } from "@akadli/provider-shopify";
+
+const provider = new ShopifyProvider();
+
+// 1. Verify Webhook HMAC signature (Base64)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
+
+// 2. Parse standardized Algerian COD order
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 3. Apply post-call decision to Shopify (tags: akadli-confirmed / akadli-modified / akadli-refused)
+const result = await provider.applyOrderDecision(order.orderId, {
+  orderId: order.orderId,
+  status: "CONFIRMED",
+  reasonOrNotes: "Confirmed via voice agent"
+}, {
+  shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
+  accessToken: process.env.SHOPIFY_ACCESS_TOKEN!
+});
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-shopify - docs/api-spec.md
+================================================================================
+
+
+# Shopify COD Order Confirmation Adapter Specification (`@akadli/provider-shopify`)
+
+This document defines the technical specification, webhook signature verification, Algerian COD data extraction, and outbound mutation endpoints for Shopify stores integrating with the **Akadli-AI** voice confirmation engine.
+
+---
+
+## Live Shopify Store Setup Guide (2026 Dev Dashboard)
+
+This section covers the verified live setup steps for integrating Shopify stores with Akadli-AI:
+
+### 1. Create App in `dev.shopify.com`
+- Navigate to [dev.shopify.com](https://dev.shopify.com) and create or open your app.
+- Set **App URL** to `https://example.com` (leave **Embed app in Shopify admin** **UNCHECKED**).
+- Under **API access** -> **Scopes**, select `read_orders,write_orders`.
+
+### 2. Enable Protected Customer Data Access (CRITICAL)
+- In `dev.shopify.com` -> **API access** -> **Protected customer data access**, enable **Protected customer data**.
+- Check **Name**, **Address**, and **Phone**.
+- *Rationale*: Shopify redacts customer details from webhooks and blocks `shipping_address` mutations if these fields are not explicitly approved.
+
+### 3. Authentication (`clientId` + `clientSecret` or `accessToken`)
+- **OAuth Exchange**: Provide `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`. `@akadli/provider-shopify` automatically requests an access token from `POST /admin/oauth/access_token` with `grant_type: client_credentials` and caches it in memory until expiry.
+- **Direct Access Token**: Alternatively, configure `SHOPIFY_ACCESS_TOKEN` (`shpat_...`) directly.
+
+### 4. Algerian Address Mapping (Missing `Province` Field)
+- Shopify checkout hides the `Province` field when Country is set to `Algeria`.
+- Customers typically provide their Wilaya in `city`, `address1`, or enter a 5-digit Algerian ONP postal code in `zip` (`13000` -> Wilaya `13`).
+- Many Algerian merchants use COD form apps (EasySell, Releasit) which store address fields in `note_attributes`.
+- `@akadli/provider-shopify` dynamically resolves Wilaya and Commune using multi-candidate resolution across `note_attributes`, `province`/`province_code`, `city`, `zip`, and `address1`/`address2` via `@akadli/dz-geo`.
+
+---
+
+## 1. Webhook Signature Verification (`verifyWebhook`)
+
+Shopify signs every webhook request using HMAC-SHA256 calculated over the unparsed raw request body with the merchant's webhook shared secret.
+
+### Specifications
+- **Header:** `X-Shopify-Hmac-Sha256` (case-insensitive extraction via `headers["x-shopify-hmac-sha256"]`).
+- **Algorithm:** `sha256` HMAC encoded as **Base64**.
+- **Timing Attack Prevention:** Comparison must be performed using `crypto.timingSafeEqual` over buffers of equal byte length.
+- **Fail Safe:** If the header is missing, lengths mismatch, or the digest does not match, return `false` without throwing uncaught exceptions.
+
+```typescript
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyShopifyWebhook(
+  headers: Record<string, string>,
+  rawBody: string | Buffer,
+  secret: string
+): boolean {
+  const headerKey = Object.keys(headers).find(
+    (k) => k.toLowerCase() === "x-shopify-hmac-sha256"
+  );
+  const signature = headerKey ? headers[headerKey] : undefined;
+  if (!signature || !secret) return false;
+
+  const bodyBuffer = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+  const hmac = createHmac("sha256", secret).update(bodyBuffer).digest("base64");
+
+  const sigBuffer = Buffer.from(signature, "utf8");
+  const hmacBuffer = Buffer.from(hmac, "utf8");
+
+  if (sigBuffer.length !== hmacBuffer.length) return false;
+  return timingSafeEqual(sigBuffer, hmacBuffer);
+}
+```
+
+---
+
+## 2. Inbound COD Order Extraction (`parseWebhookOrder`)
+
+Shopify `orders/create` payloads for Algerian cash-on-delivery merchants arrive in two primary forms:
+1. **Standard Shopify Checkout:** Customer address and phone are located in `shipping_address` or `billing_address`.
+2. **Algerian COD Form Apps (EasySell, Releasit, CodForm, FastForm):** Because checkout is bypassed, `shipping_address` is frequently blank, partial, or generic. The true customer phone, Wilaya, and Commune are stored in `note_attributes` key-value pairs.
+
+### Extraction Pipeline
+1. **Order ID & Basics:**
+   - `orderId`: `String(payload.id)`
+   - `storeName`: `payload.shop_name || payload.store_name || "Shopify Store"`
+   - `itemName`: First line item title (`payload.line_items?.[0]?.title || "Article"`)
+   - `currentVariant`: First line item variant title (`payload.line_items?.[0]?.variant_title || "Standard"`)
+   - `priceDa`: `Math.round(Number(payload.total_price || 0))`
+
+2. **Dual-Source Address & Phone Fallback:**
+   Scan `shipping_address`, `billing_address`, and `note_attributes` (case-insensitive substring match):
+   - **Phone:** `shipping_address.phone` $\rightarrow$ `billing_address.phone` $\rightarrow$ `customer.phone` $\rightarrow$ `note_attributes` matching `phone`, `téléphone`, `telephone`, `tel`, or `هاتف`.
+   - **Wilaya:** `shipping_address.province` $\rightarrow$ `shipping_address.province_code` $\rightarrow$ `note_attributes` matching `wilaya`, `province`, or `ولاية`.
+   - **Commune:** `shipping_address.city` $\rightarrow$ `note_attributes` matching `commune`, `city`, or `بلدية`.
+   - **Customer Name:** `shipping_address.name` $\rightarrow$ `${customer.first_name} ${customer.last_name}` $\rightarrow$ `note_attributes` matching `nom`, `name`, or `اسم` $\rightarrow$ `"Client"`.
+   - **Address Note:** `shipping_address.address1` $\rightarrow$ `note_attributes` matching `adresse`, `address`, or `عنوان`.
+
+3. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
+   - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
+   - Wilaya is matched against all 69 official 2026 Wilayas via `normalizeWilaya(...)`.
+   - Commune is resolved and verified for that Wilaya via `normalizeCommune(..., wilayaCode)`.
+   - Constraints (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) are populated and validated using `createStandardizedDzOrder(...)`.
+
+---
+
+## 3. Order Decision Mutation (`applyOrderDecision`)
+
+Once the customer completes the ElevenAgents voice confirmation call, the decision is mutated in Shopify Admin API.
+
+### Required Credentials
+```typescript
+export interface ShopifyProviderCredentials {
+  shopDomain: string;       // e.g. "store.myshopify.com"
+  accessToken: string;      // Shopify Admin Access Token ("shpat_...")
+  apiVersion?: string;      // defaults to "2024-04"
+  cancelOnRefused?: string; // "true" (default) or "false"
+}
+```
+
+### Mutation Endpoints
+
+#### 1. `CONFIRMED`
+- **Method:** `PUT https://{shopDomain}/admin/api/{apiVersion}/orders/{orderId}.json`
+- **Headers:** `X-Shopify-Access-Token: {accessToken}`, `Content-Type: application/json`
+- **Payload:**
+```json
+{
+  "order": {
+    "id": 1029384756,
+    "tags": "akadli-confirmed",
+    "note": "[Akadli-AI] Order CONFIRMED by customer."
+  }
+}
+```
+
+#### 2. `MODIFIED`
+- **Method:** `PUT https://{shopDomain}/admin/api/{apiVersion}/orders/{orderId}.json`
+- **Headers:** `X-Shopify-Access-Token: {accessToken}`, `Content-Type: application/json`
+- **Payload:**
+```json
+{
+  "order": {
+    "id": 1029384756,
+    "tags": "akadli-modified, akadli-variant-43",
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Commune -> Maghnia; Note -> Près de la mosquée.",
+    "shipping_address": {
+      "province": "13",
+      "city": "Maghnia",
+      "address1": "Près de la mosquée"
+    }
+  }
+}
+```
+
+#### 3. `REFUSED`
+- **Step A:** `PUT https://{shopDomain}/admin/api/{apiVersion}/orders/{orderId}.json` with tag `"akadli-refused"` and refusal note.
+- **Step B (if `cancelOnRefused !== "false"`):** `POST https://{shopDomain}/admin/api/{apiVersion}/orders/{orderId}/cancel.json`
+- **Headers:** `X-Shopify-Access-Token: {accessToken}`, `Content-Type: application/json`
+- **Cancel Payload:**
+```json
+{
+  "reason": "customer",
+  "email": false,
+  "restock": true
+}
+```
+
+---
+
+## 4. Error Handling & Resilience
+- **401 Unauthorized:** Return `{ success: false, externalStatus: "UNAUTHORIZED", rawResponse: ... }`.
+- **404 Not Found:** Return `{ success: false, externalStatus: "NOT_FOUND", rawResponse: ... }`.
+- **429 Too Many Requests:** Check `Retry-After` header and handle rate limiting gracefully.
+- **5xx Server Errors:** Return descriptive error message with HTTP status code.
+
+
+
+================================================================================
+# FILE: @akadli/provider-youcan - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/provider-youcan
+
+> YouCan (.shop) Cash-On-Delivery (COD) adapter with Algerian 1-page checkout parsing, HMAC-SHA256 signature verification, and REST order mutations.
+
+Implements `IEcommerceProvider` from `@akadli/adapter-contract` for YouCan stores operating in Algeria.
+
+---
+
+## YouCan Seller Area Setup Guide
+
+1. **Generate API Token:** In [seller-area.youcan.shop](https://seller-area.youcan.shop), go to **Settings** -> **API & Integrations** and generate an API Access Token.
+2. **Configure Webhook:**
+   - In **Settings** -> **Webhooks**, create a new webhook for the event `order.created`.
+   - Set the URL to your endpoint (e.g. `https://your-domain.com/api/webhooks/youcan`).
+   - Copy the generated Webhook Secret (`x-youcan-signature` hex digest verification).
+3. **Algerian 1-Page COD Parsing:**
+   - In Algeria, YouCan merchants often use single-page checkout forms where customer inputs are stored inside `extra_fields` or `custom_fields`.
+   - `@akadli/provider-youcan` automatically extracts address information from both standard `shipping.address` and `extra_fields` / `custom_fields`, normalizing the Wilaya (`01`-`69`) and commune via `@akadli/dz-geo`.
+
+---
+
+## Credentials Schema (`YouCanCredentialsSchema`)
+
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `accessToken` | `string` | Yes | — | YouCan API Access Token |
+| `baseUrl` | `string` | No | `"https://api.youcan.shop"` | YouCan REST API base URL |
+| `closeOnRefused` | `string` | No | `"true"` | Closes/cancels the order if customer refuses call |
+
+---
+
+## Usage Example
+
+```typescript
+import { YouCanProvider } from "@akadli/provider-youcan";
+
+const provider = new YouCanProvider();
+
+// 1. Verify Webhook HMAC signature (hex digest from x-youcan-signature)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.YOUCAN_WEBHOOK_SECRET!);
+
+// 2. Parse standardized Algerian COD order (supports shipping.address & extra_fields)
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 3. Mutate YouCan order after confirmation call (tags: akadli-confirmed / akadli-modified / akadli-refused)
+const result = await provider.applyOrderDecision(order.orderId, {
+  orderId: order.orderId,
+  status: "CONFIRMED",
+  reasonOrNotes: "Confirmed via voice call"
+}, {
+  accessToken: process.env.YOUCAN_ACCESS_TOKEN!
+});
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-youcan - docs/api-spec.md
+================================================================================
+
+
+# YouCan COD Order Confirmation Adapter Specification (`@akadli/provider-youcan`)
+
+This document defines the technical specification, webhook signature verification, Algerian COD data extraction, and outbound mutation endpoints for YouCan (`.shop`) stores integrating with the **Akadli-AI** voice confirmation engine.
+
+---
+
+## 1. Webhook Signature Verification (`verifyWebhook`)
+
+YouCan signs webhook payloads using HMAC-SHA256 computed over the untouched raw request body with the merchant's webhook secret key.
+
+### Specifications
+- **Header:** `x-youcan-signature` (case-insensitive extraction via case-insensitive header lookup).
+- **Algorithm:** `sha256` HMAC encoded as a lowercase **hex** string.
+- **Timing Attack Prevention:** Comparison must be performed using `crypto.timingSafeEqual` between buffers of equal byte length.
+- **Fail Safe:** If the header is missing, lengths mismatch, or signature is invalid, return `false` without throwing unhandled exceptions.
+
+```typescript
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyYouCanWebhook(
+  headers: Record<string, string>,
+  rawBody: string | Buffer,
+  secret: string
+): boolean {
+  const headerKey = Object.keys(headers).find(
+    (k) => k.toLowerCase() === "x-youcan-signature"
+  );
+  const signature = headerKey ? headers[headerKey] : undefined;
+  if (!signature || !secret) return false;
+
+  const bodyBuffer = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+  const hmacHex = createHmac("sha256", secret).update(bodyBuffer).digest("hex");
+
+  const sigBuffer = Buffer.from(signature, "utf8");
+  const hmacBuffer = Buffer.from(hmacHex, "utf8");
+
+  if (sigBuffer.length !== hmacBuffer.length) return false;
+  return timingSafeEqual(sigBuffer, hmacBuffer);
+}
+```
+
+---
+
+## 2. Inbound COD Order Extraction (`parseWebhookOrder`)
+
+YouCan webhook deliveries can arrive in several envelope formats:
+
+1. **Official YouCan Resthook Standard Payload Format:**
+   ```json
+   {
+     "event_name": "order.created",
+     "event_happened_at": "2026-10-16T14:20:00.000000Z",
+     "data": {
+       "id": "ord_yc_882910",
+       "total": 6400,
+       ...
+     }
+   }
+   ```
+2. **App Webhook / Resthook Delivery Envelope:**
+   ```json
+   {
+     "id": "8e6b019b-06de-496d-a96d-c9ee69c0ccf0",
+     "event": "order.created",
+     "store_id": "store_yc_111",
+     "payload": {
+       "id": "ord_yc_882910",
+       ...
+     }
+   }
+   ```
+3. **Nested Resource Envelope:** `{ data: { order: { ... } } }`, `{ payload: { order: { ... } } }`, or `{ order: { ... } }`.
+4. **Direct Order Object:** `{ id: "ord_yc_882910", total: ..., customer: { ... }, shipping: { ... } }`.
+
+### Extraction Pipeline
+
+1. **Envelope Unwrapping & ID Resolution (`unwrapYouCanPayload`):**
+   - Automatically unwrap `data.order`, `data`, `payload.order`, `payload`, or `order`.
+   - In Resthook delivery envelopes, the root `id` is the webhook delivery UUID. The actual order identifier is resolved from `orderData.id`, `orderData.order_id`, or `orderData.ref`.
+   - Preserves top-level metadata (`store_name`, `extra_fields`, `custom_fields`, `customer`, `notes`).
+   - Normalizes flattened `shipping` objects into canonical `{ address: { ... } }`.
+
+2. **Order Basics & Line Item Extraction:**
+   - `orderId`: `String(data.id)`
+   - `storeName`: `data.store_name || data.shop_name || "YouCan Store"`
+   - `priceDa`: `Math.round(Number(data.total || 0))`
+   - **Product Name (`itemName`) Resolution (in priority order):**
+     1. `variants[0]?.variant?.product?.name`
+     2. `variants[0]?.variant?.product?.meta?.title`
+     3. `variants[0]?.item?.name`
+     4. `variants[0]?.name` / `variants[0]?.title`
+     5. `line_items[0]?.title` / `line_items[0]?.name`
+     6. Fallback: `"Article"`
+   - **Selected Variant (`currentVariant`) Resolution (in priority order):**
+     1. Case-insensitive lookup in `variants[0]?.variant?.variations` (for keys matching `variant`, `size`, `taille`, `pointure`, `مقاس`, or first non-default string value)
+     2. `variants[0]?.variant?.values?.[0]` (if not `"default"`)
+     3. `variants[0]?.variation` (case-insensitive key lookup)
+     4. `variants[0]?.title` / `variants[0]?.variant?.title` / `line_items[0]?.variant_title`
+     5. Fallback: `"Standard"`
+   - **Allowed Variants (`allowedVariants`) Extraction:**
+     - Inspect `variants[0]?.variant?.product?.variant_options`
+     - Extract values from the option matching `/^(?:size|taille|pointure|مقاس|variant)$/i` (or first option with non-empty string values array, e.g. `["M", "L", "XL"]`)
+     - Ensure `currentVariant` is always included in `allowedVariants`
+     - Populates `constraints.allowedVariants` in `createStandardizedDzOrder`
+
+3. **Resilient Multi-Candidate Algerian Address & Phone Extraction:**
+   - **Phone Extraction:**
+     - Primary: `shipping.address.phone` or `shipping.phone` or `customer.phone`
+     - Fallback: `extra_fields` / `custom_fields` or customer notes matching `/(?:phone|téléphone|telephone|tel|mobile|هاتف|تلفون|موبايل|جوال)/i`
+   - **Multi-Candidate Wilaya Resolution:**
+     - Try in order: `extra_fields`/`custom_fields` -> `customer_notes` -> `shipping.address.region` -> `shipping.address.state` -> `shipping.address.city` -> `zip` (5-digit prefix or 2-digit code) -> `first_line`/`address1` -> `second_line`/`address2`.
+     - Validates against all 69 official 2026 Wilayas via `normalizeWilaya(...)`.
+   - **Smart Commune Resolution:**
+     - Once Wilaya is resolved, checks `extra_fields`, `customer_notes`, `city`, `first_line`, and `second_line` against `normalizeCommune(..., wilayaCode)`.
+     - Prioritizes specific non-capital communes over the Wilaya capital when found in street lines.
+
+4. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
+   - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
+   - Populates `constraints` (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) and builds a canonical `StandardizedDzOrder`.
+
+---
+
+## 3. Order Decision Mutation (`applyOrderDecision`)
+
+Once the customer concludes the voice confirmation call, the decision is updated in the YouCan REST API.
+
+### Required Credentials
+```typescript
+export interface YouCanCredentials {
+  accessToken: string;       // YouCan API Access Token (Bearer auth)
+  baseUrl?: string;          // Default: "https://api.youcan.shop"
+  closeOnRefused?: string;   // Default: "true" ("false" to skip /orders/{id}/close)
+}
+```
+
+### Outbound REST Endpoints
+
+All requests include headers:
+- `Authorization: Bearer {accessToken}`
+- `Content-Type: application/json`
+- `Accept: application/json`
+
+#### 1. `CONFIRMED`
+- **Method:** `PUT {baseUrl}/orders/{orderId}`
+- **Payload:**
+```json
+{
+  "tags": ["akadli-confirmed"],
+  "notes": "[Akadli-AI] Order CONFIRMED by customer."
+}
+```
+- **Returns:** `{ success: true, externalStatus: "CONFIRMED", rawResponse: ... }`
+
+#### 2. `MODIFIED`
+- **Method:** `PUT {baseUrl}/orders/{orderId}`
+- **Payload:**
+```json
+{
+  "shipping": {
+    "address": {
+      "region": "13",
+      "city": "Mansourah",
+      "first_line": "Near Pharmacie Centrale"
+    }
+  },
+  "tags": ["akadli-modified", "akadli-variant-XL"],
+  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
+}
+```
+- **Returns:** `{ success: true, externalStatus: "UPDATED_AND_CONFIRMED", rawResponse: ... }`
+
+#### 3. `REFUSED`
+- **Step A:** `PUT {baseUrl}/orders/{orderId}`
+```json
+{
+  "tags": ["akadli-refused"],
+  "notes": "[Akadli-AI] Order REFUSED: Customer cancelled on call."
+}
+```
+- **Step B:** If `credentials.closeOnRefused !== "false"`, call:
+  - **Method:** `PUT {baseUrl}/orders/{orderId}/close`
+  - **Payload:** `{"cancel_order": true}`
+  - Closes the refused order and returns items back to stock.
+- **Returns:** `{ success: true, externalStatus: "CANCELLED", rawResponse: ... }`
+
+#### 4. Additional Status Updates (`YouCanClient.updateOrderStatus`)
+- **Method:** `PUT {baseUrl}/orders/{orderId}/status`
+- **Payload:** `{"status": "processed"}` (or `"open"`, `"closed"`, `"canceled-by-seller"`)
+
+---
+
+## 4. HTTP Error Handling
+
+- **401 Unauthorized / 403 Forbidden**: Invalid or expired `accessToken`. Fails immediately without retries.
+- **404 Not Found**: Order does not exist on YouCan.
+- **422 Unprocessable Entity**: Invalid order field or state transition.
+- **429 Too Many Requests / 5xx Server Error**: Retried up to 3 times with exponential backoff before failing.
+
+
+
+================================================================================
+# FILE: @akadli/provider-woocommerce - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/provider-woocommerce
+
+> WooCommerce Cash-On-Delivery (COD) adapter with DZ-XX state code mapping, COD plugin meta_data extraction, HMAC-SHA256 verification, and REST v3 order mutations.
+
+Implements `IEcommerceProvider` from `@akadli/adapter-contract` for WordPress WooCommerce stores operating in Algeria.
+
+---
+
+## WooCommerce & WordPress Setup Guide
+
+1. **Generate REST API Keys:**
+   - In WP Admin, navigate to **WooCommerce** -> **Settings** -> **Advanced** -> **REST API**.
+   - Click **Add Key**: Set description to `Akadli-AI`, select user, and set Permissions to **Read/Write**.
+   - Copy the generated `Consumer key` (`ck_...`) and `Consumer secret` (`cs_...`).
+2. **Configure Webhook:**
+   - In WP Admin -> **WooCommerce** -> **Settings** -> **Advanced** -> **Webhooks**, click **Add Webhook**.
+   - Status: **Active** • Topic: **Order created** • Delivery URL: `https://your-domain.com/api/webhooks/woocommerce`.
+   - Secret: Enter your signing secret (used for Base64 `x-wc-webhook-signature` verification).
+   - API Version: **WP REST API Integration v3**.
+3. **Algerian `DZ-XX` States & COD Plugins:**
+   - Standard WooCommerce represents Algerian Wilayas as `DZ-XX` state codes (e.g. `DZ-16` for Alger, `DZ-68` for Bou Saada).
+   - Stores using Algerian COD checkout plugins store custom entries in order `meta_data` (e.g., `_billing_wilaya`, `_shipping_commune`).
+   - `@akadli/provider-woocommerce` parses both standard address objects and plugin `meta_data` into canonical `@akadli/dz-geo` Wilayas (`01`-`69`).
+
+---
+
+## Credentials Schema (`WooCommerceCredentialsSchema`)
+
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `siteUrl` | `string` | Yes | — | WordPress site URL (e.g., `https://dz-store.com`) |
+| `consumerKey` | `string` | Yes | — | WooCommerce REST API Consumer Key (`ck_...`) |
+| `consumerSecret` | `string` | Yes | — | WooCommerce REST API Consumer Secret (`cs_...`) |
+| `cancelOnRefused` | `string` | No | `"true"` | Sets order status to `cancelled` upon `REFUSED` decision |
+
+---
+
+## Usage Example
+
+```typescript
+import { WooCommerceProvider, isWooCommerceWebhookPing } from "@akadli/provider-woocommerce";
+
+const provider = new WooCommerceProvider();
+
+// 1. Acknowledge WooCommerce initial unsigned handshake ping (WC_Webhook::deliver_ping)
+if (isWooCommerceWebhookPing(headers, req.body, rawBody)) {
+  return res.status(200).json({ success: true, message: "Webhook ping acknowledged" });
+}
+
+// 2. Verify Webhook HMAC signature (Base64 from x-wc-webhook-signature)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.WOOCOMMERCE_WEBHOOK_SECRET!);
+if (!isValid) {
+  return res.status(401).json({ error: "Invalid HMAC signature" });
+}
+
+// 3. Parse standardized Algerian COD order (supports DZ-XX states and meta_data)
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 4. Mutate WooCommerce order (updates meta_data, adds order note, updates status)
+const result = await provider.applyOrderDecision(order.orderId, {
+  orderId: order.orderId,
+  status: "CONFIRMED",
+  reasonOrNotes: "Customer confirmed via phone"
+}, {
+  siteUrl: process.env.WOOCOMMERCE_SITE_URL!,
+  consumerKey: process.env.WOOCOMMERCE_CONSUMER_KEY!,
+  consumerSecret: process.env.WOOCOMMERCE_CONSUMER_SECRET!
+});
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-woocommerce - docs/api-spec.md
+================================================================================
+
+
+# WooCommerce COD Order Confirmation Adapter Specification (`@akadli/provider-woocommerce`)
+
+This document defines the technical specification, webhook signature verification, Algerian COD data extraction, and outbound mutation endpoints for WooCommerce stores integrating with the **Akadli-AI** voice confirmation engine.
+
+---
+
+## 1. Webhook Signature Verification (`verifyWebhook`)
+
+WooCommerce signs webhook payloads using HMAC-SHA256 computed over the untouched raw request body with the merchant's configured webhook secret key.
+
+### Specifications
+- **Header:** `x-wc-webhook-signature` (case-insensitive extraction via case-insensitive header lookup).
+- **Algorithm:** `sha256` HMAC encoded as a **Base64** string.
+- **Timing Attack Prevention:** Comparison must be performed using `crypto.timingSafeEqual` between buffers of equal byte length.
+- **Fail Safe:** If the header is missing, lengths mismatch, or signature is invalid, return `false` without throwing unhandled exceptions.
+
+```typescript
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyWooCommerceWebhook(
+  headers: Record<string, string>,
+  rawBody: string | Buffer,
+  secret: string
+): boolean {
+  const headerKey = Object.keys(headers).find(
+    (k) => k.toLowerCase() === "x-wc-webhook-signature"
+  );
+  const signature = headerKey ? headers[headerKey] : undefined;
+  if (!signature || !secret) return false;
+
+  const bodyBuffer = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+  const hmacBase64 = createHmac("sha256", secret).update(bodyBuffer).digest("base64");
+
+  const sigBuffer = Buffer.from(signature, "utf8");
+  const hmacBuffer = Buffer.from(hmacBase64, "utf8");
+
+  if (sigBuffer.length !== hmacBuffer.length) return false;
+  return timingSafeEqual(sigBuffer, hmacBuffer);
+}
+```
+
+### Initial Unsigned Handshake Ping (`isWooCommerceWebhookPing`)
+When creating or activating a webhook in WordPress Admin, WooCommerce core invokes `WC_Webhook::deliver_ping()` via `wp_safe_remote_post()`.
+- **Payload:** `webhook_id=<id>` (sent with `Content-Type: application/x-www-form-urlencoded`).
+- **Signature:** WooCommerce **does not calculate or send** an `x-wc-webhook-signature` header on test pings.
+- **Handling:** Webhook receivers must recognize this handshake via `isWooCommerceWebhookPing(headers, body, rawBody)` and acknowledge immediately with HTTP 200 without attempting HMAC verification or order parsing.
+
+---
+
+## 2. Inbound COD Order Extraction (`parseWebhookOrder`)
+
+WooCommerce `order.created` or `order.updated` payloads for Algerian COD merchants typically arrive in one of two modes:
+1. **Standard WooCommerce Checkout:** Customer address and phone are located in `billing` and `shipping` objects (`state` formatted as `"DZ-13"`, `"13"`, or `"Tlemcen"`, `city` for Commune, `address_1`/`address_2` for street notes, `phone`, and `postcode`).
+2. **Algerian COD Checkout Plugins (WooCommerce Dz, Yalidine WooCommerce, EasyCOD, etc.):** Because merchants in Algeria frequently replace the standard multi-step checkout with a simplified single-form COD plugin, customer phone, Wilaya, and Commune are frequently stored in top-level `meta_data` (e.g. `_billing_wilaya`, `wilaya`, `commune`, `baladiya`, `_billing_phone`).
+
+### Extraction Pipeline
+
+1. **Order Basics:**
+   - `orderId`: `String(payload.id)`
+   - `storeName`: `payload.store_name || "WooCommerce Store"`
+   - `itemName`: First line item title (`payload.line_items?.[0]?.name || "Article"`)
+   - `currentVariant`: Extracted by scanning `line_items[0]?.meta_data` for keys matching `/(?:pa_size|size|taille|pointure|variant|pa_variant)/i` or variant name/title, defaulting to `"Standard"`.
+   - `priceDa`: `Math.round(Number(payload.total || 0))`
+
+2. **Multi-Source Address & Phone Extraction (Standard + COD Plugin Meta):**
+   - **Primary Source (Billing & Shipping objects):**
+     - Customer Name: `${payload.billing?.first_name || payload.shipping?.first_name || ""} ${payload.billing?.last_name || payload.shipping?.last_name || ""}`.trim() || "Client"
+     - Phone: `payload.billing?.phone || payload.shipping?.phone`
+     - Wilaya: `payload.shipping?.state || payload.billing?.state` (stripping leading `"DZ-"` or `"dz_"` prefix)
+     - City/Commune: `payload.shipping?.city || payload.billing?.city`
+     - Address Note: `[payload.shipping?.address_1, payload.shipping?.address_2].filter(Boolean).join(", ")` or billing address
+     - Postcode: `payload.shipping?.postcode || payload.billing?.postcode` (if 5-digit Algerian postal code like `"13000"`, extracts first 2 digits `"13"`)
+   - **Fallback Source (`meta_data` array):**
+     When primary fields are missing, empty, or generic, inspect the top-level `meta_data` array:
+     - Phone: keys matching `/(?:phone|téléphone|telephone|tel|هاتف|تلفون)/i` (e.g., `_billing_phone`)
+     - Wilaya: keys matching `/(?:wilaya|province|state|ولاية)/i` (e.g., `_billing_wilaya`, `wilaya`)
+     - Commune: keys matching `/(?:commune|city|بلدية|baladiya)/i` (e.g., `commune`, `baladiya`)
+     - Address: keys matching `/(?:address|adresse|عنوان)/i` (e.g., `_billing_address_1`, `adresse`)
+     - Name: keys matching `/(?:^nom$|^name$|^full[_\s]?name$|اسم)/i`
+
+3. **Normalization via `@akadli/dz-geo` & `@akadli/core`:**
+   - Phone is normalized to 10-digit local format (`05/06/07XXXXXXXX`) or E.164 (`+213...`).
+   - Wilaya is resolved across all 69 Algerian Wilayas (2026 administrative division) via `normalizeWilaya(...)`.
+   - Commune is resolved against valid communes for the resolved Wilaya via `normalizeCommune(..., wilayaCode)`.
+   - Populates constraints (`allowedWilayas`, `allowedCommunes`, `allowedVariants`) and builds a canonical `StandardizedDzOrder`.
+
+---
+
+## 3. Order Decision Mutation (`applyOrderDecision`)
+
+Once the customer concludes the voice confirmation call, the order decision is pushed to the WooCommerce REST API (v3).
+
+### Required Credentials
+```typescript
+export interface WooCommerceCredentials {
+  siteUrl: string;          // WordPress/WooCommerce site URL (e.g. "https://dz-store.com")
+  consumerKey: string;      // WooCommerce REST API Consumer Key (ck_...)
+  consumerSecret: string;   // WooCommerce REST API Consumer Secret (cs_...)
+  cancelOnRefused?: string; // Default: "true" ("false" to skip status: "cancelled")
+}
+```
+
+### Outbound REST Endpoints
+
+All requests use HTTP Basic Authentication:
+- `Authorization: Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`
+- `Content-Type: application/json`
+
+Base endpoint: `{siteUrl}/wp-json/wc/v3`
+
+#### 1. `CONFIRMED`
+- `PUT /wp-json/wc/v3/orders/{orderId}`:
+  ```json
+  {
+    "meta_data": [
+      { "key": "_akadli_status", "value": "akadli-confirmed" }
+    ]
+  }
+  ```
+- `POST /wp-json/wc/v3/orders/{orderId}/notes`:
+  ```json
+  {
+    "note": "[Akadli-AI] Order CONFIRMED by customer (akadli-confirmed).",
+    "customer_note": false
+  }
+  ```
+
+#### 2. `MODIFIED`
+- `PUT /wp-json/wc/v3/orders/{orderId}`:
+  ```json
+  {
+    "shipping": {
+      "state": "13",
+      "city": "Maghnia",
+      "address_1": "Nouvelle adresse près du stade"
+    },
+    "billing": {
+      "state": "13",
+      "city": "Maghnia",
+      "address_1": "Nouvelle adresse près du stade"
+    },
+    "meta_data": [
+      { "key": "_akadli_status", "value": "akadli-modified" },
+      { "key": "_akadli_variant", "value": "XL" }
+    ]
+  }
+  ```
+- `POST /wp-json/wc/v3/orders/{orderId}/notes`:
+  ```json
+  {
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Maghnia",
+    "customer_note": false
+  }
+  ```
+
+#### 3. `REFUSED`
+- `PUT /wp-json/wc/v3/orders/{orderId}`:
+  ```json
+  {
+    "status": "cancelled",
+    "meta_data": [
+      { "key": "_akadli_status", "value": "akadli-refused" }
+    ]
+  }
+  ```
+- `POST /wp-json/wc/v3/orders/{orderId}/notes`:
+  ```json
+  {
+    "note": "[Akadli-AI] Order REFUSED: Customer ordered by mistake and asked to cancel.",
+    "customer_note": false
+  }
+  ```
+
+
+
+================================================================================
+# FILE: @akadli/provider-gsheets - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/provider-gsheets
+
+> Universal Google Sheets & Apps Script bridge for Algerian COD landing pages and entry-level store builders (SetShop, JustSell, Foorweb).
+
+Implements `IEcommerceProvider` from `@akadli/adapter-contract` supporting flexible Arabic, French, and English column headers, HMAC/secret verification, and two-way cell mutations.
+
+---
+
+## Connection Modes for Algerian Merchants
+
+### Mode A: Direct Google Sheets REST API v4
+Connects directly using a Google Cloud Service Account OAuth token. Requires `spreadsheetId` and `accessToken`.
+
+### Mode B: Zero-OAuth Google Apps Script Web App (Recommended for Fast Setup)
+Merchants deploy a simple Web App inside their Google Sheet that handles outbound webhooks and accepts post-call updates.
+
+#### Copy-Paste Google Apps Script (`doPost` Handler)
+Inside your Google Sheet -> **Extensions** -> **Apps Script**, paste:
+
+```javascript
+function doPost(e) {
+  var data = JSON.parse(e.postData.contents);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
+  var row = data.rowNumber;
+  if (!row) return ContentService.createTextOutput("Missing rowNumber");
+
+  sheet.getRange(row, 7).setValue(data.status); // Col G: Status
+  if (data.finalWilaya) sheet.getRange(row, 9).setValue(data.finalWilaya); // Col I: Wilaya
+  if (data.finalCommune) sheet.getRange(row, 10).setValue(data.finalCommune); // Col J: Commune
+  if (data.reasonOrNotes) sheet.getRange(row, 12).setValue(data.reasonOrNotes); // Col L: Notes
+  return ContentService.createTextOutput("OK");
+}
+```
+*Deploy as Web App -> Execute as: Me -> Who has access: Anyone.*
+
+---
+
+## Credentials Schema
+
+| Mode | Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **A** | `spreadsheetId` | `string` | Yes (Mode A) | — | Google Sheet ID from URL |
+| **A** | `accessToken` | `string` | Yes (Mode A) | — | Google Cloud OAuth2 token |
+| **A** | `sheetName` | `string` | No | `"Sheet1"` | Target tab name |
+| **A** | `statusColumn` / `notesColumn` | `string` | No | `"G"` / `"L"` | Columns for status and notes |
+| **B** | `appsScriptWebhookUrl` | `string` | Yes (Mode B) | — | Deployed Apps Script Web App URL |
+| **B** | `secret` | `string` | No | — | Shared secret token for verification |
+
+---
+
+## Usage Example
+
+```typescript
+import { GSheetsProvider } from "@akadli/provider-gsheets";
+
+const provider = new GSheetsProvider();
+
+// 1. Verify Webhook (supports x-akadli-signature hex HMAC or x-akadli-secret)
+const isValid = await provider.verifyWebhook(headers, rawBody, process.env.GSHEETS_WEBHOOK_SECRET!);
+
+// 2. Parse row payload (supports Arabic headers like 'الاسم', 'الهاتف', 'الولاية')
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 3. Mutate Google Sheet row (Mode B Apps Script or Mode A REST API)
+const result = await provider.applyOrderDecision(order.orderId, {
+  orderId: order.orderId,
+  status: "CONFIRMED",
+  reasonOrNotes: "Confirmed via voice agent"
+}, {
+  appsScriptWebhookUrl: process.env.GSHEETS_APPS_SCRIPT_URL!
+});
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-gsheets - docs/api-spec.md
+================================================================================
+
+
+# Google Sheets Algerian COD Adapter Specification (`@akadli/provider-gsheets`)
+
+This document defines the technical specification, webhook signature verification, Algerian COD sheet row extraction, and outbound mutation endpoints for Google Sheets integrating with the **Akadli-AI** voice confirmation engine.
+
+---
+
+## Background: Why Google Sheets Integration is Critical
+
+In the Algerian e-commerce ecosystem, entry-level store builders (such as **SetShop**, **JustSell**, **DZBuild**, and **Foorweb**) as well as custom single-product COD landing pages do not expose full-featured two-way REST APIs for order management. Instead, they sync every incoming checkout submission into a **Google Sheet row** and trigger an outbound webhook via Google Apps Script (`UrlFetchApp`).
+
+`@akadli/provider-gsheets` acts as the universal bridge for these platforms, enabling:
+1. Ingesting new order rows with flexible multi-lingual column headers (Arabic, French, English).
+2. Normalizing Algerian customer phone numbers and 2026 Wilayas/Communes.
+3. Mutating the Google Sheet row directly upon voice call completion via either:
+   - **Mode A**: Direct Google Sheets REST API v4 (`values:batchUpdate`).
+   - **Mode B**: Google Apps Script Web App Webhook callback (`doPost`).
+
+---
+
+## 1. Webhook Signature Verification (`verifyWebhook`)
+
+Google Apps Script webhooks emit payloads using `UrlFetchApp.fetch()`. Merchants can configure either a cryptographic HMAC-SHA256 signature header or a shared secret token header.
+
+### Supported Headers
+- **HMAC Signature:** `x-akadli-signature` or `x-gsheets-signature` (case-insensitive) containing the `hex` digest of HMAC-SHA256 over the unparsed raw body.
+- **Shared Secret / Token:** `x-akadli-secret` (or `authorization: Bearer <secret>`).
+
+### Verification Protocol
+1. If `x-akadli-signature` or `x-gsheets-signature` is present:
+   - Compute `crypto.createHmac("sha256", secret).update(bodyBuffer).digest("hex")`.
+   - Compare with the signature using `crypto.timingSafeEqual` after verifying byte lengths match.
+2. If `x-akadli-secret` is present:
+   - Compare header value with configured `secret` using `crypto.timingSafeEqual` over UTF-8 buffers of equal length.
+3. If neither header matches or signatures differ, return `false` gracefully without throwing unhandled exceptions.
+
+```typescript
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyGSheetsWebhook(
+  headers: Record<string, string>,
+  rawBody: string | Buffer,
+  secret: string
+): boolean {
+  if (!secret) return false;
+
+  // Case-insensitive header lookup
+  const getHeader = (name: string): string | undefined => {
+    const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());
+    return key ? headers[key] : undefined;
+  };
+
+  const sigHeader = getHeader("x-akadli-signature") || getHeader("x-gsheets-signature");
+  if (sigHeader) {
+    const bodyBuffer = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+    const computedHex = createHmac("sha256", secret).update(bodyBuffer).digest("hex");
+    const sigBuf = Buffer.from(sigHeader.trim(), "utf8");
+    const compBuf = Buffer.from(computedHex, "utf8");
+    if (sigBuf.length === compBuf.length && timingSafeEqual(sigBuf, compBuf)) {
+      return true;
+    }
+  }
+
+  const secretHeader = getHeader("x-akadli-secret");
+  if (secretHeader) {
+    const headerBuf = Buffer.from(secretHeader.trim(), "utf8");
+    const secBuf = Buffer.from(secret.trim(), "utf8");
+    if (headerBuf.length === secBuf.length && timingSafeEqual(headerBuf, secBuf)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+```
+
+---
+
+## 2. Inbound COD Row Extraction (`parseWebhookOrder`)
+
+Google Sheet rows arrive as JSON payloads containing row numbers and flexible column key mappings across English, French, and Arabic.
+
+### Row Identification & Tracking
+- Payload supplies either `rowNumber` (number or string like `42`) or `orderId` (e.g., `"ROW-42"` or `"SS-1042"`).
+- `@akadli/provider-gsheets` preserves the `rowNumber` in the canonical `orderId` (e.g. `ROW-42` or `SS-1042#ROW-42`), ensuring that `applyOrderDecision` can target the exact row on Google Sheets.
+
+### Column Key Mapping
+Column keys are evaluated case-insensitively, supporting trimmed Arabic, French, and English variations:
+
+| Field | Accepted Candidate Keys | Default Fallback |
+| :--- | :--- | :--- |
+| **Customer Name** | `full_name`, `nom`, `client`, `الاسم`, `اسم_العميل`, `name`, `customer` | `"Client"` |
+| **Phone** | `phone`, `telephone`, `tel`, `الهاتف`, `رقم_الهاتف`, `mobile` | Must normalize via `@akadli/dz-geo` |
+| **Wilaya** | `wilaya`, `province`, `state`, `الولاية`, `region` | Must normalize to 2-digit code (`"01"`-`"69"`) |
+| **Commune** | `commune`, `baladiya`, `city`, `البلدية`, `ville` | Must match or fallback to Wilaya capital |
+| **Address Note**| `address`, `adresse`, `note`, `العنوان`, `address_note` | `""` |
+| **Product** | `product`, `item_name`, `produit`, `المنتج`, `اسم_المنتج`, `article` | `"Article"` |
+| **Size / Variant** | `size`, `taille`, `variant`, `المقاس`, `الحجم` | `"Standard"` |
+| **Price (DZD)** | `price`, `total`, `prix`, `السعر`, `montant` | `0` |
+
+### Normalization Pipeline
+1. Ingest flat or nested row payload (`payload.data` / `payload.row` / top-level keys).
+2. Phone normalized to 10-digit Algerian format (`05/06/07XXXXXXXX`) via `normalizeDzPhone(..., "local")`.
+3. Wilaya normalized to official 2-digit code (`"01"`-`"69"`) via `normalizeWilaya(...)`.
+4. Commune normalized within the resolved Wilaya via `normalizeCommune(...)`.
+5. Canonical order created via `createStandardizedDzOrder(...)` from `@akadli/core`.
+
+---
+
+## 3. Order Decision Mutation (`applyOrderDecision`)
+
+Post-call decisions (`CONFIRMED`, `MODIFIED`, `REFUSED`) are mutated back into Google Sheets. Two execution modes are supported:
+
+### Mode A: Direct Google Sheets REST API v4 (Google Cloud Service Account / OAuth)
+
+Used when `credentials.spreadsheetId` and `credentials.accessToken` are provided.
+
+#### Credentials Schema
+```typescript
+export interface GSheetsApiCredentials {
+  spreadsheetId: string;
+  accessToken: string;
+  sheetName?: string;      // default: "Sheet1"
+  statusColumn?: string;   // default: "G"
+  sizeColumn?: string;     // default: "H"
+  wilayaColumn?: string;   // default: "I"
+  communeColumn?: string;  // default: "J"
+  addressColumn?: string;  // default: "K"
+  notesColumn?: string;    // default: "L"
+  baseUrl?: string;        // default: "https://sheets.googleapis.com"
+}
+```
+
+#### Mutation Endpoint
+- **Method:** `POST {baseUrl}/v4/spreadsheets/{spreadsheetId}/values:batchUpdate`
+- **Headers:**
+  - `Authorization: Bearer {accessToken}`
+  - `Content-Type: application/json`
+- **Payload (`valueInputOption: "USER_ENTERED"`):**
+```json
+{
+  "valueInputOption": "USER_ENTERED",
+  "data": [
+    {
+      "range": "Sheet1!G42",
+      "values": [["akadli-confirmed"]]
+    },
+    {
+      "range": "Sheet1!L42",
+      "values": [["Confirmed by customer via voice call"]]
+    }
+  ]
+}
+```
+
+For `MODIFIED` decisions, `sizeColumn`, `wilayaColumn`, `communeColumn`, and `addressColumn` are included in the `data` array if specified in the decision.
+
+### Mode B: Apps Script Webhook Callback URL
+
+For merchants without Google Cloud API credentials, a Google Apps Script Web App URL can be configured.
+
+#### Credentials Schema
+```typescript
+export interface GSheetsAppsScriptCredentials {
+  appsScriptWebhookUrl: string;
+  secret?: string;
+}
+```
+
+#### Callback Request
+- **Method:** `POST {appsScriptWebhookUrl}`
+- **Headers:**
+  - `Content-Type: application/json`
+  - `x-akadli-secret: {secret}` (if secret provided)
+  - `x-akadli-signature: {hexHmac}` (if secret provided)
+- **Body:**
+```json
+{
+  "orderId": "SS-1042#ROW-42",
+  "rowNumber": 42,
+  "status": "CONFIRMED",
+  "externalStatus": "CONFIRMED",
+  "finalVariant": "43",
+  "finalWilaya": "16",
+  "finalCommune": "Bab Ezzouar",
+  "finalAddressNote": "Cité 8 Mai 1945",
+  "reasonOrNotes": "Confirmed with size change",
+  "updatedAt": "2026-10-19T14:00:00.000Z"
+}
+```
+
+---
+
+## 4. Error Handling & HTTP Status Codes
+
+- **401 / 403 Unauthorized:** Return `{ success: false, externalStatus: "UNAUTHORIZED", rawResponse: ... }`.
+- **404 Not Found:** Return `{ success: false, externalStatus: "NOT_FOUND", rawResponse: ... }`.
+- **Missing Row Number:** Return `{ success: false, externalStatus: "INVALID_ROW_NUMBER", rawResponse: ... }`.
+- **Network / Other Errors:** Fail gracefully with descriptive error payloads.
+
+
+
+================================================================================
+# FILE: @akadli/provider-tassyir - README.md
+================================================================================
+
+
+**[English](./README.md) | [العربية](./README.ar.md)**
+
+# @akadli/provider-tassyir
+
+> Official Tassyir Admin API (2026-10) adapter with Standard Webhooks (v1a Ed25519 zero-secret public key verification & HMAC fallback), install-code OAuth (tsy_ic_...) with HTTP Basic Auth, idempotent order confirmations (Idempotency-Key), and Algerian COD address normalization.
+
+Implements `IEcommerceProvider` from `@akadli/adapter-contract` for Algerian merchants and fulfillment hubs managing Cash on Delivery (COD) orders via **Tassyir** (`api.tassyir.io`).
+
+---
+
+## Tassyir App Configuration (tassyir.app.toml)
+
+When developing a headless external application on the Tassyir Developer platform (`developers.tassyir.io`), configure your `tassyir.app.toml` file as follows:
+
+```toml
+[app]
+name = "Akadli-AI Voice Confirmation"
+handle = "akadli-ai"
+client_id = "app_..."
+
+[auth]
+callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
+scopes = [
+  "read_orders",
+  "write_orders",
+  "read_customer_contact",
+  "read_products"
+]
+
+[webhooks]
+url = "https://<tunnel>/api/webhooks/tassyir"
+events = [
+  "orders/created"
+]
+```
+
+### Required App Scopes
+- `read_orders`: Read incoming orders, line items, and customer delivery destinations.
+- `write_orders`: Update order notes, confirm (`/confirm`), and cancel (`/cancel`) orders.
+- `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), phone numbers are masked as `"**********"` and the order enters `waiting: true`. The adapter detects this and throws an actionable error.
+- `read_products`: Recommended for multi-variant products. Allows the adapter to fetch full size/variant choices from `GET /products/{productId}` so voice callers can switch sizes.
+
+---
+
+## Authentication & OAuth Flow
+
+Tassyir external apps do not use static merchant API keys. Authentication uses OAuth 2.0 with install authorization codes:
+
+1. **App Installation:** When a merchant installs the external app on their store, Tassyir redirects their browser to your configured `[auth] callback_url` with an install code:
+   ```text
+   GET https://<tunnel>/api/webhooks/tassyir/callback?code=tsy_ic_...
+   ```
+2. **Redeeming Install Code:** The backend redeems `tsy_ic_...` via `POST https://api.tassyir.io/apps/oauth/token`:
+   - **Authentication:** HTTP Basic Auth header `Authorization: Basic base64(client_id:client_secret)`
+   - **Content-Type:** `application/x-www-form-urlencoded`
+   - **Body:** `grant_type=authorization_code&code=tsy_ic_...`
+   - Note: Never pass `client_secret` in the request body; Tassyir rejects that with `invalid_client`.
+   - **Response:**
+     ```json
+     {
+       "access_token": "tsy_at_...",
+       "refresh_token": "tsy_rt_...",
+       "expires_in": 3600,
+       "token_type": "Bearer",
+       "installation_id": "inst_..."
+     }
+     ```
+3. **Refreshing Tokens:** When the access token expires, refresh it using `grant_type=refresh_token&refresh_token=tsy_rt_...` with HTTP Basic Auth. The `TassyirClient` automatically handles this refresh.
+
+---
+
+## Standard Webhooks & Public Keys (Zero-Secret Verification)
+
+Tassyir signs all inbound webhooks using the **Standard Webhooks (`v1a` Ed25519)** specification. Tassyir does **not** provide a per-store "webhook secret". Instead:
+
+- Signatures are signed using an Ed25519 private key by Tassyir.
+- Corresponding public keys (`whpk_<base64_raw_32_byte_ed25519_key>`) are published at:
+  ```text
+  GET https://api.tassyir.io/apps/webhook-keys
+  ```
+- The adapter decodes the 32-byte raw Ed25519 public key natively using standard 12-byte ASN.1 SPKI DER prefix (`302a300506032b6570032100` in hex) with Node's native `crypto.createPublicKey`:
+  ```typescript
+  const spkiDerPrefix = Buffer.from("302a300506032b6570032100", "hex");
+  const der = Buffer.concat([spkiDerPrefix, raw32ByteKeyBuffer]);
+  const keyObject = crypto.createPublicKey({ key: der, format: "der", type: "spki" });
+  ```
+- Public keys fetched from `https://api.tassyir.io/apps/webhook-keys` are cached in memory for 1 hour.
+- An embedded fallback key (`whpk_1BaNZhSk1qxT/1RugRT9eucQWvfo1ufg0o1u5qZejAA=`) ensures offline and test resilience.
+- For local unit testing and simulators, HMAC-SHA256 verification is supported when a non-`whpk_` secret is passed explicitly.
+
+---
+
+## Credentials Configuration (TassyirCredentialsSchema)
+
+The adapter accepts either direct access tokens or OAuth application credentials:
+
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `accessToken` | `string` | Optional* | — | Direct Tassyir Bearer access token (`tsy_at_...` or `apiKey` for backwards compatibility) |
+| `clientId` | `string` | Optional* | — | Tassyir App Client ID (`app_...`) from Developer Console |
+| `clientSecret` | `string` | Optional* | — | Tassyir App Client Secret (`tsy_cs_...`) from Developer Console |
+| `refreshToken` | `string` | Optional | — | Tassyir OAuth Refresh Token (`tsy_rt_...`) for auto-refresh |
+| `baseUrl` | `string` | No | `"https://api.tassyir.io/apps/2026-10"` | Tassyir Admin API base endpoint |
+| `confirmOnModified` | `string` | No | `"true"` | Calls `/confirm` when an order is updated with new size/address |
+| `cancelOnRefused` | `string` | No | `"true"` | Calls `/cancel` when an order is refused during a voice call |
+
+\* Either `accessToken` or (`clientId` and `clientSecret`) must be provided.
+
+---
+
+## Usage Example
+
+```typescript
+import { TassyirProvider, TassyirClient } from "@akadli/provider-tassyir";
+
+// 1. Initialize provider
+const provider = new TassyirProvider();
+
+// 2. Verify inbound webhook (zero-secret Ed25519 verification against published whpk_ keys)
+const isValid = await provider.verifyWebhook(
+  headers,
+  rawBody
+);
+
+if (!isValid) {
+  throw new Error("Invalid Tassyir Ed25519 signature");
+}
+
+// 3. Parse standardized Algerian COD order (supports 2026-10 envelope)
+const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
+
+// 4. Apply post-call decision to Tassyir Admin API
+const result = await provider.applyOrderDecision(
+  order.orderId,
+  {
+    orderId: order.orderId,
+    status: "CONFIRMED",
+    reasonOrNotes: "Customer confirmed via ElevenAgents voice call",
+  },
+  {
+    clientId: process.env.TASSYIR_CLIENT_ID!,
+    clientSecret: process.env.TASSYIR_CLIENT_SECRET!,
+    refreshToken: process.env.TASSYIR_REFRESH_TOKEN!,
+  }
+);
+
+console.log("Mutation result:", result.externalStatus); // "CONFIRMED"
+```
+
+---
+
+## OAuth Helper Methods on TassyirClient
+
+```typescript
+const client = new TassyirClient({
+  clientId: process.env.TASSYIR_CLIENT_ID!,
+  clientSecret: process.env.TASSYIR_CLIENT_SECRET!,
+});
+
+// Redeem merchant install code on callback redirect
+const tokens = await client.redeemInstallCode(
+  process.env.TASSYIR_CLIENT_ID!,
+  process.env.TASSYIR_CLIENT_SECRET!,
+  installCode
+);
+console.log("Access Token:", tokens.access_token);
+console.log("Refresh Token:", tokens.refresh_token);
+
+// Refresh expired token
+const refreshed = await client.refreshAccessToken(
+  process.env.TASSYIR_CLIENT_ID!,
+  process.env.TASSYIR_CLIENT_SECRET!,
+  tokens.refresh_token!
+);
+```
+
+
+
+================================================================================
+# FILE: @akadli/provider-tassyir - docs/api-spec.md
+================================================================================
+
+
+# Tassyir Admin API (`2026-10`) & Standard Webhooks Specification (`@akadli/provider-tassyir`)
+
+This document defines the technical specification, authentication, Standard Webhook Ed25519 verification, Algerian COD data extraction, and order decision mutation flow for Tassyir (`api.tassyir.io`) integrating natively with the **Akadli-AI** voice confirmation engine.
+
+---
+
+## 1. Tassyir App Setup (`tassyir.app.toml`) & Scopes
+
+External headless apps on the Tassyir Developer platform (`developers.tassyir.io`) are configured via `tassyir.app.toml`:
+
+```toml
+[app]
+name = "Akadli-AI Voice Confirmation"
+handle = "akadli-ai"
+client_id = "app_..."
+
+[auth]
+callback_url = "https://<tunnel>/api/webhooks/tassyir/callback"
+scopes = [
+  "read_orders",
+  "write_orders",
+  "read_customer_contact",
+  "read_products"
+]
+
+[webhooks]
+url = "https://<tunnel>/api/webhooks/tassyir"
+events = [
+  "orders/created"
+]
+```
+
+### Required OAuth / App Scopes
+- `read_orders`: Allows reading incoming order details, items, and shipping destinations.
+- `write_orders`: Allows patching order notes, confirming orders (`/confirm`), and cancelling refused orders (`/cancel`).
+- `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), `buyer.phone` is masked as `"**********"` and `waiting: true` is flagged. The adapter enforces this guard immediately.
+- `read_products`: Recommended for multi-variant products. Allows the adapter to fetch full size/variant choices from `GET /products/{productId}` so voice agents can let callers choose alternative sizes.
+
+---
+
+## 2. Base URL & Authentication Flow
+
+- **Admin API Base URL:** `https://api.tassyir.io/apps/2026-10`
+- **OAuth Token Endpoint:** `POST https://api.tassyir.io/apps/oauth/token`
+- **Webhook Public Keys:** `GET https://api.tassyir.io/apps/webhook-keys`
+
+### External App OAuth Installation Flow
+1. Merchant installs app; browser redirects to `callback_url?code=tsy_ic_...`.
+2. Backend redeems code via `POST /apps/oauth/token`:
+   - Header: `Authorization: Basic base64(client_id:client_secret)`
+   - Header: `Content-Type: application/x-www-form-urlencoded`
+   - Body: `grant_type=authorization_code&code=tsy_ic_...`
+   - (Note: `client_secret` must NOT be in the body).
+   - Response: `{ access_token: "tsy_at_...", refresh_token: "tsy_rt_...", expires_in: 3600 }`.
+3. To refresh: `grant_type=refresh_token&refresh_token=tsy_rt_...` with Basic Auth.
+
+### Idempotency Keys on Write Routes
+Every `POST` write operation (`/confirm`, `/cancel`) sends an `Idempotency-Key` header:
+- `CONFIRMED`: `Idempotency-Key: akadli-confirm-{orderId}`
+- `MODIFIED`: `Idempotency-Key: akadli-confirm-mod-{orderId}`
+- `REFUSED`: `Idempotency-Key: akadli-cancel-{orderId}`
+
+---
+
+## 3. Webhook Signature Verification (`verifyWebhook`)
+
+Tassyir signs all inbound webhooks using the **Standard Webhooks (`v1a` Ed25519)** specification. Tassyir has **no** shared webhook secret.
+
+### Standard Webhooks (`v1a` Ed25519)
+- **Headers:**
+  - `webhook-id`: Unique message ID (e.g. `msg_741000000000000001`).
+  - `webhook-timestamp`: Unix timestamp in seconds or milliseconds.
+  - `webhook-signature`: Format `v1a,<base64_ed25519_signature>`.
+- **Signed Message:**
+  ```text
+  ${webhookId}.${webhookTimestamp}.${rawBody}
+  ```
+- **Replay Protection:** Webhook timestamp must be within 5 minutes (`300` seconds) of the current system time.
+- **Verification:** Public keys (`whpk_<base64_raw_32_byte_ed25519_key>`) are fetched from `GET https://api.tassyir.io/apps/webhook-keys` (cached for 1 hour).
+  The adapter decodes raw 32-byte Ed25519 public keys using the standard 12-byte ASN.1 SPKI DER prefix (`302a300506032b6570032100` in hex) via Node's native `crypto.createPublicKey`.
+  Fallback key `whpk_1BaNZhSk1qxT/1RugRT9eucQWvfo1ufg0o1u5qZejAA=` is embedded for resilience.
+
+### HMAC-SHA256 Fallback
+- Used strictly when a custom non-`whpk_` secret is passed in local tests and sandbox simulation.
+
+---
+
+## 4. Inbound Order Normalization (`parseWebhookOrder`)
+
+Tassyir emits `orders/created` events with a nested envelope (`data.order`) or flat order objects.
+
+### Envelope Structure (`2026-10`)
+```json
+{
+  "id": "evt_order_created_741000000000000001",
+  "type": "orders/created",
+  "apiVersion": "2026-10",
+  "data": {
+    "order": {
+      "id": "741000000000000001",
+      "store_name": "Dz Mode Constantine",
+      "total": "8500.00",
+      "buyer": {
+        "name": "Khadija Benali",
+        "phone": "0550123456",
+        "provinceCode": 25,
+        "townOns": "El Khroub",
+        "address": "Cité 1600 Logements, Bâtiment B3"
+      },
+      "delivery": {
+        "method": "home"
+      },
+      "items": [
+        {
+          "id": "item_90421",
+          "title": "Robe Traditionnelle Constantinoise",
+          "variantTitle": "L",
+          "quantity": 1,
+          "price": "8500.00"
+        }
+      ],
+      "status": "pending",
+      "created_at": "2026-10-19T14:30:00Z"
+    }
+  }
+}
+```
+
+### Field Mapping & Guards
+1. **Order ID:** `String(order.id)` (e.g. `"741000000000000001"`).
+2. **Total Price:** Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA).
+3. **Buyer Contact Guard:**
+   - If `order.waiting === true` or `buyer.phone` is masked (`"**********"`), the adapter throws:
+     `"Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."`
+4. **Wilaya & Commune Normalization:**
+   - `provinceCode` (number `1..69`, e.g. `25` -> Constantine, `59` -> Aflou) maps to official 2026 Algerian divisions via `@akadli/dz-geo`.
+   - `townOns` maps to canonical Algerian commune names.
+5. **Item & Variant Extraction:**
+   - Name: `items[0].title` or `items[0].name`.
+   - Size / Variant: Cleaned from `items[0].variantName` (e.g. `"nike ensemble - M"` -> `"M"`), `variantTitle`, `variant`, or `options`.
+   - Constraints (`allowedVariants`):
+     - If credentials or client are provided to `parseWebhookOrder` and `items[0].productId` is present, the adapter queries `GET /products/{productId}` to populate all available variants (`product.options` / `product.variants`).
+     - Defaults gracefully to the ordered variant(s) across line items if offline or without `read_products` scope.
+
+---
+
+## 5. Post-Call Order Decision Mutations (`applyOrderDecision`)
+
+Post-call decisions from Akadli-AI voice calls are dispatched back to Tassyir Admin API (`2026-10`).
+
+### Credentials Configuration
+```typescript
+interface TassyirCredentials {
+  accessToken: string; // or apiKey
+  baseUrl?: string; // Default: https://api.tassyir.io/apps/2026-10
+  confirmOnModified?: string; // "true" | "false", default: "true"
+  cancelOnRefused?: string; // "true" | "false", default: "true"
+}
+```
+
+### Outbound Actions
+
+#### 1. `CONFIRMED`
+1. `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}`
+   ```json
+   {
+     "note": "[Akadli-AI] Order CONFIRMED by customer (akadli-confirmed)."
+   }
+   ```
+2. `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/confirm`
+   - Header: `Idempotency-Key: akadli-confirm-{orderId}`
+   - Body: `{}`
+
+Returns `externalStatus: "CONFIRMED"`.
+
+#### 2. `MODIFIED`
+1. Resolve numeric Wilaya code `provinceCode` (`1..69`) from `decision.finalWilaya`.
+2. `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}`
+   ```json
+   {
+     "buyer": {
+       "provinceCode": 13,
+       "address": "Maghnia - Cite Imama"
+     },
+     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed size"
+   }
+   ```
+3. If `credentials.confirmOnModified !== "false"`:
+   `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/confirm`
+   - Header: `Idempotency-Key: akadli-confirm-mod-{orderId}`
+   - Body: `{}`
+
+Returns `externalStatus: "MODIFIED"`.
+
+#### 3. `REFUSED`
+1. If `credentials.cancelOnRefused !== "false"`:
+   `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/cancel`
+   - Header: `Idempotency-Key: akadli-cancel-{orderId}`
+   - Body:
+     ```json
+     {
+       "note": "[Akadli-AI] Order REFUSED by customer (akadli-refused): Customer refused during voice call"
+     }
+     ```
+2. Otherwise, `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}` updating `note`.
+
+Returns `externalStatus: "REFUSED"`.
+
+---
+
+## 6. Rate Limit & Busy Handling
+- **429 Rate Limits:**
+  - Standard rate limit: Returns `externalStatus: "RATE_LIMITED"`.
+  - Quota exhaustion (`code: "BUSINESS_RATE_LIMITED"`): Returns `externalStatus: "BUSINESS_RATE_LIMITED"`.
+- **503 Server Busy (`API_BUSY`):**
+  - Respects `Retry-After` header with bounded exponential backoff up to 3 retry attempts.
+
+
+
+================================================================================
+# FILE: @akadli/playground - README.md
+================================================================================
+
+
+**[English](./README.md) | [🇩🇿 العربية](./README.ar.md)**
+
+# @akadli/playground
+
+> Local HTTPS WebRTC phone simulator (/phone) and desktop admin dispatch center (/admin) for end-to-end testing of Algerian COD voice calls and webhook integrations over LAN Wi-Fi.
+
+`@akadli/playground` provides an isolated testbed to simulate inbound store orders, test live Darja speech-to-speech calls via ElevenAgents, and inspect order decisions without deploying external servers.
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install & build from root
+pnpm install && pnpm build
+
+# 2. Configure credentials in apps/akadli-playground/.env
+cp apps/akadli-playground/.env.example apps/akadli-playground/.env
+
+# 3. Launch the playground server
+pnpm --filter @akadli/playground dev
+```
+
+- **Admin Dashboard (`/admin`):** Open `https://localhost:3000/admin` to trigger calls, load sample fixtures, and monitor transcripts.
+- **Mobile Phone Receiver (`/phone`):** Open `https://<YOUR-LAN-IP>:3000/phone` on your smartphone (connected to same Wi-Fi) to receive the simulated customer call with custom ringtone.
+
+---
+
+## Environment Variables (`server/src/config.ts`)
+
+| Category | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| **Server** | `PORT` / `SERVER_PORT` | `3000` / `3001` | Frontend Vite and backend Express ports |
+| **ElevenLabs** | `ELEVENLABS_API_KEY` / `_AGENT_ID` | — | ElevenAgents voice synthesis credentials |
+| **Shopify** | `SHOPIFY_SHOP_DOMAIN` / `_ACCESS_TOKEN` | — | Store domain & permanent access token |
+| **Shopify** | `SHOPIFY_CLIENT_ID` / `_CLIENT_SECRET` | — | OAuth client credentials (auto token exchange) |
+| **Shopify** | `SHOPIFY_WEBHOOK_SECRET` / `_API_VERSION` | `"2025-01"` | HMAC verification secret & API version |
+| **YouCan** | `YOUCAN_ACCESS_TOKEN` / `_WEBHOOK_SECRET` | — | YouCan API token & webhook signing secret |
+| **YouCan** | `YOUCAN_API_BASE_URL` | `"https://api.youcan.shop"` | YouCan REST API base URL |
+| **WooCommerce** | `WOOCOMMERCE_SITE_URL` | — | WordPress site URL |
+| **WooCommerce** | `WOOCOMMERCE_CONSUMER_KEY` / `_SECRET` | — | REST API v3 credentials (`ck_...`, `cs_...`) |
+| **WooCommerce** | `WOOCOMMERCE_WEBHOOK_SECRET` | — | HMAC signing secret (`x-wc-webhook-signature`) |
+| **GSheets** | `GSHEETS_SPREADSHEET_ID` / `_ACCESS_TOKEN`| — | Mode A Google Sheets API credentials |
+| **GSheets** | `GSHEETS_APPS_SCRIPT_URL` / `_SECRET` | — | Mode B Apps Script Web App callback URL |
+| **Tassyir** | `TASSYIR_API_KEY` / `_WEBHOOK_SECRET` | — | Tassyir COD ERP API key & signing secret |
+| **Tassyir** | `TASSYIR_API_BASE_URL` | `"https://api.tassyir.dz/v1"` | Tassyir REST API base URL |
+
+---
+
+## Webhook & Simulation Endpoints
+
+All store adapters register live ingestion and fixture simulation routes in `providerRegistry`:
+
+| Provider | Live Ingestion Route | Local Fixture Simulation Route |
+| :--- | :--- | :--- |
+| **Shopify** | `POST /api/webhooks/shopify` | `POST /api/webhooks/shopify/simulate` |
+| **YouCan** | `POST /api/webhooks/youcan` | `POST /api/webhooks/youcan/simulate` |
+| **WooCommerce** | `POST /api/webhooks/woocommerce` | `POST /api/webhooks/woocommerce/simulate` |
+| **Google Sheets** | `POST /api/webhooks/gsheets` | `POST /api/webhooks/gsheets/simulate` |
+| **Tassyir ERP** | `POST /api/webhooks/tassyir` | `POST /api/webhooks/tassyir/simulate` |
+
+---
+
+## Live Webhook Testing with Cloudflare Tunnel
+
+To test live webhooks from real stores without deploying to cloud:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3001
+```
+
+Set your store webhook URL to `https://<tunnel-subdomain>.trycloudflare.com/api/webhooks/<provider>`.
