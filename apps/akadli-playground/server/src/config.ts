@@ -86,7 +86,7 @@ export const config = {
     return (process.env.TASSYIR_WEBHOOK_SECRET || '').trim();
   },
   get tassyirApiBaseUrl(): string {
-    return (process.env.TASSYIR_API_BASE_URL || 'https://api.tassyir.dz/v1').trim();
+    return (process.env.TASSYIR_API_BASE_URL || 'https://api.tassyir.io/apps/2026-10').trim();
   },
 };
 

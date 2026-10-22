@@ -256,7 +256,7 @@ const providerRegistry: ProviderDescriptor[] = [
     secretEnvVarName: 'TASSYIR_WEBHOOK_SECRET',
     webhookReceivedType: 'TASSYIR_WEBHOOK_RECEIVED',
     mutationResultType: 'TASSYIR_MUTATION_RESULT',
-    getLiveStoreLabel: () => config.tassyirApiBaseUrl || 'https://api.tassyir.dz/v1',
+    getLiveStoreLabel: () => config.tassyirApiBaseUrl || 'https://api.tassyir.io/apps/2026-10',
     resolveFixture: (fixture) =>
       fixture === 'stopdesk' || fixture === 'stop-desk' || fixture === '59'
         ? 'webhook-order-stopdesk.json'
@@ -272,9 +272,10 @@ const providerRegistry: ProviderDescriptor[] = [
     },
     isTargetOrder: (order) => order?.source === 'tassyir',
     getMutationCredentials: () => ({
+      accessToken: config.tassyirApiKey || 'simulated_tassyir_api_key',
       apiKey: config.tassyirApiKey || 'simulated_tassyir_api_key',
-      baseUrl: config.tassyirApiBaseUrl || 'https://api.tassyir.dz/v1',
-      dispatchOnConfirm: 'true',
+      baseUrl: config.tassyirApiBaseUrl || 'https://api.tassyir.io/apps/2026-10',
+      confirmOnModified: 'true',
       cancelOnRefused: 'true',
     }),
   },

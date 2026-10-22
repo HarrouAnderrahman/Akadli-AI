@@ -1,13 +1,29 @@
 import { z } from "zod";
 
+export const TassyirBuyerSchema = z.object({
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  provinceCode: z.union([z.number(), z.string()]).optional(),
+  townOns: z.string().optional(),
+  address: z.string().optional(),
+  address2: z.string().optional(),
+});
+
+export type TassyirBuyer = z.infer<typeof TassyirBuyerSchema>;
+
 export const TassyirItemSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
   name: z.string().optional(),
   title: z.string().optional(),
+  variantTitle: z.string().optional(),
   variant: z.string().optional(),
+  options: z.array(z.string()).optional(),
   size: z.string().optional(),
   quantity: z.number().optional(),
   price: z.union([z.number(), z.string()]).optional(),
 });
+
+export type TassyirItem = z.infer<typeof TassyirItemSchema>;
 
 export const TassyirCustomerSchema = z.object({
   full_name: z.string().optional(),
@@ -27,18 +43,26 @@ export const TassyirShippingAddressSchema = z.object({
   address: z.string().optional(),
 });
 
-export const TassyirWebhookPayloadSchema = z.object({
-  event: z.string().optional(),
+export const TassyirOrderSchema = z.object({
   id: z.union([z.string(), z.number()]).optional(),
   order_id: z.union([z.string(), z.number()]).optional(),
   tracking_id: z.string().optional(),
   store_name: z.string().optional(),
   product_name: z.string().optional(),
   size: z.string().optional(),
-  total_price: z.union([z.number(), z.string()]).optional(),
   total: z.union([z.number(), z.string()]).optional(),
+  total_price: z.union([z.number(), z.string()]).optional(),
   cod_amount: z.union([z.number(), z.string()]).optional(),
+  waiting: z.boolean().optional(),
+  buyer: TassyirBuyerSchema.optional(),
   customer: TassyirCustomerSchema.optional(),
+  shipping_address: TassyirShippingAddressSchema.optional(),
+  delivery: z
+    .object({
+      method: z.string().optional(),
+    })
+    .optional(),
+  items: z.array(TassyirItemSchema).optional(),
   client_name: z.string().optional(),
   client_phone: z.string().optional(),
   full_name: z.string().optional(),
@@ -52,40 +76,71 @@ export const TassyirWebhookPayloadSchema = z.object({
   address: z.string().optional(),
   stop_desk: z.union([z.boolean(), z.string()]).optional(),
   delivery_note: z.string().optional(),
-  shipping_address: TassyirShippingAddressSchema.optional(),
-  items: z.array(TassyirItemSchema).optional(),
   confirmation_status: z.string().optional(),
   status: z.string().optional(),
   created_at: z.string().optional(),
 });
 
+export type TassyirOrder = z.infer<typeof TassyirOrderSchema>;
+
+export const TassyirWebhookPayloadSchema = z.object({
+  id: z.string().optional(),
+  type: z.string().optional(),
+  apiVersion: z.string().optional(),
+  event: z.string().optional(),
+  data: z
+    .object({
+      order: TassyirOrderSchema.optional(),
+    })
+    .optional(),
+}).catchall(z.unknown());
+
 export type TassyirWebhookPayload = z.infer<typeof TassyirWebhookPayloadSchema>;
 
-export const TassyirCredentialsSchema = z.object({
-  apiKey: z.string().min(1, "Tassyir apiKey is required"),
-  baseUrl: z.string().optional().default("https://api.tassyir.dz/v1"),
-  dispatchOnConfirm: z.string().optional().default("true"),
-  cancelOnRefused: z.string().optional().default("true"),
-});
+export const TassyirCredentialsSchema = z
+  .object({
+    accessToken: z.string().optional(),
+    apiKey: z.string().optional(),
+    baseUrl: z.string().optional().default("https://api.tassyir.io/apps/2026-10"),
+    confirmOnModified: z.string().optional().default("true"),
+    dispatchOnConfirm: z.string().optional().default("true"),
+    cancelOnRefused: z.string().optional().default("true"),
+  })
+  .refine((data) => Boolean((data.accessToken && data.accessToken.trim().length > 0) || (data.apiKey && data.apiKey.trim().length > 0)), {
+    message: "Tassyir accessToken or apiKey is required",
+    path: ["accessToken"],
+  });
 
 export type TassyirCredentials = z.infer<typeof TassyirCredentialsSchema>;
 
-export const TassyirOrderUpdatePayloadSchema = z.object({
-  confirmation_status: z.enum(["confirmed", "refused", "pending"]).optional(),
-  status: z.string().optional(),
-  shipping_address: z
+export const TassyirOrderPatchPayloadSchema = z.object({
+  note: z.string().optional(),
+  notes: z.string().optional(),
+  buyer: z
     .object({
-      wilaya: z.string().optional(),
-      commune: z.string().optional(),
+      provinceCode: z.number().optional(),
       address: z.string().optional(),
+      townOns: z.string().optional(),
     })
     .optional(),
-  variant_size: z.string().optional(),
+  confirmation_status: z.string().optional(),
+  status: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  notes: z.string().optional(),
+  variant_size: z.string().optional(),
+  shipping_address: z.any().optional(),
 });
 
-export type TassyirOrderUpdatePayload = z.infer<typeof TassyirOrderUpdatePayloadSchema>;
+export type TassyirOrderPatchPayload = z.infer<typeof TassyirOrderPatchPayloadSchema>;
+
+export const TassyirOrderCancelPayloadSchema = z.object({
+  note: z.string(),
+});
+
+export type TassyirOrderCancelPayload = z.infer<typeof TassyirOrderCancelPayloadSchema>;
+
+// Backward compatibility alias
+export const TassyirOrderUpdatePayloadSchema = TassyirOrderPatchPayloadSchema;
+export type TassyirOrderUpdatePayload = TassyirOrderPatchPayload;
 
 export const TassyirDispatchPayloadSchema = z.object({
   ready_for_expedition: z.boolean(),

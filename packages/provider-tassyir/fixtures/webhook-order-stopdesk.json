@@ -1,23 +1,33 @@
 {
-  "event": "order.pending_confirmation",
-  "order_id": "TSS-59012",
-  "store_name": "Sahara Tech Store",
-  "items": [
-    {
-      "name": "Wireless Gaming Headset",
-      "size": "Black",
-      "quantity": 1,
-      "price": 6200
+  "id": "evt_order_created_741000000000000002",
+  "type": "orders/created",
+  "apiVersion": "2026-10",
+  "data": {
+    "order": {
+      "id": "741000000000000002",
+      "store_name": "Sahara Tech Store",
+      "total": "6200.00",
+      "buyer": {
+        "name": "Walid Sahraoui",
+        "phone": "0661987654",
+        "provinceCode": 59,
+        "townOns": "Aflou",
+        "address": "Arrêt Bureau Yalidine Aflou Centre"
+      },
+      "delivery": {
+        "method": "stop_desk"
+      },
+      "items": [
+        {
+          "id": "item_59012",
+          "title": "Wireless Gaming Headset",
+          "variantTitle": "Black",
+          "quantity": 1,
+          "price": "6200.00"
+        }
+      ],
+      "status": "pending",
+      "created_at": "2026-10-19T14:45:00Z"
     }
-  ],
-  "total": 6200,
-  "client_name": "Walid Sahraoui",
-  "client_phone": "0661987654",
-  "wilaya_id": "59",
-  "commune_name": "Aflou",
-  "stop_desk": true,
-  "delivery_note": "Arrêt Bureau Yalidine Aflou Centre",
-  "confirmation_status": "pending_confirmation",
-  "status": "pending",
-  "created_at": "2026-10-19T14:45:00Z"
+  }
 }

@@ -4,36 +4,57 @@
 
 # @akadli/provider-tassyir
 
-> محول نظام تسيير (Tassyir ERP) لإدارة طلبيات الدفع عند الاستلام في الجزائر مع التحقق من التوقيع، والتحديث ثنائي المراحل، وتجهيز الشحن التلقائي لشركات التوصيل (Yalidine, ZR Express, Ecotrack).
+> محول نظام تسيير الرسمي (Tassyir Admin API `2026-10`) مع دعم Webhooks المعيارية (`v1a` Ed25519 وتوقيع HMAC)، وتأكيد الطلبيات بدون تكرار (`Idempotency-Key`)، وتطبيع عناوين الدفع عند الاستلام في الجزائر (69 ولاية).
 
-ينفذ واجهة `IEcommerceProvider` من حزمة `@akadli/adapter-contract` لمتاجر ومستودعات التجارة الإلكترونية التي تدير عملياتها عبر نظام Tassyir ERP الجزائري.
-
----
-
-## دليل إعداد نظام Tassyir وتدفق التحديث ثنائي المراحل
-
-1. **الحصول على مفتاح API والمفتاح السري:**
-   - من لوحة تحكم Tassyir ERP -> **الإعدادات (Settings)** -> **واجهات الربط (API & Integrations)**، أنشئ مفتاح API وانسخ المفتاح السري للـ Webhook (ترويسة `x-tassyir-signature` بصيغة hex).
-2. **ضبط مسار الـ Webhook:**
-   - عيّن رابط التسليم إلى `https://your-domain.com/api/webhooks/tassyir` للحدث `order.created`.
-3. **بروتوكول التحديث ثنائي المراحل بعد المكالمة:**
-   - **المرحلة الأولى (`PATCH /orders/{id}`):** تحديث حالة التأكيد (`confirmed` / `refused`) والوسوم (`akadli-confirmed`، `akadli-modified`، `akadli-refused`) وتعديلات العنوان والملاحظات.
-   - **المرحلة الثانية (`POST /orders/{id}/dispatch`):** في حال كانت الحالة `CONFIRMED` وخيار `dispatchOnConfirm` مفعّلاً، يتم إرسال إشعار التجهيز للشحن المباشر إلى شركة التوصيل المرتبطة (ياليدين، زر إكسبريس، أو إيكوتراك) مع `ready_for_expedition: true`.
+ينفذ واجهة `IEcommerceProvider` من حزمة `@akadli/adapter-contract` للتكامل المباشر مع واجهة برمجة تطبيقات منصة **تسيير** (`api.tassyir.io`) لخدمة التجارة الإلكترونية ومراكز التوصيل في الجزائر.
 
 ---
 
-## جدول بيانات الاعتماد (`TassyirCredentialsSchema`)
+## 🚀 إعداد متجر التطوير عبر واجهة أوامر تسيير (Tassyir CLI)
+
+يمكنك ربط واختبار المتجر والـ Webhooks محلياً باستخدام أداة المطورين الرسمية:
+
+```bash
+# 1. تسجيل الدخول إلى حساب مطوري تسيير
+npx tassyir@latest login
+
+# 2. إنشاء متجر تجريبي للمطورين
+npx tassyir@latest store create --name "Akadli Dev Store"
+
+# 3. محاكاة وإرسال إشعار الويب (orders/created) إلى منصة Akadli Playground
+npx tassyir@latest webhook trigger orders/created
+```
+
+### الصلاحيات المطلوبة للتطبيق (App Scopes)
+عند إنشاء رمز الوصول (Access Token) في لوحة تحكم تسيير، يجب تحديد الصلاحيات التالية:
+- `read_orders`: قراءة تفاصيل الطلبيات الواردة وبيانات الشحن.
+- `write_orders`: تحديث ملاحظات الطلبية، وتأكيدها (`/confirm`) أو إلغائها (`/cancel`).
+- `read_customer_contact`: **إلزامية للتأكيد الصوتي.** في حال عدم منح هذه الصلاحية (أو تجاوز باقة المتجر)، يتم حجب رقم هاتف الزبون كـ `"**********"` وتدخل الطلبية في حالة الانتظار `waiting: true`. يتعامل المحول مع هذه الحالة برمي خطأ استباقي واضح للمستخدم.
+
+---
+
+## ⚙️ المميزات والبنية التقنية
+
+- **واجهة تسيير الرسمية (`2026-10`):** اتصال مباشر مع `https://api.tassyir.io/apps/2026-10`.
+- **التحقق المعياري من الـ Webhooks (`v1a` Ed25519):** فحص ترويسات `webhook-id` و `webhook-timestamp` (ضمن نافذة 5 دقائق لمنع هجمات إعادة التشغيل) و `webhook-signature` باستخدام مكتبة `node:crypto`. يدعم أيضاً HMAC-SHA256 لمحاكاة البيئة التجريبية المحلية.
+- **التقسيم الإداري الجزائري 2026:** استخراج وتطبيع الولايات (من 01 إلى 69) والبلديات تلقائياً عبر `@akadli/dz-geo`.
+- **منع تكرار العمليات (`Idempotency-Key`):** إرسال ترويسة فريدة `Idempotency-Key: akadli-{action}-{orderId}` مع كل طلب `POST` (`/confirm` أو `/cancel`) لضمان عدم تكرار التأكيد أو الإلغاء عند انقطاع الشبكة وإعادة المحاولة.
+- **إدارة حدود الاستخدام والضغط:** معالجة ترويسات `429 RATE_LIMITED` و `BUSINESS_RATE_LIMITED` و `503 API_BUSY` مع انتظار `Retry-After`.
+
+---
+
+## 🔑 جدول بيانات الاعتماد (`TassyirCredentialsSchema`)
 
 | الحقل | النوع | إلزامي | القيمة الافتراضية | الوصف |
 | :--- | :--- | :--- | :--- | :--- |
-| `apiKey` | `string` | نعم | — | مفتاح واجهة برمجة تطبيقات Tassyir ERP |
-| `baseUrl` | `string` | لا | `"https://api.tassyir.dz/v1"` | الرابط الأساسي لواجهة Tassyir REST API |
-| `dispatchOnConfirm` | `string` | لا | `"true"` | تفعيل المرحلة الثانية وتجهيز الشحن التلقائي لشركة التوصيل عند التأكيد |
-| `cancelOnRefused` | `string` | لا | `"true"` | إلغاء الطلبية تلقائياً في ERP عند رفض الزبون |
+| `accessToken` | `string` | نعم* | — | رمز Bearer لوصول واجهة Tassyir Admin API (يُقبل `apiKey` أيضاً للتوافق) |
+| `baseUrl` | `string` | لا | `"https://api.tassyir.io/apps/2026-10"` | الرابط الأساسي لواجهة Tassyir REST API |
+| `confirmOnModified` | `string` | لا | `"true"` | تأكيد الطلبية تلقائياً في تسيير عبر `/confirm` عند تعديل المقاس أو العنوان |
+| `cancelOnRefused` | `string` | لا | `"true"` | إلغاء الطلبية عبر `/cancel` عند رفض الزبون للطلب خلال المكالمة |
 
 ---
 
-## مثال تطبيقي في TypeScript
+## 💻 مثال تطبيقي في TypeScript
 
 </div>
 
@@ -44,21 +65,32 @@ import { TassyirProvider } from "@akadli/provider-tassyir";
 
 const provider = new TassyirProvider();
 
-// 1. التحقق من توقيع HMAC (ترويسة x-tassyir-signature بصيغة hex)
-const isValid = await provider.verifyWebhook(headers, rawBody, process.env.TASSYIR_WEBHOOK_SECRET!);
+// 1. التحقق من توقيع Webhook (معيار v1a Ed25519 أو HMAC)
+const isValid = await provider.verifyWebhook(
+  headers,
+  rawBody,
+  process.env.TASSYIR_WEBHOOK_PUBLIC_KEY!
+);
 
-// 2. تحليل الطلبية وتطبيع العناوين وفق تقسيم 2026
+// 2. تحليل الطلبية وتطبيع بيانات الدفع عند الاستلام الجزائرية
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تطبيق القرار (المرحلة 1: تحديث الطلب + المرحلة 2: تجهيز الشحن التلقائي)
-const result = await provider.applyOrderDecision(order.orderId, {
-  orderId: order.orderId,
-  status: "CONFIRMED",
-  reasonOrNotes: "تم تأكيد الطلبية عبر مكالمة الوكيل الصوتي"
-}, {
-  apiKey: process.env.TASSYIR_API_KEY!,
-  dispatchOnConfirm: "true"
-});
+// 3. تطبيق قرار المكالمة على واجهة تسيير 2026-10
+const result = await provider.applyOrderDecision(
+  order.orderId,
+  {
+    orderId: order.orderId,
+    status: "CONFIRMED",
+    reasonOrNotes: "تم تأكيد الطلبية عبر مكالمة الوكيل الصوتي ElevenAgents"
+  },
+  {
+    accessToken: process.env.TASSYIR_ACCESS_TOKEN!,
+    confirmOnModified: "true",
+    cancelOnRefused: "true"
+  }
+);
+
+console.log("نتيجة التعديل:", result.externalStatus); // "CONFIRMED"
 ```
 
 </div>

@@ -1,4 +1,10 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  timingSafeEqual,
+  createPublicKey,
+  verify,
+  KeyObject,
+} from "node:crypto";
 import {
   IEcommerceProvider,
   StandardizedDzOrder,
@@ -7,11 +13,56 @@ import {
   ApplyOrderDecisionResult,
 } from "@akadli/adapter-contract";
 import { createStandardizedDzOrder } from "@akadli/core";
+import { normalizeWilaya } from "@akadli/dz-geo";
 import {
   TassyirWebhookPayloadSchema,
   TassyirCredentialsSchema,
+  TassyirOrder,
 } from "./schemas.js";
 import { TassyirClient } from "./tassyir-client.js";
+
+function safeTimingCompare(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a, "utf8");
+    const bufB = Buffer.from(b, "utf8");
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+function parseEd25519PublicKey(secret: string): KeyObject | null {
+  try {
+    if (secret.includes("-----BEGIN")) {
+      return createPublicKey(secret);
+    }
+    let cleaned = secret.trim();
+    if (cleaned.startsWith("whpk_")) cleaned = cleaned.slice(5);
+    if (cleaned.startsWith("ed25519_")) cleaned = cleaned.slice(8);
+
+    let buf: Buffer;
+    if (/^[0-9a-fA-F]+$/.test(cleaned) && cleaned.length === 64) {
+      buf = Buffer.from(cleaned, "hex");
+    } else {
+      buf = Buffer.from(cleaned, "base64");
+    }
+
+    if (buf.length === 32) {
+      // 12-byte standard Ed25519 SPKI DER prefix
+      const spkiDerPrefix = Buffer.from("302a300506032b6570032100", "hex");
+      const der = Buffer.concat([spkiDerPrefix, buf]);
+      return createPublicKey({ key: der, format: "der", type: "spki" });
+    }
+
+    if (buf.length === 44) {
+      return createPublicKey({ key: buf, format: "der", type: "spki" });
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export class TassyirProvider implements IEcommerceProvider {
   private readonly customFetch?: typeof fetch;
@@ -21,103 +72,221 @@ export class TassyirProvider implements IEcommerceProvider {
   }
 
   /**
-   * Cryptographically verifies Tassyir's HMAC-SHA256 webhook signature.
+   * Cryptographically verifies Tassyir webhooks supporting both:
+   * 1. Official Tassyir Standard Webhooks (v1a Ed25519 / webhook-signature)
+   * 2. HMAC-SHA256 (webhook-signature or x-tassyir-signature / x-akadli-signature)
    */
   async verifyWebhook(
     headers: Record<string, string>,
     rawBody: string | Buffer,
     secret: string
   ): Promise<boolean> {
-    const headerKey = Object.keys(headers).find((k) => {
-      const lower = k.toLowerCase();
-      return lower === "x-tassyir-signature" || lower === "x-akadli-signature";
-    });
-    const signature = headerKey ? headers[headerKey] : undefined;
-    if (!signature || !secret) {
-      return false;
-    }
+    if (!secret) return false;
 
-    try {
-      const bodyBuffer =
-        typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
-      const calculatedHex = createHmac("sha256", secret)
-        .update(bodyBuffer)
-        .digest("hex");
+    const getHeader = (name: string): string | undefined => {
+      const lower = name.toLowerCase();
+      for (const [k, v] of Object.entries(headers)) {
+        if (k.toLowerCase() === lower) return v;
+      }
+      return undefined;
+    };
 
-      const sigBuffer = Buffer.from(signature, "utf8");
-      const calcBuffer = Buffer.from(calculatedHex, "utf8");
+    const webhookSignature =
+      getHeader("webhook-signature") || getHeader("x-webhook-signature");
+    const webhookId =
+      getHeader("webhook-id") || getHeader("x-webhook-id");
+    const webhookTimestamp =
+      getHeader("webhook-timestamp") || getHeader("x-webhook-timestamp");
+    const legacySignature =
+      getHeader("x-tassyir-signature") || getHeader("x-akadli-signature");
 
-      if (sigBuffer.length !== calcBuffer.length) {
+    const rawBodyBuffer =
+      typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
+    const rawBodyStr =
+      typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
+
+    // Scenario 1: Standard Webhooks v1a / webhook-signature
+    if (webhookSignature) {
+      if (!webhookId || !webhookTimestamp) {
+        // Missing required standard webhook metadata headers
         return false;
       }
 
-      return timingSafeEqual(sigBuffer, calcBuffer);
-    } catch {
-      return false;
+      // 5-minute tolerance check
+      const tsNum = Number(webhookTimestamp);
+      if (isNaN(tsNum)) return false;
+      const tsMs = tsNum > 1e11 ? tsNum : tsNum * 1000;
+      if (Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+        return false;
+      }
+
+      const messageToVerify = `${webhookId}.${webhookTimestamp}.${rawBodyStr}`;
+      const messageBuffer = Buffer.from(messageToVerify, "utf8");
+
+      // Parse candidate signatures from the header (space-separated or comma-separated tokens)
+      const candidateSignatures: { scheme: string; value: string }[] = [];
+      const entries = webhookSignature.trim().split(/\s+/);
+      for (const entry of entries) {
+        const commaParts = entry.split(",");
+        if (commaParts.length === 2 && commaParts[0] && commaParts[1]) {
+          candidateSignatures.push({ scheme: commaParts[0], value: commaParts[1] });
+        } else {
+          candidateSignatures.push({ scheme: "raw", value: entry });
+        }
+      }
+
+      // Try Ed25519 verification first if secret is a valid Ed25519 public key
+      const edKey = parseEd25519PublicKey(secret);
+      if (edKey) {
+        for (const candidate of candidateSignatures) {
+          try {
+            const sigBuf = Buffer.from(candidate.value, "base64");
+            if (verify(null, messageBuffer, edKey, sigBuf)) {
+              return true;
+            }
+          } catch {
+            // continue
+          }
+        }
+      }
+
+      // Fallback: Check HMAC against webhook-signature tokens
+      try {
+        const hmacMsgB64 = createHmac("sha256", secret).update(messageBuffer).digest("base64");
+        const hmacMsgHex = createHmac("sha256", secret).update(messageBuffer).digest("hex");
+        const hmacRawB64 = createHmac("sha256", secret).update(rawBodyBuffer).digest("base64");
+        const hmacRawHex = createHmac("sha256", secret).update(rawBodyBuffer).digest("hex");
+
+        for (const candidate of candidateSignatures) {
+          if (
+            safeTimingCompare(candidate.value, hmacMsgB64) ||
+            safeTimingCompare(candidate.value, hmacMsgHex) ||
+            safeTimingCompare(candidate.value, hmacRawB64) ||
+            safeTimingCompare(candidate.value, hmacRawHex)
+          ) {
+            return true;
+          }
+        }
+      } catch {
+        // continue
+      }
     }
+
+    // Scenario 2: Legacy HMAC verification (x-tassyir-signature / x-akadli-signature)
+    if (legacySignature) {
+      try {
+        const hmacHex = createHmac("sha256", secret).update(rawBodyBuffer).digest("hex");
+        const hmacB64 = createHmac("sha256", secret).update(rawBodyBuffer).digest("base64");
+
+        if (
+          safeTimingCompare(legacySignature, hmacHex) ||
+          safeTimingCompare(legacySignature, hmacB64)
+        ) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /**
-   * Parses and normalizes an inbound Tassyir orders webhook payload into a canonical StandardizedDzOrder.
+   * Parses and normalizes an inbound Tassyir orders/created webhook payload into a canonical StandardizedDzOrder.
    */
   async parseWebhookOrder(payload: unknown): Promise<StandardizedDzOrder> {
-    const data = TassyirWebhookPayloadSchema.parse(payload);
+    const rawData = TassyirWebhookPayloadSchema.parse(payload);
+    const orderData = (rawData.data?.order ?? rawData) as TassyirOrder;
 
-    const orderId = String(data.id || data.order_id || data.tracking_id || "");
-    const storeName = data.store_name || "Tassyir Store";
+    const orderId = String(orderData.id || orderData.order_id || orderData.tracking_id || "");
+    const storeName = orderData.store_name || "Tassyir Store";
 
-    const firstItem = data.items?.[0];
-    const itemName = firstItem?.name || firstItem?.title || data.product_name || "Article";
-    const currentSize = firstItem?.variant || firstItem?.size || data.size || "Standard";
+    const rawPrice = orderData.total ?? orderData.total_price ?? orderData.cod_amount ?? 0;
+    const priceDa = Math.round(Number(rawPrice));
 
-    const priceDa = Math.round(Number(data.total_price ?? data.total ?? data.cod_amount ?? 0));
+    const rawPhone = String(
+      orderData.buyer?.phone ||
+      orderData.customer?.phone ||
+      orderData.client_phone ||
+      orderData.phone ||
+      orderData.customer_phone ||
+      orderData.shipping_address?.phone ||
+      ""
+    ).trim();
+
+    // Check for masked phone or waiting state past plan allowance / missing read_customer_contact scope
+    if (
+      orderData.waiting === true ||
+      rawPhone === "**********" ||
+      rawPhone.includes("*****") ||
+      !rawPhone
+    ) {
+      throw new Error(
+        "Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."
+      );
+    }
 
     const customerName =
-      data.customer?.full_name ||
-      data.customer?.name ||
-      data.client_name ||
-      data.full_name ||
+      orderData.buyer?.name ||
+      orderData.customer?.full_name ||
+      orderData.customer?.name ||
+      orderData.client_name ||
+      orderData.full_name ||
       "Client";
 
-    const rawCustomerPhone =
-      data.customer?.phone ||
-      data.client_phone ||
-      data.phone ||
-      data.customer_phone ||
-      data.shipping_address?.phone ||
-      "";
-
     const rawWilaya = String(
-      data.customer?.wilaya ||
-        data.wilaya ||
-        data.wilaya_code ||
-        data.wilaya_id ||
-        data.shipping_address?.wilaya ||
-        data.shipping_address?.province ||
-        ""
+      orderData.buyer?.provinceCode ||
+      orderData.customer?.wilaya ||
+      orderData.wilaya ||
+      orderData.wilaya_code ||
+      orderData.wilaya_id ||
+      orderData.shipping_address?.wilaya ||
+      orderData.shipping_address?.province ||
+      ""
     );
 
     const rawCommune = String(
-      data.customer?.commune ||
-        data.commune ||
-        data.commune_name ||
-        data.shipping_address?.commune ||
-        data.shipping_address?.city ||
-        ""
+      orderData.buyer?.townOns ||
+      orderData.customer?.commune ||
+      orderData.commune ||
+      orderData.commune_name ||
+      orderData.shipping_address?.commune ||
+      orderData.shipping_address?.city ||
+      ""
     );
 
+    const buyerAddress = [orderData.buyer?.address, orderData.buyer?.address2]
+      .filter(Boolean)
+      .join(" - ");
+
     const currentAddressNote =
-      data.customer?.address ||
-      data.shipping_address?.address ||
-      data.address ||
-      data.delivery_note ||
-      (data.stop_desk ? "Stop-Desk / Bureau" : undefined);
+      buyerAddress ||
+      orderData.customer?.address ||
+      orderData.shipping_address?.address ||
+      orderData.address ||
+      orderData.delivery_note ||
+      (orderData.stop_desk || orderData.delivery?.method === "stop_desk"
+        ? "Stop-Desk / Bureau"
+        : undefined);
+
+    const firstItem = orderData.items?.[0];
+    const itemName =
+      firstItem?.title || firstItem?.name || orderData.product_name || "Article";
+
+    const currentSize =
+      firstItem?.variantTitle ||
+      firstItem?.variant ||
+      (Array.isArray(firstItem?.options) ? firstItem.options.join(" / ") : undefined) ||
+      firstItem?.size ||
+      orderData.size ||
+      "Standard";
 
     return createStandardizedDzOrder({
       orderId,
       storeName,
       customerName,
-      rawCustomerPhone,
+      rawCustomerPhone: rawPhone,
       itemName,
       priceDa,
       currentSize,
@@ -128,7 +297,7 @@ export class TassyirProvider implements IEcommerceProvider {
   }
 
   /**
-   * Applies the customer's finalized confirmation decision back to Tassyir ERP.
+   * Applies the customer's finalized confirmation decision back to Tassyir Admin API (2026-10).
    */
   async applyOrderDecision(
     orderId: string,
@@ -140,11 +309,9 @@ export class TassyirProvider implements IEcommerceProvider {
     const client = new TassyirClient(validCreds, this.customFetch);
 
     if (validDecision.status === "CONFIRMED") {
-      // Phase 1: Update ERP order status
+      // Step 1: PATCH note with confirmation tag
       const updateRes = await client.updateOrder(orderId, {
-        confirmation_status: "confirmed",
-        tags: ["akadli-confirmed"],
-        notes: "[Akadli-AI] Order CONFIRMED by customer.",
+        note: "[Akadli-AI] Order CONFIRMED by customer (akadli-confirmed).",
       });
 
       if (!updateRes.success) {
@@ -155,77 +322,65 @@ export class TassyirProvider implements IEcommerceProvider {
         };
       }
 
-      // Phase 2: Two-Phase Courier Dispatch
-      if (validCreds.dispatchOnConfirm !== "false") {
-        const dispatchRes = await client.dispatchOrder(orderId, {
-          ready_for_expedition: true,
-          trigger_source: "akadli-ai",
-        });
-
-        return {
-          success: dispatchRes.success,
-          externalStatus: dispatchRes.success
-            ? "CONFIRMED_AND_DISPATCHED"
-            : dispatchRes.externalStatus,
-          rawResponse: {
-            update: updateRes.rawResponse,
-            dispatch: dispatchRes.rawResponse,
-          },
-        };
-      }
+      // Step 2: POST /confirm with Idempotency-Key
+      const confirmRes = await client.confirmOrder(orderId, `akadli-confirm-${orderId}`);
 
       return {
-        success: true,
-        externalStatus: "CONFIRMED",
-        rawResponse: updateRes.rawResponse,
+        success: confirmRes.success,
+        externalStatus: confirmRes.success ? "CONFIRMED" : confirmRes.externalStatus,
+        rawResponse: {
+          update: updateRes.rawResponse,
+          confirm: confirmRes.rawResponse,
+        },
       };
     }
 
     if (validDecision.status === "MODIFIED") {
-      const tags = ["akadli-modified"];
-      if (validDecision.finalSize) {
-        tags.push(`akadli-size-${validDecision.finalSize}`);
+      let provinceCode: number | undefined;
+      if (validDecision.finalWilaya) {
+        const normalized = normalizeWilaya(validDecision.finalWilaya);
+        provinceCode = Number(normalized.code);
       }
 
-      const noteParts: string[] = [];
-      if (validDecision.finalSize) {
-        noteParts.push(`Size -> ${validDecision.finalSize}`);
-      }
-      if (validDecision.finalWilaya) {
-        noteParts.push(`Wilaya -> ${validDecision.finalWilaya}`);
-      }
+      const addressParts = [
+        validDecision.finalCommune,
+        validDecision.finalAddressNote,
+      ].filter(Boolean);
+      const address = addressParts.length > 0 ? addressParts.join(" - ") : undefined;
+
+      const tagsStr = validDecision.finalSize
+        ? `(akadli-modified, akadli-size-${validDecision.finalSize})`
+        : `(akadli-modified)`;
+
+      const detailParts: string[] = [];
       if (validDecision.finalCommune) {
-        noteParts.push(`Commune -> ${validDecision.finalCommune}`);
+        detailParts.push(`Commune: ${validDecision.finalCommune}`);
+      }
+      if (validDecision.finalSize) {
+        detailParts.push(`Size: ${validDecision.finalSize}`);
       }
       if (validDecision.finalAddressNote) {
-        noteParts.push(`Note -> ${validDecision.finalAddressNote}`);
+        detailParts.push(`Address: ${validDecision.finalAddressNote}`);
       }
       if (validDecision.reasonOrNotes) {
-        noteParts.push(`Details: ${validDecision.reasonOrNotes}`);
-      }
-      const notes = `[Akadli-AI] Order MODIFIED: ${noteParts.join("; ")}`;
-
-      const shippingAddressUpdate: Record<string, string> = {};
-      if (validDecision.finalWilaya) {
-        shippingAddressUpdate.wilaya = validDecision.finalWilaya;
-      }
-      if (validDecision.finalCommune) {
-        shippingAddressUpdate.commune = validDecision.finalCommune;
-      }
-      if (validDecision.finalAddressNote) {
-        shippingAddressUpdate.address = validDecision.finalAddressNote;
+        detailParts.push(`Notes: ${validDecision.reasonOrNotes}`);
       }
 
-      // Phase 1: Update ERP order with modifications
+      const detailsSuffix =
+        detailParts.length > 0 ? ` — ${detailParts.join(" | ")}` : "";
+      const note = `[Akadli-AI] Order MODIFIED ${tagsStr}${detailsSuffix}`;
+
+      const buyerUpdate: { provinceCode?: number; address?: string } = {};
+      if (provinceCode !== undefined) {
+        buyerUpdate.provinceCode = provinceCode;
+      }
+      if (address !== undefined) {
+        buyerUpdate.address = address;
+      }
+
       const updateRes = await client.updateOrder(orderId, {
-        confirmation_status: "confirmed",
-        shipping_address:
-          Object.keys(shippingAddressUpdate).length > 0
-            ? shippingAddressUpdate
-            : undefined,
-        variant_size: validDecision.finalSize,
-        tags,
-        notes,
+        buyer: Object.keys(buyerUpdate).length > 0 ? buyerUpdate : undefined,
+        note,
       });
 
       if (!updateRes.success) {
@@ -236,46 +391,50 @@ export class TassyirProvider implements IEcommerceProvider {
         };
       }
 
-      // Phase 2: Dispatch with updated shipping details for courier bordereau
-      if (validCreds.dispatchOnConfirm !== "false") {
-        const dispatchRes = await client.dispatchOrder(orderId, {
-          ready_for_expedition: true,
-          trigger_source: "akadli-ai",
-          shipping_address:
-            Object.keys(shippingAddressUpdate).length > 0
-              ? shippingAddressUpdate
-              : undefined,
-          variant_size: validDecision.finalSize,
-        });
+      if (validCreds.confirmOnModified !== "false") {
+        const confirmRes = await client.confirmOrder(
+          orderId,
+          `akadli-confirm-mod-${orderId}`
+        );
 
         return {
-          success: dispatchRes.success,
-          externalStatus: dispatchRes.success
-            ? "UPDATED_AND_DISPATCHED"
-            : dispatchRes.externalStatus,
+          success: confirmRes.success,
+          externalStatus: confirmRes.success ? "MODIFIED" : confirmRes.externalStatus,
           rawResponse: {
             update: updateRes.rawResponse,
-            dispatch: dispatchRes.rawResponse,
+            confirm: confirmRes.rawResponse,
           },
         };
       }
 
       return {
         success: true,
-        externalStatus: "UPDATED_AND_CONFIRMED",
+        externalStatus: "MODIFIED",
         rawResponse: updateRes.rawResponse,
       };
     }
 
     // REFUSED
-    const refusalNotes = `[Akadli-AI] Order REFUSED: ${validDecision.reasonOrNotes || "Customer refused order."}`;
-    const status = validCreds.cancelOnRefused !== "false" ? "cancelled" : "pending";
+    const refusalReason =
+      validDecision.reasonOrNotes || "Customer cancelled during voice call";
+    const refusalNote = `[Akadli-AI] Order REFUSED by customer (akadli-refused): ${refusalReason}`;
+
+    if (validCreds.cancelOnRefused !== "false") {
+      const cancelRes = await client.cancelOrder(
+        orderId,
+        { note: refusalNote },
+        `akadli-cancel-${orderId}`
+      );
+
+      return {
+        success: cancelRes.success,
+        externalStatus: cancelRes.success ? "REFUSED" : cancelRes.externalStatus,
+        rawResponse: cancelRes.rawResponse,
+      };
+    }
 
     const updateRes = await client.updateOrder(orderId, {
-      confirmation_status: "refused",
-      status,
-      tags: ["akadli-refused"],
-      notes: refusalNotes,
+      note: refusalNote,
     });
 
     return {

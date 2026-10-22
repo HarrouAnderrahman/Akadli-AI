@@ -1,160 +1,196 @@
-# Tassyir Algerian COD ERP & Courier Dispatch Adapter Specification (`@akadli/provider-tassyir`)
+# Tassyir Admin API (`2026-10`) & Standard Webhooks Specification (`@akadli/provider-tassyir`)
 
-This document defines the technical specification, webhook signature verification, Algerian COD data extraction, and two-phase courier dispatch mutations for Tassyir ERP (`api.tassyir.dz`) integrating with the **Akadli-AI** voice confirmation engine.
+This document defines the technical specification, authentication, Standard Webhook Ed25519 verification, Algerian COD data extraction, and order decision mutation flow for Tassyir (`api.tassyir.io`) integrating natively with the **Akadli-AI** voice confirmation engine.
 
 ---
 
-## 1. Webhook Signature Verification (`verifyWebhook`)
+## 1. Tassyir Developer CLI & Store Setup
 
-Tassyir signs inbound webhook notifications using HMAC-SHA256 computed over the untouched raw request body with the merchant's configured webhook secret.
+Developers can rapidly configure and test store integrations using the official Tassyir Developer CLI:
 
-### Specifications
-- **Header:** `x-tassyir-signature` or `x-akadli-signature` (case-insensitive extraction).
-- **Algorithm:** `sha256` HMAC encoded as a lowercase **hex** string.
-- **Timing Attack Prevention:** Comparison must be performed using `crypto.timingSafeEqual` between buffers of identical byte length.
-- **Fail Safe:** If the signature header or secret is missing, byte lengths differ, or the signature is invalid, return `false` without throwing uncaught exceptions.
+```bash
+# 1. Authenticate with Tassyir Developer platform
+npx tassyir@latest login
 
-```typescript
-import { createHmac, timingSafeEqual } from "node:crypto";
+# 2. Create a development store sandbox
+npx tassyir@latest store create --name "Akadli Dev Store"
 
-export function verifyTassyirWebhook(
-  headers: Record<string, string>,
-  rawBody: string | Buffer,
-  secret: string
-): boolean {
-  const headerKey = Object.keys(headers).find((k) => {
-    const lower = k.toLowerCase();
-    return lower === "x-tassyir-signature" || lower === "x-akadli-signature";
-  });
-  const signature = headerKey ? headers[headerKey] : undefined;
-  if (!signature || !secret) return false;
+# 3. Simulate and trigger inbound order webhooks to your local Akadli playground
+npx tassyir@latest webhook trigger orders/created
+```
 
-  const bodyBuffer = typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
-  const calculatedHex = createHmac("sha256", secret).update(bodyBuffer).digest("hex");
+### Required OAuth / App Scopes
+When generating an app token in Tassyir App Console, you must request:
+- `read_orders`: Allows reading incoming order details, items, and shipping destinations.
+- `write_orders`: Allows patching order notes, confirming orders (`/confirm`), and cancelling refused orders (`/cancel`).
+- `read_customer_contact`: **Mandatory for voice confirmation.** Without this scope (or if past merchant plan quota), `buyer.phone` is masked as `"**********"` and `waiting: true` is flagged. The adapter enforces this guard immediately.
 
-  const sigBuffer = Buffer.from(signature, "utf8");
-  const calcBuffer = Buffer.from(calculatedHex, "utf8");
+---
 
-  if (sigBuffer.length !== calcBuffer.length) return false;
-  return timingSafeEqual(sigBuffer, calcBuffer);
+## 2. Base URL & Authentication
+
+- **Base URL:** `https://api.tassyir.io/apps/2026-10`
+- **Authentication Header:**
+  ```http
+  Authorization: Bearer {accessToken}
+  ```
+  *(For backwards compatibility, `apiKey` is also accepted and maps to Bearer token authentication).*
+
+### Idempotency Keys on Write Routes
+Every `POST` write operation (`/confirm`, `/cancel`) sends an `Idempotency-Key` header:
+- `CONFIRMED`: `Idempotency-Key: akadli-confirm-{orderId}`
+- `MODIFIED`: `Idempotency-Key: akadli-confirm-mod-{orderId}`
+- `REFUSED`: `Idempotency-Key: akadli-cancel-{orderId}`
+
+This ensures safe automatic retries without duplicating actions in Tassyir's fulfillment pipeline.
+
+---
+
+## 3. Webhook Signature Verification (`verifyWebhook`)
+
+Tassyir supports the modern **Standard Webhooks (`v1a` Ed25519)** specification as well as HMAC-SHA256 signatures for testing environments.
+
+### Standard Webhooks (`v1a` Ed25519)
+- **Headers:**
+  - `webhook-id`: Unique message ID (e.g. `msg_741000000000000001`).
+  - `webhook-timestamp`: Unix timestamp in seconds or milliseconds.
+  - `webhook-signature`: Format `v1a,<base64_ed25519_signature>`.
+- **Signed Message:**
+  ```text
+  ${webhookId}.${webhookTimestamp}.${rawBody}
+  ```
+- **Replay Protection:** Webhook timestamp must be within 5 minutes (`300` seconds) of the current system time.
+- **Verification:** Computed using Node.js `node:crypto.verify(null, messageBuffer, publicKey, sigBuffer)`. The `secret` parameter can be an Ed25519 raw base64 public key (32 bytes), SPKI DER (44 bytes), or PEM string.
+
+### HMAC-SHA256 Fallback
+- **Headers:** `x-tassyir-signature`, `x-akadli-signature`, or `webhook-signature`.
+- **Verification:** Computed with `crypto.createHmac("sha256", secret)` over `rawBody` (or standard webhook message) and compared via `crypto.timingSafeEqual`.
+
+---
+
+## 4. Inbound Order Normalization (`parseWebhookOrder`)
+
+Tassyir emits `orders/created` events with a nested envelope (`data.order`) or flat order objects.
+
+### Envelope Structure (`2026-10`)
+```json
+{
+  "id": "evt_order_created_741000000000000001",
+  "type": "orders/created",
+  "apiVersion": "2026-10",
+  "data": {
+    "order": {
+      "id": "741000000000000001",
+      "store_name": "Dz Mode Constantine",
+      "total": "8500.00",
+      "buyer": {
+        "name": "Khadija Benali",
+        "phone": "0550123456",
+        "provinceCode": 25,
+        "townOns": "El Khroub",
+        "address": "Cité 1600 Logements, Bâtiment B3"
+      },
+      "delivery": {
+        "method": "home"
+      },
+      "items": [
+        {
+          "id": "item_90421",
+          "title": "Robe Traditionnelle Constantinoise",
+          "variantTitle": "L",
+          "quantity": 1,
+          "price": "8500.00"
+        }
+      ],
+      "status": "pending",
+      "created_at": "2026-10-19T14:30:00Z"
+    }
+  }
 }
 ```
 
----
-
-## 2. Inbound COD Order Extraction (`parseWebhookOrder`)
-
-Tassyir emits `order.created` or `order.pending_confirmation` webhook events. Payloads follow Algerian COD ERP conventions where customer and delivery info can exist in nested `customer`/`shipping_address` objects or top-level flat fields (with stop-desk support).
-
-### Extraction Pipeline
-
-1. **Order Basics:**
-   - `orderId`: `String(payload.id || payload.order_id || payload.tracking_id)`
-   - `storeName`: `payload.store_name || "Tassyir Store"`
-   - `itemName`: First item title (`payload.items?.[0]?.name || payload.product_name || "Article"`)
-   - `currentSize`: Variant size (`payload.items?.[0]?.variant || payload.items?.[0]?.size || payload.size || "Standard"`)
-   - `priceDa`: `Math.round(Number(payload.total_price ?? payload.total ?? payload.cod_amount ?? 0))`
-
-2. **Customer & Delivery Extraction:**
-   - **Customer Name:** `payload.customer?.full_name || payload.customer?.name || payload.client_name || payload.full_name || "Client"`
-   - **Customer Phone:** `payload.customer?.phone || payload.client_phone || payload.phone || payload.shipping_address?.phone || ""`
-   - **Wilaya:** Extracted from `payload.customer?.wilaya || payload.wilaya || payload.wilaya_code || payload.wilaya_id || payload.shipping_address?.wilaya || payload.shipping_address?.province || ""`. Normalized via `@akadli/dz-geo` supporting all 69 Wilayas of the 2026 administrative division (e.g. `25` -> `25 - Constantine`, `59` -> `59 - Aflou`).
-   - **Commune:** Extracted from `payload.customer?.commune || payload.commune || payload.commune_name || payload.shipping_address?.commune || payload.shipping_address?.city || ""`.
-   - **Address Note & Stop-Desk:** Extracted from `payload.customer?.address || payload.address || payload.shipping_address?.address || payload.delivery_note || (payload.stop_desk ? "Stop-Desk / Bureau" : undefined)`.
-
-3. **Normalization:**
-   - Normalized into `StandardizedDzOrder` via `@akadli/core` (`createStandardizedDzOrder`), populating `constraints.allowedWilayas`, `constraints.allowedCommunes`, and `constraints.allowedSizes`.
+### Field Mapping & Guards
+1. **Order ID:** `String(order.id)` (e.g. `"741000000000000001"`).
+2. **Total Price:** Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA).
+3. **Buyer Contact Guard:**
+   - If `order.waiting === true` or `buyer.phone` is masked (`"**********"`), the adapter throws:
+     `"Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."`
+4. **Wilaya & Commune Normalization:**
+   - `provinceCode` (number `1..69`, e.g. `25` -> Constantine, `59` -> Aflou) maps to official 2026 Algerian divisions via `@akadli/dz-geo`.
+   - `townOns` maps to canonical Algerian commune names.
+5. **Item Details:**
+   - Name: `items[0].title` or `items[0].name`.
+   - Size: `items[0].variantTitle`, `items[0].variant`, or `items[0].options`.
 
 ---
 
-## 3. Two-Phase Order Decision & Courier Dispatch Mutation (`applyOrderDecision`)
+## 5. Post-Call Order Decision Mutations (`applyOrderDecision`)
 
-Tassyir operates as an Algerian COD ERP integrated with local couriers (Yalidine, Ecotrack, ZR Express, Maystro).
+Post-call decisions from Akadli-AI voice calls are dispatched back to Tassyir Admin API (`2026-10`).
 
-### Credentials Schema
+### Credentials Configuration
 ```typescript
 interface TassyirCredentials {
-  apiKey: string;
-  baseUrl?: string; // Default: https://api.tassyir.dz/v1
-  dispatchOnConfirm?: string; // "true" | "false", default: "true"
+  accessToken: string; // or apiKey
+  baseUrl?: string; // Default: https://api.tassyir.io/apps/2026-10
+  confirmOnModified?: string; // "true" | "false", default: "true"
   cancelOnRefused?: string; // "true" | "false", default: "true"
 }
 ```
 
-### Authentication
-Requests to Tassyir API include:
-```http
-Authorization: Bearer {apiKey}
-X-Tassyir-Api-Key: {apiKey}
-Content-Type: application/json
-```
+### Outbound Actions
+
+#### 1. `CONFIRMED`
+1. `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}`
+   ```json
+   {
+     "note": "[Akadli-AI] Order CONFIRMED by customer (akadli-confirmed)."
+   }
+   ```
+2. `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/confirm`
+   - Header: `Idempotency-Key: akadli-confirm-{orderId}`
+   - Body: `{}`
+
+Returns `externalStatus: "CONFIRMED"`.
+
+#### 2. `MODIFIED`
+1. Resolve numeric Wilaya code `provinceCode` (`1..69`) from `decision.finalWilaya`.
+2. `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}`
+   ```json
+   {
+     "buyer": {
+       "provinceCode": 13,
+       "address": "Maghnia - Cite Imama"
+     },
+     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-size-L) — Commune: Maghnia | Size: L | Address: Cite Imama | Notes: Customer changed size"
+   }
+   ```
+3. If `credentials.confirmOnModified !== "false"`:
+   `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/confirm`
+   - Header: `Idempotency-Key: akadli-confirm-mod-{orderId}`
+   - Body: `{}`
+
+Returns `externalStatus: "MODIFIED"`.
+
+#### 3. `REFUSED`
+1. If `credentials.cancelOnRefused !== "false"`:
+   `POST https://api.tassyir.io/apps/2026-10/orders/{orderId}/cancel`
+   - Header: `Idempotency-Key: akadli-cancel-{orderId}`
+   - Body:
+     ```json
+     {
+       "note": "[Akadli-AI] Order REFUSED by customer (akadli-refused): Customer refused during voice call"
+     }
+     ```
+2. Otherwise, `PATCH https://api.tassyir.io/apps/2026-10/orders/{orderId}` updating `note`.
+
+Returns `externalStatus: "REFUSED"`.
 
 ---
 
-### Outbound Decisions
-
-#### 1. `CONFIRMED`
-- **Phase 1 (ERP State Update):**
-  `PATCH {baseUrl}/orders/{orderId}`
-  ```json
-  {
-    "confirmation_status": "confirmed",
-    "tags": ["akadli-confirmed"],
-    "notes": "[Akadli-AI] Order CONFIRMED by customer."
-  }
-  ```
-- **Phase 2 (Courier Dispatch):**
-  If `credentials.dispatchOnConfirm !== "false"`:
-  `POST {baseUrl}/orders/{orderId}/dispatch`
-  ```json
-  {
-    "ready_for_expedition": true,
-    "trigger_source": "akadli-ai"
-  }
-  ```
-  Returns `externalStatus: "CONFIRMED_AND_DISPATCHED"` (or `"CONFIRMED"` if dispatch is skipped).
-
-#### 2. `MODIFIED`
-- **Phase 1 (ERP State Update):**
-  `PATCH {baseUrl}/orders/{orderId}`
-  ```json
-  {
-    "confirmation_status": "confirmed",
-    "shipping_address": {
-      "wilaya": "25",
-      "commune": "El Khroub",
-      "address": "Cité nouvelle près de la mosquée"
-    },
-    "variant_size": "XL",
-    "tags": ["akadli-modified", "akadli-size-XL"],
-    "notes": "[Akadli-AI] Order MODIFIED: Size -> XL; Wilaya -> 25; Commune -> El Khroub; Note -> Cité nouvelle près de la mosquée"
-  }
-  ```
-- **Phase 2 (Courier Dispatch with Corrected Destination):**
-  If `credentials.dispatchOnConfirm !== "false"`:
-  `POST {baseUrl}/orders/{orderId}/dispatch`
-  ```json
-  {
-    "ready_for_expedition": true,
-    "trigger_source": "akadli-ai",
-    "shipping_address": {
-      "wilaya": "25",
-      "commune": "El Khroub",
-      "address": "Cité nouvelle près de la mosquée"
-    },
-    "variant_size": "XL"
-  }
-  ```
-  Returns `externalStatus: "UPDATED_AND_DISPATCHED"` (or `"UPDATED_AND_CONFIRMED"`).
-
-#### 3. `REFUSED`
-- `PATCH {baseUrl}/orders/{orderId}`
-  ```json
-  {
-    "confirmation_status": "refused",
-    "status": "cancelled",
-    "tags": ["akadli-refused"],
-    "notes": "[Akadli-AI] Order REFUSED: Customer refused delivery."
-  }
-  ```
-  *(Never calls `/dispatch`)*. Returns `externalStatus: "REFUSED"`.
+## 6. Rate Limit & Busy Handling
+- **429 Rate Limits:**
+  - Standard rate limit: Returns `externalStatus: "RATE_LIMITED"`.
+  - Quota exhaustion (`code: "BUSINESS_RATE_LIMITED"`): Returns `externalStatus: "BUSINESS_RATE_LIMITED"`.
+- **503 Server Busy (`API_BUSY`):**
+  - Respects `Retry-After` header with bounded exponential backoff up to 3 retry attempts.
