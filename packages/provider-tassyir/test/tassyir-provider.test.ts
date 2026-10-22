@@ -425,7 +425,75 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(stopdeskOrder.constraints.allowedSizes).toEqual(["Black"]);
   });
 
-  it("9. throws descriptive error when buyer phone is masked or order is in waiting state", async () => {
+  it("9. parses Tassyir orders/created with numeric townOns, null address2, and orderNumber successfully", async () => {
+    const tassyirLivePayload = {
+      id: "evt_0",
+      type: "orders/created",
+      apiVersion: "2026-10",
+      createdAt: "2026-10-22T15:46:53.133Z",
+      businessId: "768261938617522044",
+      storeId: "1000000000000000100",
+      appId: "768498309554771615",
+      installationId: "768500224288102645",
+      changed: [],
+      data: {
+        order: {
+          id: "1000000000000000001",
+          orderNumber: "TEST-1001",
+          storeId: "1000000000000000100",
+          status: "pending",
+          waiting: false,
+          archived: false,
+          dispatched: false,
+          delivered: false,
+          returned: false,
+          currency: "DZD",
+          total: "4600.00",
+          shippingPrice: "600.00",
+          subtotal: "5000.00",
+          discountTotal: "1000.00",
+          discounts: [
+            {
+              title: "Sample 2-piece offer",
+              code: null,
+              class: "product",
+              source: "offer",
+              amount: "1000.00",
+              offerId: null,
+            },
+          ],
+          buyer: {
+            provinceCode: 16,
+            townOns: 1601,
+            address: "12 Rue Didouche Mourad",
+            address2: null,
+            name: "Sofiane Mansouri",
+            phone: "0550112233",
+          },
+          items: [
+            {
+              id: "item_123",
+              title: "T-Shirt Algerie",
+              variantTitle: "L",
+              quantity: 1,
+              price: "4600.00",
+            },
+          ],
+        },
+      },
+    };
+
+    const order = await provider.parseWebhookOrder(tassyirLivePayload);
+    expect(order.orderId).toBe("1000000000000000001");
+    expect(order.customerPhone).toBe("0550112233");
+    expect(order.currentWilaya).toBe("16");
+    expect(order.priceDa).toBe(4600);
+    expect(order.currentAddressNote).toBe("12 Rue Didouche Mourad");
+    expect(order.itemName).toBe("T-Shirt Algerie");
+    expect(order.currentSize).toBe("L");
+  });
+
+  it("10. throws descriptive error when buyer phone is masked or order is in waiting state", async () => {
     const maskedPayload = {
       apiVersion: "2026-10",
       data: {
@@ -468,7 +536,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     );
   });
 
-  it("10. executes applyOrderDecision for CONFIRMED (PATCH /orders/{id} + POST /orders/{id}/confirm with Idempotency-Key)", async () => {
+  it("11. executes applyOrderDecision for CONFIRMED (PATCH /orders/{id} + POST /orders/{id}/confirm with Idempotency-Key)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -498,7 +566,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(confirmReq.headers.get("Idempotency-Key")).toBe("akadli-confirm-741000000000000001");
   });
 
-  it("11. executes applyOrderDecision for MODIFIED (PATCH with buyer.provinceCode, buyer.address, note + POST /confirm)", async () => {
+  it("12. executes applyOrderDecision for MODIFIED (PATCH with buyer.provinceCode, buyer.address, note + POST /confirm)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -533,7 +601,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(confirmReq.headers.get("Idempotency-Key")).toBe("akadli-confirm-mod-741000000000000001");
   });
 
-  it("12. executes applyOrderDecision for REFUSED (POST /orders/{id}/cancel with note and Idempotency-Key)", async () => {
+  it("13. executes applyOrderDecision for REFUSED (POST /orders/{id}/cancel with note and Idempotency-Key)", async () => {
     const result = await provider.applyOrderDecision(
       "741000000000000001",
       {
@@ -559,7 +627,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(capturedConfirmRequests.length).toBe(0);
   });
 
-  it("13. handles rate limits (429 RATE_LIMITED, BUSINESS_RATE_LIMITED), 503 API_BUSY with Retry-After, and 401 UNAUTHORIZED", async () => {
+  it("14. handles rate limits (429 RATE_LIMITED, BUSINESS_RATE_LIMITED), 503 API_BUSY with Retry-After, and 401 UNAUTHORIZED", async () => {
     // 401 Unauthorized
     server.use(
       http.patch(`${BASE_URL}/orders/:orderId`, () =>

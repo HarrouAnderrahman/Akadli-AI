@@ -1,85 +1,101 @@
 import { z } from "zod";
 
-export const TassyirBuyerSchema = z.object({
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  provinceCode: z.union([z.number(), z.string()]).optional(),
-  townOns: z.string().optional(),
-  address: z.string().optional(),
-  address2: z.string().optional(),
-});
+export const TassyirBuyerSchema = z
+  .object({
+    name: z.string().nullable().optional(),
+    phone: z.union([z.string(), z.number()]).nullable().optional(),
+    provinceCode: z.union([z.number(), z.string()]).nullable().optional(),
+    townOns: z.union([z.number(), z.string()]).nullable().optional(),
+    address: z.string().nullable().optional(),
+    address2: z.string().nullable().optional(),
+  })
+  .catchall(z.unknown());
 
 export type TassyirBuyer = z.infer<typeof TassyirBuyerSchema>;
 
-export const TassyirItemSchema = z.object({
-  id: z.union([z.string(), z.number()]).optional(),
-  name: z.string().optional(),
-  title: z.string().optional(),
-  variantTitle: z.string().optional(),
-  variant: z.string().optional(),
-  options: z.array(z.string()).optional(),
-  size: z.string().optional(),
-  quantity: z.number().optional(),
-  price: z.union([z.number(), z.string()]).optional(),
-});
+export const TassyirItemSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).nullable().optional(),
+    name: z.string().nullable().optional(),
+    title: z.string().nullable().optional(),
+    variantTitle: z.string().nullable().optional(),
+    variant: z.string().nullable().optional(),
+    options: z.array(z.string()).nullable().optional(),
+    size: z.string().nullable().optional(),
+    quantity: z.number().nullable().optional(),
+    price: z.union([z.number(), z.string()]).nullable().optional(),
+  })
+  .catchall(z.unknown());
 
 export type TassyirItem = z.infer<typeof TassyirItemSchema>;
 
-export const TassyirCustomerSchema = z.object({
-  full_name: z.string().optional(),
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  wilaya: z.union([z.string(), z.number()]).optional(),
-  commune: z.string().optional(),
-  address: z.string().optional(),
-});
+export const TassyirCustomerSchema = z
+  .object({
+    full_name: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    phone: z.union([z.string(), z.number()]).nullable().optional(),
+    wilaya: z.union([z.string(), z.number()]).nullable().optional(),
+    commune: z.union([z.string(), z.number()]).nullable().optional(),
+    address: z.string().nullable().optional(),
+  })
+  .catchall(z.unknown());
 
-export const TassyirShippingAddressSchema = z.object({
-  phone: z.string().optional(),
-  wilaya: z.union([z.string(), z.number()]).optional(),
-  province: z.union([z.string(), z.number()]).optional(),
-  commune: z.string().optional(),
-  city: z.string().optional(),
-  address: z.string().optional(),
-});
+export const TassyirShippingAddressSchema = z
+  .object({
+    phone: z.union([z.string(), z.number()]).nullable().optional(),
+    wilaya: z.union([z.string(), z.number()]).nullable().optional(),
+    province: z.union([z.string(), z.number()]).nullable().optional(),
+    commune: z.union([z.string(), z.number()]).nullable().optional(),
+    city: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+  })
+  .catchall(z.unknown());
 
-export const TassyirOrderSchema = z.object({
-  id: z.union([z.string(), z.number()]).optional(),
-  order_id: z.union([z.string(), z.number()]).optional(),
-  tracking_id: z.string().optional(),
-  store_name: z.string().optional(),
-  product_name: z.string().optional(),
-  size: z.string().optional(),
-  total: z.union([z.number(), z.string()]).optional(),
-  total_price: z.union([z.number(), z.string()]).optional(),
-  cod_amount: z.union([z.number(), z.string()]).optional(),
-  waiting: z.boolean().optional(),
-  buyer: TassyirBuyerSchema.optional(),
-  customer: TassyirCustomerSchema.optional(),
-  shipping_address: TassyirShippingAddressSchema.optional(),
-  delivery: z
-    .object({
-      method: z.string().optional(),
-    })
-    .optional(),
-  items: z.array(TassyirItemSchema).optional(),
-  client_name: z.string().optional(),
-  client_phone: z.string().optional(),
-  full_name: z.string().optional(),
-  phone: z.string().optional(),
-  customer_phone: z.string().optional(),
-  wilaya: z.union([z.string(), z.number()]).optional(),
-  wilaya_code: z.union([z.string(), z.number()]).optional(),
-  wilaya_id: z.union([z.string(), z.number()]).optional(),
-  commune: z.string().optional(),
-  commune_name: z.string().optional(),
-  address: z.string().optional(),
-  stop_desk: z.union([z.boolean(), z.string()]).optional(),
-  delivery_note: z.string().optional(),
-  confirmation_status: z.string().optional(),
-  status: z.string().optional(),
-  created_at: z.string().optional(),
-});
+export const TassyirOrderSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).nullable().optional(),
+    order_id: z.union([z.string(), z.number()]).nullable().optional(),
+    orderNumber: z.union([z.string(), z.number()]).nullable().optional(),
+    order_number: z.union([z.string(), z.number()]).nullable().optional(),
+    tracking_id: z.string().nullable().optional(),
+    store_name: z.string().nullable().optional(),
+    storeId: z.union([z.string(), z.number()]).nullable().optional(),
+    product_name: z.string().nullable().optional(),
+    size: z.string().nullable().optional(),
+    total: z.union([z.number(), z.string()]).nullable().optional(),
+    total_price: z.union([z.number(), z.string()]).nullable().optional(),
+    cod_amount: z.union([z.number(), z.string()]).nullable().optional(),
+    waiting: z.boolean().nullable().optional(),
+    buyer: TassyirBuyerSchema.nullable().optional(),
+    customer: TassyirCustomerSchema.nullable().optional(),
+    shipping_address: TassyirShippingAddressSchema.nullable().optional(),
+    delivery: z
+      .object({
+        method: z.string().nullable().optional(),
+      })
+      .catchall(z.unknown())
+      .nullable()
+      .optional(),
+    items: z.array(TassyirItemSchema).nullable().optional(),
+    client_name: z.string().nullable().optional(),
+    client_phone: z.union([z.string(), z.number()]).nullable().optional(),
+    full_name: z.string().nullable().optional(),
+    phone: z.union([z.string(), z.number()]).nullable().optional(),
+    customer_phone: z.union([z.string(), z.number()]).nullable().optional(),
+    wilaya: z.union([z.string(), z.number()]).nullable().optional(),
+    wilaya_code: z.union([z.string(), z.number()]).nullable().optional(),
+    wilaya_id: z.union([z.string(), z.number()]).nullable().optional(),
+    commune: z.union([z.string(), z.number()]).nullable().optional(),
+    commune_name: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    stop_desk: z.union([z.boolean(), z.string()]).nullable().optional(),
+    delivery_note: z.string().nullable().optional(),
+    confirmation_status: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    created_at: z.string().nullable().optional(),
+    createdAt: z.string().nullable().optional(),
+  })
+  .catchall(z.unknown());
 
 export type TassyirOrder = z.infer<typeof TassyirOrderSchema>;
 

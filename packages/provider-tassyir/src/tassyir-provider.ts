@@ -244,7 +244,14 @@ export class TassyirProvider implements IEcommerceProvider {
     const rawData = TassyirWebhookPayloadSchema.parse(payload);
     const orderData = (rawData.data?.order ?? rawData) as TassyirOrder;
 
-    const orderId = String(orderData.id || orderData.order_id || orderData.tracking_id || "");
+    const orderId = String(
+      orderData.id ||
+      orderData.order_id ||
+      orderData.orderNumber ||
+      orderData.order_number ||
+      orderData.tracking_id ||
+      ""
+    );
     const storeName = orderData.store_name || "Tassyir Store";
 
     const rawPrice = orderData.total ?? orderData.total_price ?? orderData.cod_amount ?? 0;
