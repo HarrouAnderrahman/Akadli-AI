@@ -19,7 +19,11 @@ import {
   TassyirCredentialsSchema,
   TassyirOrder,
 } from "./schemas.js";
-import { TassyirClient } from "./tassyir-client.js";
+import {
+  TassyirClient,
+  fetchTassyirWebhookPublicKeys,
+  ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY,
+} from "./tassyir-client.js";
 
 function safeTimingCompare(a: string, b: string): boolean {
   try {
@@ -32,7 +36,7 @@ function safeTimingCompare(a: string, b: string): boolean {
   }
 }
 
-function parseEd25519PublicKey(secret: string): KeyObject | null {
+export function parseEd25519PublicKey(secret: string): KeyObject | null {
   try {
     if (secret.includes("-----BEGIN")) {
       return createPublicKey(secret);
@@ -72,17 +76,16 @@ export class TassyirProvider implements IEcommerceProvider {
   }
 
   /**
-   * Cryptographically verifies Tassyir webhooks supporting both:
-   * 1. Official Tassyir Standard Webhooks (v1a Ed25519 / webhook-signature)
-   * 2. HMAC-SHA256 (webhook-signature or x-tassyir-signature / x-akadli-signature)
+   * Cryptographically verifies Tassyir webhooks supporting:
+   * 1. Official Tassyir Standard Webhooks (v1a Ed25519 / webhook-signature) using public keys
+   *    (either from GET https://api.tassyir.io/apps/webhook-keys, embedded default fallback, or passed whpk_ key)
+   * 2. HMAC-SHA256 fallback ONLY when a custom non-whpk_ secret is explicitly passed in tests/simulators.
    */
   async verifyWebhook(
     headers: Record<string, string>,
     rawBody: string | Buffer,
-    secret: string
+    secret = ""
   ): Promise<boolean> {
-    if (!secret) return false;
-
     const getHeader = (name: string): string | undefined => {
       const lower = name.toLowerCase();
       for (const [k, v] of Object.entries(headers)) {
@@ -104,6 +107,13 @@ export class TassyirProvider implements IEcommerceProvider {
       typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody;
     const rawBodyStr =
       typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
+
+    const isExplicitHmacSecret = Boolean(
+      secret &&
+        secret.trim().length > 0 &&
+        !secret.startsWith("whpk_") &&
+        !secret.includes("-----BEGIN")
+    );
 
     // Scenario 1: Standard Webhooks v1a / webhook-signature
     if (webhookSignature) {
@@ -135,45 +145,80 @@ export class TassyirProvider implements IEcommerceProvider {
         }
       }
 
-      // Try Ed25519 verification first if secret is a valid Ed25519 public key
-      const edKey = parseEd25519PublicKey(secret);
-      if (edKey) {
-        for (const candidate of candidateSignatures) {
-          try {
-            const sigBuf = Buffer.from(candidate.value, "base64");
-            if (verify(null, messageBuffer, edKey, sigBuf)) {
+      // A. Public Key Ed25519 Verification (Default Tassyir flow)
+      const candidateKeyStrings: string[] = [];
+      if (
+        secret &&
+        (secret.startsWith("whpk_") ||
+          secret.includes("-----BEGIN") ||
+          /^[0-9a-fA-F]{64}$/.test(secret.trim()))
+      ) {
+        candidateKeyStrings.push(secret.trim());
+      }
+
+      // If secret is empty or is the default active key, fetch published keys and use active fallback
+      if (!secret || secret.trim() === "" || secret === ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY) {
+        try {
+          const fetchedKeys = await fetchTassyirWebhookPublicKeys(this.customFetch);
+          for (const k of fetchedKeys) {
+            if (!candidateKeyStrings.includes(k)) {
+              candidateKeyStrings.push(k);
+            }
+          }
+        } catch {
+          // Graceful fallback
+        }
+
+        if (!candidateKeyStrings.includes(ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY)) {
+          candidateKeyStrings.push(ACTIVE_TASSYIR_WEBHOOK_PUBLIC_KEY);
+        }
+      }
+
+      for (const keyStr of candidateKeyStrings) {
+        const edKey = parseEd25519PublicKey(keyStr);
+        if (edKey) {
+          for (const candidate of candidateSignatures) {
+            try {
+              const sigBuf = Buffer.from(candidate.value, "base64");
+              if (verify(null, messageBuffer, edKey, sigBuf)) {
+                return true;
+              }
+            } catch {
+              // continue
+            }
+          }
+        }
+      }
+
+      // B. Fallback: Check HMAC ONLY when a custom non-whpk_ secret is explicitly passed
+      if (isExplicitHmacSecret) {
+        try {
+          const hmacMsgB64 = createHmac("sha256", secret).update(messageBuffer).digest("base64");
+          const hmacMsgHex = createHmac("sha256", secret).update(messageBuffer).digest("hex");
+          const hmacRawB64 = createHmac("sha256", secret).update(rawBodyBuffer).digest("base64");
+          const hmacRawHex = createHmac("sha256", secret).update(rawBodyBuffer).digest("hex");
+
+          for (const candidate of candidateSignatures) {
+            if (
+              safeTimingCompare(candidate.value, hmacMsgB64) ||
+              safeTimingCompare(candidate.value, hmacMsgHex) ||
+              safeTimingCompare(candidate.value, hmacRawB64) ||
+              safeTimingCompare(candidate.value, hmacRawHex)
+            ) {
               return true;
             }
-          } catch {
-            // continue
           }
+        } catch {
+          // continue
         }
       }
 
-      // Fallback: Check HMAC against webhook-signature tokens
-      try {
-        const hmacMsgB64 = createHmac("sha256", secret).update(messageBuffer).digest("base64");
-        const hmacMsgHex = createHmac("sha256", secret).update(messageBuffer).digest("hex");
-        const hmacRawB64 = createHmac("sha256", secret).update(rawBodyBuffer).digest("base64");
-        const hmacRawHex = createHmac("sha256", secret).update(rawBodyBuffer).digest("hex");
-
-        for (const candidate of candidateSignatures) {
-          if (
-            safeTimingCompare(candidate.value, hmacMsgB64) ||
-            safeTimingCompare(candidate.value, hmacMsgHex) ||
-            safeTimingCompare(candidate.value, hmacRawB64) ||
-            safeTimingCompare(candidate.value, hmacRawHex)
-          ) {
-            return true;
-          }
-        }
-      } catch {
-        // continue
-      }
+      return false;
     }
 
     // Scenario 2: Legacy HMAC verification (x-tassyir-signature / x-akadli-signature)
-    if (legacySignature) {
+    // ONLY executed when a custom non-whpk_ secret is explicitly passed
+    if (legacySignature && isExplicitHmacSecret) {
       try {
         const hmacHex = createHmac("sha256", secret).update(rawBodyBuffer).digest("hex");
         const hmacB64 = createHmac("sha256", secret).update(rawBodyBuffer).digest("base64");

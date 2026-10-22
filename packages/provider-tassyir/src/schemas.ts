@@ -97,21 +97,62 @@ export const TassyirWebhookPayloadSchema = z.object({
 
 export type TassyirWebhookPayload = z.infer<typeof TassyirWebhookPayloadSchema>;
 
+export const TassyirOAuthTokenResponseSchema = z
+  .object({
+    access_token: z.string(),
+    refresh_token: z.string().optional(),
+    token_type: z.string().optional(),
+    expires_in: z.number().optional(),
+    installation_id: z.string().optional(),
+    scope: z.string().optional(),
+  })
+  .catchall(z.unknown());
+
+export type TassyirOAuthTokenResponse = z.infer<typeof TassyirOAuthTokenResponseSchema>;
+
 export const TassyirCredentialsSchema = z
   .object({
     accessToken: z.string().optional(),
     apiKey: z.string().optional(),
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    refreshToken: z.string().optional(),
     baseUrl: z.string().optional().default("https://api.tassyir.io/apps/2026-10"),
     confirmOnModified: z.string().optional().default("true"),
     dispatchOnConfirm: z.string().optional().default("true"),
     cancelOnRefused: z.string().optional().default("true"),
   })
-  .refine((data) => Boolean((data.accessToken && data.accessToken.trim().length > 0) || (data.apiKey && data.apiKey.trim().length > 0)), {
-    message: "Tassyir accessToken or apiKey is required",
-    path: ["accessToken"],
-  });
+  .refine(
+    (data) => {
+      const hasToken = Boolean(
+        (data.accessToken && data.accessToken.trim().length > 0) ||
+        (data.apiKey && data.apiKey.trim().length > 0)
+      );
+      const hasOAuthRefresh = Boolean(
+        data.clientId &&
+        data.clientId.trim().length > 0 &&
+        data.clientSecret &&
+        data.clientSecret.trim().length > 0 &&
+        data.refreshToken &&
+        data.refreshToken.trim().length > 0
+      );
+      const hasOAuthClient = Boolean(
+        data.clientId &&
+        data.clientId.trim().length > 0 &&
+        data.clientSecret &&
+        data.clientSecret.trim().length > 0
+      );
+      return hasToken || hasOAuthRefresh || hasOAuthClient;
+    },
+    {
+      message:
+        "Tassyir credentials require either an accessToken (tsy_at_...) or (clientId, clientSecret, and refreshToken)",
+      path: ["accessToken"],
+    }
+  );
 
 export type TassyirCredentials = z.infer<typeof TassyirCredentialsSchema>;
+export type TassyirCredentialsInput = z.input<typeof TassyirCredentialsSchema>;
 
 export const TassyirOrderPatchPayloadSchema = z.object({
   note: z.string().optional(),
