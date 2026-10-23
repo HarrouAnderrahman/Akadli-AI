@@ -7,7 +7,9 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "release:dry-run": "pnpm turbo run build test && pnpm -r --filter './packages/*' publish --dry-run --no-git-checks",
+    "release:publish": "pnpm turbo run build test && pnpm -r --filter './packages/*' publish --access public --no-git-checks"
   },
   "devDependencies": {
     "turbo": "^2.4.4",

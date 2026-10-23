@@ -1,18 +1,45 @@
 {
   "name": "@akadli/dz-geo",
   "version": "0.1.0",
+  "description": "Official 2026 Algerian administrative divisions (69 Wilayas, 1,708 Communes) and +213 phone normalization",
+  "license": "MIT",
+  "homepage": "https://akadli.me",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HarrouAnderrahman/Akadli-AI.git",
+    "directory": "packages/dz-geo"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "README.ar.md"
+  ],
+  "keywords": [
+    "algeria",
+    "dz",
+    "wilaya",
+    "commune",
+    "cod",
+    "akadli",
+    "geo",
+    "phone-normalizer",
+    "algerian-wilayas"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vitest run"
