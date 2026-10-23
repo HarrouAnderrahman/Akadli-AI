@@ -22,7 +22,7 @@ export default defineConfig({
         },
       },
       social: {
-        github: "https://github.com/Akadli-AI/Akadli-AI",
+        github: "https://github.com/HarrouAnderrahman/Akadli-AI",
       },
       customCss: ["./src/styles/custom.css"],
       head: [

@@ -6,7 +6,7 @@ Akadli-AI automates post-checkout COD order confirmation calls in Algerian Darja
 
 - Website: https://akadli.me
 - Arabic Documentation: https://akadli.me/ar/
-- GitHub: https://github.com/Akadli-AI/Akadli-AI
+- GitHub: https://github.com/HarrouAnderrahman/Akadli-AI
 - Full LLM Context: https://akadli.me/llms-full.txt
 
 ## Quick Installation

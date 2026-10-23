@@ -19,7 +19,7 @@ Clone the repository and launch the playground:
 
 ```bash
 # 1. Clone & install dependencies
-git clone https://github.com/Akadli-AI/Akadli-AI.git
+git clone https://github.com/HarrouAnderrahman/Akadli-AI.git
 cd Akadli-AI
 pnpm install
 pnpm build
