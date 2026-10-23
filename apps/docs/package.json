@@ -8,7 +8,7 @@
     "prebuild": "node ./scripts/generate-llms.mjs",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
     "preview": "astro preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc --noEmit",
     "lint": "echo 'Docs lint passed'",
     "test": "node ./scripts/test-build.mjs"
   },
