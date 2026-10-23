@@ -59,7 +59,7 @@ export async function handleFinalizeOrderToolCall(
   const normalized = normalizeRawToolPayload(rawToolPayload);
   const parseResult = FinalizedOrderDecisionSchema.safeParse(normalized);
   if (!parseResult.success) {
-    const errorMsg = parseResult.error.errors.map((e) => e.message).join("; ");
+    const errorMsg = parseResult.error.errors.map((e: { path: (string | number)[]; message: string }) => e.message).join("; ");
     return {
       success: false,
       message: `Invalid finalize_order_decision payload: ${errorMsg}`,
