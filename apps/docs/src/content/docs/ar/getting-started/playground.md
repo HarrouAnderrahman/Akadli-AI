@@ -1,5 +1,5 @@
 ---
-title: بيئة الاختبار التفاعلية (@akadli/playground)
+title: بيئة التجارب
 description: اختبار المكالمات الصوتية المباشرة بالدارجة عبر Wi-Fi وربط الـ Webhooks بواسطة نفق Cloudflare.
 ---
 
@@ -17,7 +17,7 @@ description: اختبار المكالمات الصوتية المباشرة ب�
 
 ```bash
 # 1. استنساخ المستودع وتثبيت الحزم
-git clone https://github.com/Akadli-AI/Akadli-AI.git
+git clone https://github.com/HarrouAnderrahman/Akadli-AI.git
 cd Akadli-AI
 pnpm install
 pnpm build

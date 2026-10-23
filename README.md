@@ -65,7 +65,7 @@ const result = await handleFinalizeOrderToolCall(
 Test live voice calls over local Wi-Fi with WebRTC audio streaming:
 
 ```bash
-git clone https://github.com/Akadli-AI/Akadli-AI.git
+git clone https://github.com/HarrouAnderrahman/Akadli-AI.git
 pnpm install
 pnpm build
 pnpm --filter @akadli/playground dev

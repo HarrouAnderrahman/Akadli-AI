@@ -22,7 +22,7 @@ export default defineConfig({
         },
       },
       social: {
-        github: "https://github.com/Akadli-AI/Akadli-AI",
+        github: "https://github.com/HarrouAnderrahman/Akadli-AI",
       },
       customCss: ["./src/styles/custom.css"],
       head: [
@@ -64,85 +64,85 @@ export default defineConfig({
       sidebar: [
         {
           label: "Getting Started",
-          translations: { ar: "البداية والتشغيل" },
+          translations: { ar: "البداية" },
           items: [
             {
-              label: "Overview & Architecture",
+              label: "Overview",
               slug: "getting-started/overview",
-              translations: { ar: "نظرة عامة والهندسة المعمارية" },
+              translations: { ar: "نظرة عامة" },
             },
             {
-              label: "Quickstart Guide",
+              label: "Quickstart",
               slug: "getting-started/quickstart",
-              translations: { ar: "دليل البدء السريع" },
+              translations: { ar: "البدء السريع" },
             },
             {
-              label: "Playground Sandbox",
+              label: "Playground",
               slug: "getting-started/playground",
-              translations: { ar: "بيئة الاختبار التفاعلية (Playground)" },
+              translations: { ar: "بيئة التجارب" },
             },
           ],
         },
         {
-          label: "Core Packages",
+          label: "Core",
           translations: { ar: "الحزم الأساسية" },
           items: [
             {
-              label: "Adapter Contract (@akadli/adapter-contract)",
+              label: "Adapter Contract",
               slug: "core/adapter-contract",
-              translations: { ar: "العقود البرمجية (@akadli/adapter-contract)" },
+              translations: { ar: "العقود البرمجية" },
             },
             {
-              label: "Algerian Geo & Phone (@akadli/dz-geo)",
+              label: "Algerian Geography",
               slug: "core/dz-geo",
-              translations: { ar: "الجغرافيا والهاتف 2026 (@akadli/dz-geo)" },
+              translations: { ar: "الجغرافيا والهاتف" },
             },
             {
-              label: "Voice Orchestration Engine (@akadli/core)",
+              label: "Voice Engine",
               slug: "core/engine",
-              translations: { ar: "محرك المحادثة الصوتية (@akadli/core)" },
+              translations: { ar: "المحرك الصوتي" },
             },
           ],
         },
         {
-          label: "Store & ERP Adapters",
-          translations: { ar: "محولات المتاجر و ERP" },
+          label: "Store Adapters",
+          translations: { ar: "محولات المتاجر" },
           items: [
             {
-              label: "Shopify Adapter (@akadli/provider-shopify)",
+              label: "Shopify",
               slug: "providers/shopify",
-              translations: { ar: "محول شوبيفاي (@akadli/provider-shopify)" },
+              translations: { ar: "Shopify" },
             },
             {
-              label: "YouCan Adapter (@akadli/provider-youcan)",
+              label: "YouCan",
               slug: "providers/youcan",
-              translations: { ar: "محول يوكان (@akadli/provider-youcan)" },
+              translations: { ar: "YouCan" },
             },
             {
-              label: "WooCommerce Adapter (@akadli/provider-woocommerce)",
+              label: "WooCommerce",
               slug: "providers/woocommerce",
-              translations: { ar: "محول ووكومرس (@akadli/provider-woocommerce)" },
+              translations: { ar: "WooCommerce" },
             },
             {
-              label: "Google Sheets Adapter (@akadli/provider-gsheets)",
+              label: "Google Sheets",
               slug: "providers/gsheets",
-              translations: { ar: "محول جداول جوجل (@akadli/provider-gsheets)" },
+              translations: { ar: "Google Sheets" },
             },
             {
-              label: "Tassyir ERP Adapter (@akadli/provider-tassyir)",
+              label: "Tassyir ERP",
               slug: "providers/tassyir",
-              translations: { ar: "محول تسيير (@akadli/provider-tassyir)" },
+              translations: { ar: "Tassyir ERP" },
             },
           ],
         },
         {
-          label: "For AI Agents",
-          translations: { ar: "للوكلاء البرمجيين والذكاء الاصطناعي" },
+          label: "AI Agents",
+          translations: { ar: "وكلاء الذكاء الاصطناعي" },
           items: [
             {
-              label: "AI Agent Portal & llms.txt",
+              label: "Agent Portal",
               slug: "agents/overview",
-              translations: { ar: "بوابة الوكلاء وملفات llms.txt" },
+              translations: { ar: "بوابة الوكلاء" },
             },
           ],
         },

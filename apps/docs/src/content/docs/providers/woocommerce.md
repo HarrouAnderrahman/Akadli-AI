@@ -1,5 +1,5 @@
 ---
-title: WooCommerce Adapter (@akadli/provider-woocommerce)
+title: WooCommerce
 description: WooCommerce REST v3 Cash-on-Delivery adapter with DZ-XX state codes, COD plugin meta_data parser, and HMAC verification.
 ---
 

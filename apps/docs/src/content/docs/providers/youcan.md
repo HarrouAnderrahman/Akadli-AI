@@ -1,5 +1,5 @@
 ---
-title: YouCan Adapter (@akadli/provider-youcan)
+title: YouCan
 description: YouCan (.shop) Cash-on-Delivery adapter with 1-page checkout extra_fields extraction and HMAC signature verification.
 ---
 

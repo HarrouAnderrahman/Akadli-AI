@@ -1,5 +1,5 @@
 ---
-title: بوابة وكلاء الذكاء الاصطناعي وتكامل llms.txt
+title: بوابة وكلاء الذكاء الاصطناعي
 description: تعليمات وقوالب التوجيه والقواعد المعمارية الثابتة لنماذج Cursor و Antigravity و Claude Code و Codex.
 ---
 

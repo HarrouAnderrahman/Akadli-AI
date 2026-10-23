@@ -1,5 +1,5 @@
 ---
-title: Voice Orchestration Engine (@akadli/core)
+title: Voice Engine
 description: Stateless orchestration engine connecting ElevenLabs Conversational AI with store adapters.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Shopify Adapter (@akadli/provider-shopify)
+title: Shopify
 description: Production Shopify Cash-on-Delivery adapter with Dev Dashboard setup, protected customer data access, and missing-province resolution.
 ---
 

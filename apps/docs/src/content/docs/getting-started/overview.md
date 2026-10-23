@@ -1,5 +1,5 @@
 ---
-title: Architecture & COD Confirmation Lifecycle
+title: Overview
 description: High-level architectural overview and end-to-end confirmation lifecycle of Akadli-AI.
 ---
 

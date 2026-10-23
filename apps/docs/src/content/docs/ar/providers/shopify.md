@@ -1,5 +1,5 @@
 ---
-title: محول شوبيفاي (@akadli/provider-shopify)
+title: Shopify
 description: محول تأكيد طلبيات الدفع عند الاستلام لمتاجر Shopify، وخطوات إعداد لوحة المطورين، وحل إشكالية الولاية المفقودة.
 ---
 

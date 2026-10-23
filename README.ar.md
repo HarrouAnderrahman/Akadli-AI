@@ -87,7 +87,7 @@ const result = await handleFinalizeOrderToolCall(
 <div dir="ltr" align="left">
 
 ```bash
-git clone https://github.com/Akadli-AI/Akadli-AI.git
+git clone https://github.com/HarrouAnderrahman/Akadli-AI.git
 pnpm install
 pnpm build
 pnpm --filter @akadli/playground dev

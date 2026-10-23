@@ -1,5 +1,5 @@
 ---
-title: Google Sheets Adapter (@akadli/provider-gsheets)
+title: Google Sheets
 description: Universal Google Sheets & Apps Script bridge for Algerian COD landing pages and store builders (SetShop, JustSell, Foorweb).
 ---
 

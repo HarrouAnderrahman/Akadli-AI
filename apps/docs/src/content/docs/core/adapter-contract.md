@@ -1,5 +1,5 @@
 ---
-title: Adapter Contract (@akadli/adapter-contract)
+title: Adapter Contract
 description: Pure Zod schemas and TypeScript interfaces establishing contract boundaries across Akadli-AI.
 ---
 
