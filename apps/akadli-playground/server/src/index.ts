@@ -544,6 +544,13 @@ app.get('/api/status', (req, res) => {
 // Call Logs & Audio Archive Endpoints
 app.get('/api/logs', async (_req, res) => {
   try {
+    if (
+      pendingAudioLog &&
+      ((currentCallState as CallState) === 'standby' ||
+        (currentCallState as CallState) === 'ended')
+    ) {
+      flushPendingCallAudioArchive();
+    }
     const logsDir = getCallLogsDir();
     if (!fs.existsSync(logsDir)) {
       return res.json({ logs: [] });
@@ -561,7 +568,7 @@ app.get('/api/logs', async (_req, res) => {
         const mp3Filename = `${baseName}.mp3`;
         const mp3Path = path.join(logsDir, mp3Filename);
         const hasMp3 = fs.existsSync(mp3Path);
-        const isPending = pendingAudioLog?.id === baseName;
+        const isPending = !hasMp3 && pendingAudioLog?.id === baseName;
 
         logs.push({
           id: baseName,
@@ -1404,6 +1411,16 @@ async function handleOrderFinalized(
     transcript: [...currentTranscript],
   });
 
+  // If the phone client already hung up while dispatchOrderMutation was awaiting the provider API,
+  // terminateCall() already ran before pendingAudioLog was created — flush it immediately now.
+  if (
+    (currentCallState as CallState) === 'ended' ||
+    (currentCallState as CallState) === 'standby'
+  ) {
+    flushPendingCallAudioArchive();
+    return;
+  }
+
   // Fallback auto hangup after 15 seconds if client has not already disconnected after goodbye
   if (finalizeHangupTimer) {
     clearTimeout(finalizeHangupTimer);
@@ -1412,6 +1429,8 @@ async function handleOrderFinalized(
     finalizeHangupTimer = null;
     if (currentCallState === 'finalizing' || currentCallState === 'active') {
       terminateCall('Order finalized successfully');
+    } else if (pendingAudioLog) {
+      flushPendingCallAudioArchive();
     }
   }, 15000);
 }
