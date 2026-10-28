@@ -80,7 +80,9 @@ export class AdminPage {
   private tassyirApiBaseUrl: string | null = null;
   private tassyirMutationResult: ShopifyMutationData | null = null;
   private activeCallLog: CallLogEntry | null = null;
+  private activeConversationId: string | null = null;
   private callLogs: CallLogEntry[] = [];
+  private audioPollTimer: number | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -99,9 +101,29 @@ export class AdminPage {
       if (res.ok) {
         const data = await res.json();
         this.callLogs = Array.isArray(data.logs) ? data.logs : [];
+        if (this.activeCallLog) {
+          const updated = this.callLogs.find((l) => l.id === this.activeCallLog?.id);
+          if (updated) {
+            this.activeCallLog = updated;
+            this.renderDecisionSummary();
+          }
+        }
         this.renderRecentCallLogs();
       }
     } catch (e) {}
+  }
+
+  private scheduleAudioPollIfNeeded() {
+    if (this.audioPollTimer !== null) {
+      clearTimeout(this.audioPollTimer);
+      this.audioPollTimer = null;
+    }
+    if (this.activeCallLog?.audioPending && !this.activeCallLog.hasAudio) {
+      this.audioPollTimer = window.setTimeout(async () => {
+        await this.fetchCallLogs();
+        this.scheduleAudioPollIfNeeded();
+      }, 3000);
+    }
   }
 
   private async fetchLanInfo() {
@@ -186,6 +208,7 @@ export class AdminPage {
         this.transcripts = [];
         this.finalizedDecision = null;
         this.activeCallLog = null;
+        this.activeConversationId = null;
         this.shopifyMutationResult = null;
         this.youcanMutationResult = null;
         this.woocommerceMutationResult = null;
@@ -206,6 +229,9 @@ export class AdminPage {
       }
 
       case 'TRANSCRIPT_UPDATE': {
+        if (msg.data?.conversationId) {
+          this.activeConversationId = msg.data.conversationId;
+        }
         if (msg.data?.turn) {
           this.transcripts.push(msg.data.turn);
           this.renderTranscripts();
@@ -216,6 +242,9 @@ export class AdminPage {
       case 'ORDER_FINALIZED': {
         this.currentCallState = 'finalizing';
         this.finalizedDecision = msg.data.decision;
+        if (msg.data.conversationId) {
+          this.activeConversationId = msg.data.conversationId;
+        }
         if (msg.data.originalOrder) {
           this.order = msg.data.originalOrder;
         }
@@ -237,6 +266,7 @@ export class AdminPage {
           }
           this.renderDecisionSummary();
           this.renderRecentCallLogs();
+          this.scheduleAudioPollIfNeeded();
         }
         break;
       }
@@ -1337,7 +1367,10 @@ export class AdminPage {
     const jsonUrl = log?.jsonUrl || '';
     const jsonFilename = log?.jsonFilename || `${this.order.order_id || 'call'}-transcript.json`;
     const hasAudio = Boolean(log?.hasAudio && log?.mp3Url);
-    const audioPending = Boolean(log?.audioPending);
+    const audioPending = Boolean(
+      log?.audioPending || (!log && (this.activeConversationId || this.currentCallState === 'finalizing'))
+    );
+    const convId = log?.conversationId || this.activeConversationId;
 
     let audioPlayerHtml = '';
     if (hasAudio && log?.mp3Url) {
@@ -1386,8 +1419,8 @@ export class AdminPage {
         <div class="flex items-center justify-between">
           <span class="text-xs font-semibold text-zinc-200">Call Transcript & Audio</span>
           ${
-            log?.conversationId
-              ? `<span class="text-[10px] font-mono text-zinc-500" title="ElevenLabs Conversation ID">${log.conversationId}</span>`
+            convId
+              ? `<span class="text-[10px] font-mono text-zinc-500" title="ElevenLabs Conversation ID">${convId}</span>`
               : `<span class="text-[10px] font-mono text-zinc-500">${this.transcripts.length} STT turns</span>`
           }
         </div>

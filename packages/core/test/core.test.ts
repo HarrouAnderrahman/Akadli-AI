@@ -212,6 +212,9 @@ describe("@akadli/core", () => {
           return HttpResponse.json({
             conversation_id: CONV_ID,
             status: "done",
+            has_audio: true,
+            has_user_audio: true,
+            has_response_audio: true,
             transcript: [
               {
                 role: "agent",
@@ -269,6 +272,9 @@ describe("@akadli/core", () => {
       expect(result.conversationId).toBe(CONV_ID);
       expect(result.status).toBe("done");
       expect(result.durationSecs).toBe(18);
+      expect(result.hasAudio).toBe(true);
+      expect(result.hasUserAudio).toBe(true);
+      expect(result.hasResponseAudio).toBe(true);
       expect(result.transcript).toEqual([
         {
           role: "agent",

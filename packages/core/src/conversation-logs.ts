@@ -9,6 +9,9 @@ export interface ElevenLabsConversationTranscript {
   status: string;
   transcript: ElevenLabsTranscriptTurn[];
   durationSecs?: number;
+  hasAudio?: boolean;
+  hasUserAudio?: boolean;
+  hasResponseAudio?: boolean;
 }
 
 interface RawElevenLabsTranscriptTurn {
@@ -24,6 +27,9 @@ interface RawElevenLabsConversationResponse {
   conversation_id?: string;
   conversationId?: string;
   status?: string;
+  has_audio?: boolean;
+  has_user_audio?: boolean;
+  has_response_audio?: boolean;
   transcript?: RawElevenLabsTranscriptTurn[];
   call_duration_secs?: number;
   duration_secs?: number;
@@ -113,7 +119,12 @@ export async function fetchElevenLabsConversationTranscript(
           : conversationId.trim(),
     status: typeof raw.status === "string" ? raw.status : "done",
     transcript,
-    ...(durationSecs !== undefined ? { durationSecs } : {})
+    ...(durationSecs !== undefined ? { durationSecs } : {}),
+    ...(typeof raw.has_audio === "boolean" ? { hasAudio: raw.has_audio } : {}),
+    ...(typeof raw.has_user_audio === "boolean" ? { hasUserAudio: raw.has_user_audio } : {}),
+    ...(typeof raw.has_response_audio === "boolean"
+      ? { hasResponseAudio: raw.has_response_audio }
+      : {})
   };
 }
 

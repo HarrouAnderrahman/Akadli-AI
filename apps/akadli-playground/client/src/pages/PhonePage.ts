@@ -288,6 +288,13 @@ export class PhonePage {
         }
       };
 
+      sessionOptions.onConversationMetadata = (meta: any) => {
+        const convId = meta?.conversation_id || meta?.conversationId;
+        if (convId) {
+          this.activeConversationId = convId;
+        }
+      };
+
       sessionOptions.onMessage = (message: any) => {
         const isAgent = message.source === 'ai' || message.role === 'agent';
         if (this.hasFinalizedOrder && isAgent) {
