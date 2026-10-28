@@ -128,15 +128,16 @@ if (!isValid) {
   throw new Error("Invalid Tassyir Ed25519 signature");
 }
 
-// 2. تحليل مغلف الطلبية وتطبيع العنوان لتقسيم الـ 69 ولاية
+// 2. تحليل مغلف الطلبية (بما فيها items[].quantity و shippingPrice و total) وتطبيع العنوان لتقسيم الـ 69 ولاية
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تحديث الطلبية في تسيير مع مفتاح التكرار Idempotency-Key
+// 3. تحديث الطلبية في تسيير مع مفتاح التكرار Idempotency-Key (تتضمن الملاحظات akadli-confirmed / akadli-modified / akadli-qty-{qty})
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "تم تأكيد الطلبية صوتياً بالدارجة"
   },
   {

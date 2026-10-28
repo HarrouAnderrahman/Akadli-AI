@@ -32,7 +32,7 @@ Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilay
 | :--- | :--- | :--- |
 | [`@akadli/adapter-contract`](./packages/adapter-contract) | العقود البرمجية | مخططات Zod نقية وواجهة `IEcommerceProvider` بدون تبعيات تشغيلية خارجية |
 | [`@akadli/dz-geo`](./packages/dz-geo) | الجغرافيا / الهاتف | التقسيم الإداري الجزائري 2026 (69 ولاية و 1708 بلدية) ومعالج أرقام الهاتف `+213` |
-| [`@akadli/core`](./packages/core) | المحرك الأساسي | منشئ المتغيرات الديناميكية لـ ElevenAgents ومنسق استدعاءات `handleFinalizeOrderToolCall` |
+| [`@akadli/core`](./packages/core) | المحرك الأساسي | منشئ المتغيرات الديناميكية لـ ElevenAgents ومنسق `handleFinalizeOrderToolCall` واسترجاع نصوص وتسجيلات المكالمات (STT/MP3) |
 | [`@akadli/provider-shopify`](./packages/provider-shopify) | محول المتجر | التحقق من توقيع HMAC لـ Shopify، معالجة غياب حقل الولاية، وتبادل OAuth `client_credentials` وتحديثات REST |
 | [`@akadli/provider-youcan`](./packages/provider-youcan) | محول المتجر | التحقق من Webhook لـ YouCan `.shop`، واستخراج حقول COD أحادية الصفحة وتحديث وحفظ الطلبات |
 | [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | محول المتجر | واجهة WooCommerce REST v3 وتطبيع رموز الولايات `DZ-XX` وحقول `meta_data` لإضافات COD |
@@ -53,22 +53,23 @@ import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "
 
 const provider = new ShopifyProvider();
 
-// 1. التحقق من توقيع Webhook وتحليل الطلبية وفق النموذج الجزائري القياسي
+// 1. التحقق من توقيع Webhook وتحليل الطلبية وفق النموذج الجزائري القياسي (بما في ذلك quantity و shippingFeeDa)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 2. حقن المتغيرات الديناميكية في ElevenAgents لبدء المكالمة الصوتية بالدارجة
+// 2. حقن المتغيرات الديناميكية (price_da, shipping_fee_da, subtotal_da, quantity, ...) في ElevenAgents
 const promptVars = buildElevenAgentsDynamicVariables(order);
 
 // 3. معالجة قرار أداة finalize_order_decision وتحديث المتجر مباشرة
 const result = await handleFinalizeOrderToolCall(
-  agentToolPayload, // مثلاً: { orderId: order.orderId, status: "CONFIRMED" }
+  agentToolPayload, // مثلاً: { orderId: order.orderId, status: "CONFIRMED", finalQuantity: order.quantity }
   provider,
   {
     shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
   },
-  order.constraints
+  order.constraints,
+  order
 );
 ```
 
@@ -107,7 +108,7 @@ pnpm --filter @akadli/playground dev
 
 يُرجى مراجعة [`./AGENTS.md`](./AGENTS.md) ومجلد [`.agents/skills/`](./.agents/skills/) قبل إجراء أي تعديل برمجي:
 - الحفاظ على حدود حزم `@akadli/*` والاعتماد حصرياً على دوال Node.js الأصلية بدون مكاتب زائدة.
-- الالتزام بتقسيم 2026 الإداري (`01`-`69`) والوسوم المعتمدة (`akadli-confirmed`، `akadli-modified`، `akadli-refused`).
+- الالتزام بتقسيم 2026 الإداري (`01`-`69`) والوسوم المعتمدة (`akadli-confirmed`، `akadli-modified`، `akadli-refused`، `akadli-variant-{variant}`، `akadli-qty-{qty}`).
 - تنفيذ بوابة التحقق الإلزامية قبل التثبيت: `pnpm turbo run build typecheck lint test`.
 
 ---

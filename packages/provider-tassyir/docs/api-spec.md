@@ -132,7 +132,10 @@ Tassyir emits `orders/created` events with a nested envelope (`data.order`) or f
 
 ### Field Mapping & Guards
 1. **Order ID:** `String(order.id)` (e.g. `"741000000000000001"`).
-2. **Total Price:** Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA).
+2. **Quantity & Prices:**
+   - `quantity`: Sum of `order.items[].quantity` (default `1`).
+   - `shippingFeeDa`: Parsed from decimal string `order.shippingPrice` (e.g. `"500.00"` -> `500` DA, default `0`).
+   - `priceDa`: Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA, total COD amount).
 3. **Buyer Contact Guard:**
    - If `order.waiting === true` or `buyer.phone` is masked (`"**********"`), the adapter throws:
      `"Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."`
@@ -186,7 +189,7 @@ Returns `externalStatus: "CONFIRMED"`.
        "provinceCode": 13,
        "address": "Maghnia - Cite Imama"
      },
-     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed size"
+     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L, akadli-qty-2) — Commune: Maghnia | Variant: L | Qty: 2 | Address: Cite Imama | Notes: Customer changed size"
    }
    ```
 3. If `credentials.confirmOnModified !== "false"`:

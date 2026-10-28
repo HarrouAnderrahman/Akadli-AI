@@ -59,7 +59,7 @@ Standard Shopify checkout forms hide the province/state dropdown when `country_c
 - A 5-digit postal code (`13000` -> Wilaya `13`)
 - Custom `note_attributes` added by 1-page checkout apps (EasySell, Releasit, CodForm).
 
-`@akadli/provider-shopify` inspects all of these fields and runs them through `@akadli/dz-geo`'s 4-stage resolver, correctly extracting Wilayas `01` through `69`.
+`@akadli/provider-shopify` inspects all of these fields and runs them through `@akadli/dz-geo`'s 4-stage resolver, correctly extracting Wilayas `01` through `69`. It also extracts `quantity` (sum of `line_items[].quantity` or `note_attributes` `quantity`/`qty`, default `1`) and `shippingFeeDa` (`total_shipping_price_set.shop_money.amount` -> sum of `shipping_lines[].price` -> `note_attributes` `shipping`/`livraison`, default `0`).
 
 ---
 
@@ -95,15 +95,16 @@ const isValid = await provider.verifyWebhook(
 // 2. Parse standardized Algerian COD order
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. Apply post-call decision
+// 3. Apply post-call decision (tags: akadli-modified, akadli-variant-42, akadli-qty-2)
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "MODIFIED",
     finalVariant: "42",
+    finalQuantity: 2,
     finalCommune: "Barika",
-    reasonOrNotes: "Customer updated size to 42"
+    reasonOrNotes: "Customer updated size to 42 and quantity to 2"
   },
   {
     shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,

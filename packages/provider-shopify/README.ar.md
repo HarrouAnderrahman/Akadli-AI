@@ -21,8 +21,10 @@
    - *بدون هذه الخطوة، تقوم Shopify بإخفاء بيانات العميل من الـ Webhook وتمنع تحديث عنوان الشحن.*
 3. **ضبط الـ Webhook:**
    - من لوحة تحكم المتجر -> **Settings** -> **Notifications** -> **Webhooks**، أنشئ Webhook للحدث `Order creation` بصيغة JSON موجهاً إلى `/api/webhooks/shopify`.
-4. **معالجة غياب حقل الولاية (`province: null`):**
+4. **معالجة غياب حقل الولاية واستخراج الكمية والتوصيل (`province: null`):**
    - تخفي Shopify قائمة الولايات في الجزائر؛ يكتب الزبائن ولاياتهم في حقول `city` أو `address1` أو الرمز البريدي `zip` (`13000` تشير للولاية `13`)، أو داخل `note_attributes`. تستخرج الحزمة العنوان وتطبقه بدقة وفق تقسيم 2026 عبر `@akadli/dz-geo`.
+   - تستخرج الحزمة تلقائياً الكمية `quantity` (مجموع `line_items[].quantity` أو من `note_attributes`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`total_shipping_price_set.shop_money.amount` أو مجموع `shipping_lines[].price` أو `note_attributes`، افتراضياً `0`).
+   - عند التعديل (`MODIFIED`)، تضيف الحزمة الوسوم القياسية `akadli-modified` و `akadli-variant-{finalVariant}` و `akadli-qty-{finalQuantity}`.
 
 ---
 

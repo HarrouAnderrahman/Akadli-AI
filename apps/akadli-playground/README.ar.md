@@ -42,6 +42,7 @@ pnpm --filter @akadli/playground dev
 | :--- | :--- | :--- | :--- |
 | **الخادم** | `PORT` / `SERVER_PORT` | `3000` / `3001` | منافذ واجهة Vite وخادم Express |
 | **ElevenLabs** | `ELEVENLABS_API_KEY` / `_AGENT_ID` | — | بيانات الاعتماد للوكيل الصوتي الذكي |
+| **سجلات المكالمات** | `SAVE_CALL_LOGS` / `CALL_LOGS_DIR` | `"true"` / `"./logs/calls"` | حفظ وأرشفة نصوص المحادثات (`.json`) والتسجيلات الصوتية (`.mp3`) |
 | **Shopify** | `SHOPIFY_SHOP_DOMAIN` / `_ACCESS_TOKEN` | — | نطاق المتجر ورمز الوصول الدائم |
 | **Shopify** | `SHOPIFY_CLIENT_ID` / `_CLIENT_SECRET` | — | بيانات OAuth لتبادل التوكن التلقائي |
 | **Shopify** | `SHOPIFY_WEBHOOK_SECRET` / `_API_VERSION` | `"2025-01"` | المفتاح السري لتوقيع HMAC وإصدار الـ API |
@@ -68,6 +69,15 @@ pnpm --filter @akadli/playground dev
 | **WooCommerce** | `POST /api/webhooks/woocommerce` | `POST /api/webhooks/woocommerce/simulate` |
 | **Google Sheets** | `POST /api/webhooks/gsheets` | `POST /api/webhooks/gsheets/simulate` |
 | **Tassyir ERP** | `POST /api/webhooks/tassyir` | `POST /api/webhooks/tassyir/simulate` |
+
+---
+
+## أرشفة نصوص المحادثات (STT) والتسجيلات الصوتية (`/api/logs`)
+
+عند تفعيل `SAVE_CALL_LOGS=true` (مفعل افتراضياً)، يقوم `@akadli/playground` بأرشفة المكالمات المكتملة تلقائياً داخل مجلد `CALL_LOGS_DIR` (`./logs/calls`) عبر دوال `@akadli/core`:
+- `GET /api/logs` — استعراض قائمة المكالمات المؤرشفة مع بيانات الطلبية، حالة القرار، ملف النص `transcriptFile` (`.json`) وملف الصوت `audioFile` (`.mp3`).
+- `GET /api/logs/:filename` — عرض أو تحميل ملف نص المحادثة (`.json`) أو التسجيل الصوتي للمكالمة (`.mp3`) مع جلبه تلقائياً من ElevenLabs إذا لم يكن مخزناً بعد.
+- **الاستماع المباشر في لوحة التحكم (`/admin`):** يمكنك الاستماع لتسجيل المكالمة مباشرة عبر مشغل الصوت المدمج أو معاينة وتحميل نص الحوار الكامل (JSON).
 
 ---
 

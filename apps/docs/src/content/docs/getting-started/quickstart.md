@@ -100,6 +100,7 @@ app.post(
 In your ElevenLabs dashboard, register a client/server tool named `finalize_order_decision` with parameters:
 - `orderId` (string)
 - `status` ("CONFIRMED" | "REFUSED" | "MODIFIED")
+- `finalQuantity` (integer, optional, defaults to `order.quantity` or `1`)
 - `finalVariant` (string, optional)
 - `finalWilaya` (string, optional)
 - `finalCommune` (string, optional)
@@ -138,6 +139,6 @@ app.post("/api/elevenlabs/finalize", express.json(), async (req, res) => {
 ## 5. Result Verification
 
 After execution, inspect your Shopify Admin:
-- **Tags:** `akadli-confirmed` (or `akadli-modified`, `akadli-variant-42`, `akadli-refused`).
+- **Tags:** `akadli-confirmed` (or `akadli-modified`, `akadli-variant-42`, `akadli-qty-2`, `akadli-refused`).
 - **Notes:** Order note prefixed with `[Akadli-AI]` with timestamp and caller feedback.
 - **Address & Item:** Updated to reflect customer choices if status was `MODIFIED`.

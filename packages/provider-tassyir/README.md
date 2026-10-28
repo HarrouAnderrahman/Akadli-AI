@@ -130,15 +130,16 @@ if (!isValid) {
   throw new Error("Invalid Tassyir Ed25519 signature");
 }
 
-// 3. Parse standardized Algerian COD order (supports 2026-10 envelope)
+// 3. Parse standardized Algerian COD order (supports 2026-10 envelope, items[].quantity & shippingPrice)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 4. Apply post-call decision to Tassyir Admin API
+// 4. Apply post-call decision to Tassyir Admin API (notes include akadli-confirmed / akadli-modified / akadli-qty-{qty})
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "Customer confirmed via ElevenAgents voice call",
   },
   {

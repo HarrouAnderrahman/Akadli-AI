@@ -19,13 +19,13 @@ pnpm add @akadli/core @akadli/dz-geo @akadli/provider-shopify
 
 - [Overview](https://akadli.me/getting-started/overview): Architectural lifecycle, webhook ingress, and order mutation flow.
 - [Quickstart](https://akadli.me/getting-started/quickstart): 20-line end-to-end TypeScript integration example.
-- [Playground](https://akadli.me/getting-started/playground): Local HTTPS WebRTC phone simulator (/phone) and admin console (/admin) over LAN Wi-Fi.
+- [Playground](https://akadli.me/getting-started/playground): Local HTTPS WebRTC phone simulator (/phone), admin console (/admin), and STT transcript/MP3 audio archiving over LAN Wi-Fi.
 
 ## Core Packages
 
-- [@akadli/adapter-contract](https://akadli.me/core/adapter-contract): Universal TypeScript interfaces (StandardizedDzOrder, FinalizedOrderDecision, IEcommerceProvider) and Zod validation schemas. Zero runtime dependencies.
+- [@akadli/adapter-contract](https://akadli.me/core/adapter-contract): Universal TypeScript interfaces (StandardizedDzOrder with quantity & shippingFeeDa, FinalizedOrderDecision with finalQuantity, IEcommerceProvider) and Zod validation schemas. Zero runtime dependencies.
 - [@akadli/dz-geo](https://akadli.me/core/dz-geo): Official 2026 Algerian 69 Wilayas, 1,708 Communes, ONP postal codes, and +213 phone normalizer.
-- [@akadli/core](https://akadli.me/core/engine): Stateless voice orchestration engine connecting ElevenAgents with store providers.
+- [@akadli/core](https://akadli.me/core/engine): Stateless voice orchestration engine connecting ElevenAgents with store providers, plus zero-dependency STT transcript & MP3 audio retrieval helpers.
 
 ## Store & ERP Adapters
 

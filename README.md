@@ -22,7 +22,7 @@ Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilay
 | :--- | :--- | :--- |
 | [`@akadli/adapter-contract`](./packages/adapter-contract) | Contracts | Pure Zod schemas & `IEcommerceProvider` contract |
 | [`@akadli/dz-geo`](./packages/dz-geo) | Geo / Phone | 2026 Algerian 69 Wilayas, 1,708 Communes & `+213` phone normalizer |
-| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder & `handleFinalizeOrderToolCall` orchestrator |
+| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder, `handleFinalizeOrderToolCall` orchestrator & call transcript/MP3 audio helpers |
 | [`@akadli/provider-shopify`](./packages/provider-shopify) | Adapter | Shopify HMAC verification, Algeria missing-province fallback, OAuth `client_credentials` & REST mutations |
 | [`@akadli/provider-youcan`](./packages/provider-youcan) | Adapter | YouCan `.shop` webhook verification, 1-page COD `extra_fields` parser & order close/update API |
 | [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | Adapter | WooCommerce REST v3 Basic Auth, `DZ-XX` state & COD plugin `meta_data` adapter |
@@ -39,22 +39,23 @@ import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "
 
 const provider = new ShopifyProvider();
 
-// 1. Verify webhook signature & parse standardized Algerian COD order
+// 1. Verify webhook signature & parse standardized Algerian COD order (with quantity & shippingFeeDa)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 2. Inject dynamic prompt variables into ElevenAgents for Darja voice confirmation call
+// 2. Inject dynamic prompt variables (price_da, shipping_fee_da, subtotal_da, quantity, etc.) into ElevenAgents
 const promptVars = buildElevenAgentsDynamicVariables(order);
 
 // 3. Handle ElevenAgents finalize_order_decision tool call & mutate live store
 const result = await handleFinalizeOrderToolCall(
-  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED" }
+  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED", finalQuantity: order.quantity }
   provider,
   {
     shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
   },
-  order.constraints
+  order.constraints,
+  order
 );
 ```
 
@@ -81,7 +82,7 @@ pnpm --filter @akadli/playground dev
 
 Review [`./AGENTS.md`](./AGENTS.md) and [`.agents/skills/`](./.agents/skills/) before modifying code:
 - Maintain `@akadli/*` package boundaries and zero-bloat runtime dependencies.
-- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`).
+- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`, `akadli-variant-{variant}`, `akadli-qty-{qty}`).
 - Enforce the pre-commit verification gate: `pnpm turbo run build typecheck lint test`.
 
 ---

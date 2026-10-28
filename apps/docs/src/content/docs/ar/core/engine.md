@@ -32,6 +32,8 @@ const order = createStandardizedDzOrder({
   customerName: "أمين بلقاسم",
   rawCustomerPhone: "0550123456",
   itemName: "حذاء رياضي Air Jordan 1",
+  quantity: 1,
+  shippingFeeDa: 600,
   priceDa: 12500,
   currentVariant: "43",
   rawWilaya: "بريكة",
@@ -52,16 +54,17 @@ const dynamicVariables = buildElevenAgentsDynamicVariables(order);
 /*
 النتيجة:
 {
+  order_id: "1001",
+  store_name: "متجر الأحذية الرياضية",
   customer_name: "أمين بلقاسم",
   customer_phone_e164: "+213550123456",
-  customer_phone_local: "0550123456",
-  store_name: "متجر الأحذية الرياضية",
   item_name: "حذاء رياضي Air Jordan 1",
+  quantity: "1",
+  shipping_fee_da: "600",
+  subtotal_da: "11900",
   price_da: "12500",
   current_variant: "43",
-  current_wilaya_code: "60",
-  current_wilaya_name_fr: "Barika",
-  current_wilaya_name_ar: "بريكة",
+  current_wilaya: "60",
   current_commune: "Barika",
   current_address_note: "بجانب المسجد الكبير",
   allowed_variants: "42, 43, 44",
@@ -71,9 +74,9 @@ const dynamicVariables = buildElevenAgentsDynamicVariables(order);
 */
 ```
 
-### 3. `handleFinalizeOrderToolCall(payload, provider, creds, constraints)`
+### 3. `handleFinalizeOrderToolCall(payload, provider, creds, constraints?, order?)`
 
-تستقبل وتدقق استدعاء الأداة من وكيل ElevenLabs في ختام المكالمة، وترفض أي تعديل على مقاس غير متوفر أو بلدية وهمية، ثم ترسل أمر التحديث إلى المتجر:
+تستقبل وتدقق استدعاء الأداة من وكيل ElevenLabs في ختام المكالمة، وتستخرج الكمية النهائية `finalQuantity` (من `finalQuantity ?? final_quantity ?? quantity ?? order.quantity ?? 1`)، وترفض أي تعديل على مقاس غير متوفر أو بلدية وهمية، ثم ترسل أمر التحديث إلى المتجر:
 
 ```typescript
 import { handleFinalizeOrderToolCall } from "@akadli/core";
@@ -86,6 +89,7 @@ const result = await handleFinalizeOrderToolCall(
     orderId: "1001",
     status: "MODIFIED",
     finalVariant: "44", // طلب الزبون مقاساً أكبر
+    finalQuantity: 1,
     finalCommune: "بريكة",
     reasonOrNotes: "طلب الزبون مقاس 44 بدلاً من 43"
   },
@@ -94,11 +98,35 @@ const result = await handleFinalizeOrderToolCall(
     shopDomain: "dz-store.myshopify.com",
     accessToken: "shpat_xxxxxxxx"
   },
-  order.constraints // يتأكد من أن "44" موجود ضمن allowedVariants
+  order.constraints, // يتأكد من أن "44" موجود ضمن allowedVariants
+  order
 );
 
 console.log(result.success); // true
 console.log(result.externalStatus); // "MODIFIED"
+```
+
+### 4. `fetchElevenLabsConversationTranscript` و `fetchElevenLabsConversationAudio`
+
+دوال مساعدة بدون أي تبعيات خارجية لاسترجاع النص الكامل للمحادثة الصوتية (STT) وتحميل التسجيل الصوتي للمكالمة بصيغة MP3 (`Uint8Array`) من ElevenLabs بعد انتهاء المكالمة:
+
+```typescript
+import {
+  fetchElevenLabsConversationTranscript,
+  fetchElevenLabsConversationAudio
+} from "@akadli/core";
+
+// 1. جلب نص الحوار الكامل (STT) وحالة المكالمة ومدتها الزمنية
+const transcript = await fetchElevenLabsConversationTranscript(
+  conversationId,
+  process.env.ELEVENLABS_API_KEY!
+);
+
+// 2. تحميل التسجيل الصوتي للمكالمة بصيغة MP3 (Uint8Array)
+const mp3Bytes = await fetchElevenLabsConversationAudio(
+  conversationId,
+  process.env.ELEVENLABS_API_KEY!
+);
 ```
 
 ---
@@ -108,7 +136,7 @@ console.log(result.externalStatus); // "MODIFIED"
 في لوحة ElevenLabs Conversational AI ضمن قسم **Tools** -> **Add Server Tool**:
 
 - **اسم الأداة:** `finalize_order_decision`
-- **الوصف:** `تسجيل قرار العميل بعد مكالمة تأكيد الطلبية (تأكيد أو رفض أو تعديل المقاس والعنوان).`
+- **الوصف:** `تسجيل قرار العميل بعد مكالمة تأكيد الطلبية (تأكيد أو رفض أو تعديل المقاس والكمية والعنوان).`
 - **مخطط المعاملات (JSON Schema):**
   ```json
   {
@@ -116,6 +144,7 @@ console.log(result.externalStatus); // "MODIFIED"
     "properties": {
       "orderId": { "type": "string" },
       "status": { "type": "string", "enum": ["CONFIRMED", "REFUSED", "MODIFIED"] },
+      "finalQuantity": { "type": "integer", "minimum": 1 },
       "finalVariant": { "type": "string" },
       "finalWilaya": { "type": "string" },
       "finalCommune": { "type": "string" },

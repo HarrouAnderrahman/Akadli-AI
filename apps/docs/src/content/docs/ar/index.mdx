@@ -43,19 +43,21 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
     const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
     const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-    // 2. بناء المتغيرات الديناميكية للمكالمة الصوتية بالدارجة (currentVariant، الولاية، الهاتف)
+    // 2. بناء المتغيرات الديناميكية للمكالمة الصوتية بالدارجة (quantity, shipping_fee_da, subtotal_da, price_da, currentVariant)
     const promptVars = buildElevenAgentsDynamicVariables(order);
 
     // 3. استقبال قرار العميل من أداة ElevenLabs وتحديث بيانات المتجر فوراً
     const result = await handleFinalizeOrderToolCall(
       {
         orderId: order.orderId,
-        status: "CONFIRMED", // أو "MODIFIED" لتعديل المقاس أو البلدية أو "REFUSED"
+        status: "CONFIRMED", // أو "MODIFIED" لتعديل المقاس أو الكمية أو البلدية أو "REFUSED"
+        finalQuantity: order.quantity,
         reasonOrNotes: "تم تأكيد الطلبية بالدارجة عبر مكالمة ElevenAgents الصوتية"
       },
       provider,
       { shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!, accessToken: process.env.SHOPIFY_ACCESS_TOKEN! },
-      order.constraints
+      order.constraints,
+      order
     );
     ```
   </TabItem>
@@ -78,7 +80,7 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
     1. استخدام @akadli/adapter-contract لنموذج StandardizedDzOrder و FinalizedOrderDecision.
     2. مطابقة العناوين حصرياً مع التقسيم الإداري 2026 (69 ولاية) باستخدام @akadli/dz-geo.
     3. استخدام @akadli/core لبناء متغيرات ElevenAgents وتشغيل handleFinalizeOrderToolCall.
-    4. وسوم المتجر يجب أن تكون حصرياً: akadli-confirmed و akadli-modified و akadli-refused و akadli-variant-{variant}.
+    4. وسوم المتجر يجب أن تكون حصرياً: akadli-confirmed و akadli-modified و akadli-refused و akadli-variant-{variant} و akadli-qty-{qty}.
     5. يجب أن تبدأ ملاحظات الطلب ببادئة [Akadli-AI].
     6. لا تخترع حالات جديدة، بل استخدم فقط CONFIRMED أو REFUSED أو MODIFIED.
     ```

@@ -72,6 +72,8 @@ function doPost(e) {
 | **البلدية** | `البلدية`, `الدائرة`, `commune`, `city` |
 | **المنتج** | `المنتج`, `السلعة`, `produit`, `item`, `title` |
 | **المقاس** | `المقاس`, `الحجم`, `اللون`, `taille`, `variant`, `size` |
+| **الكمية** | `الكمية`, `عدد`, `quantite`, `qte`, `quantity`, `qty` |
+| **التوصيل** | `التوصيل`, `سعر التوصيل`, `livraison`, `frais_livraison`, `shipping`, `shipping_fee` |
 | **السعر** | `السعر`, `المبلغ`, `prix`, `total`, `price` |
 
 ---

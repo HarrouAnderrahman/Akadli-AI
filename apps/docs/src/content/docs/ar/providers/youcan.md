@@ -35,7 +35,7 @@ pnpm add @akadli/provider-youcan
 - مصفوفة `custom_fields`
 - كائن العنوان الافتراضي `shipping_address`
 
-وتقوم بمطابقة الولاية مع رموز تقسيم 2026 الرسمية (`01`–`69`) والبلديات عبر `@akadli/dz-geo`.
+وتقوم بمطابقة الولاية مع رموز تقسيم 2026 الرسمية (`01`–`69`) والبلديات عبر `@akadli/dz-geo`، بالإضافة إلى استخراج الكمية `quantity` (مجموع `variants[].quantity` أو `items[].quantity` أو `line_items[].quantity` أو `extra_fields`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`shipping.price` أو `shipping_cost` أو `shipping_total` أو `extra_fields`، افتراضياً `0`) وإضافة وسم `akadli-qty-{finalQuantity}` عند التعديل (`MODIFIED`).
 
 ---
 

@@ -19,10 +19,11 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for WordPress Wo
    - Status: **Active** • Topic: **Order created** • Delivery URL: `https://your-domain.com/api/webhooks/woocommerce`.
    - Secret: Enter your signing secret (used for Base64 `x-wc-webhook-signature` verification).
    - API Version: **WP REST API Integration v3**.
-3. **Algerian `DZ-XX` States & COD Plugins:**
+3. **Algerian `DZ-XX` States, Quantity, Shipping & COD Plugins:**
    - Standard WooCommerce represents Algerian Wilayas as `DZ-XX` state codes (e.g. `DZ-16` for Alger, `DZ-68` for Bou Saada).
    - Stores using Algerian COD checkout plugins store custom entries in order `meta_data` (e.g., `_billing_wilaya`, `_shipping_commune`).
-   - `@akadli/provider-woocommerce` parses both standard address objects and plugin `meta_data` into canonical `@akadli/dz-geo` Wilayas (`01`-`69`).
+   - `@akadli/provider-woocommerce` parses both standard address objects and plugin `meta_data` into canonical `@akadli/dz-geo` Wilayas (`01`-`69`), extracts `quantity` (sum of `line_items[].quantity`, default `1`) and `shippingFeeDa` (`shipping_total` -> `shipping_lines[0].total` -> `meta_data` `_shipping_fee`/`livraison`, default `0`).
+   - On `MODIFIED`, sets `_akadli_status` (`akadli-modified`), `_akadli_variant` (`akadli-variant-{finalVariant}`), and `_akadli_qty` (`akadli-qty-{finalQuantity}`) in `meta_data` and appends an `[Akadli-AI]` order note.
 
 ---
 

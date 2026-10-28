@@ -17,9 +17,11 @@
    - من **الإعدادات** -> **الـ Webhooks**، أضف Webhook جديداً للحدث `order.created`.
    - عيّن الرابط إلى مسار الاستقبال (مثال: `https://your-domain.com/api/webhooks/youcan`).
    - انسخ المفتاح السري للـ Webhook (يُستخدم للتحقق من ترويسة `x-youcan-signature` بصيغة hex).
-3. **استخراج حقول COD أحادية الصفحة (Extra Fields):**
+3. **استخراج حقول COD أحادية الصفحة والكمية وسعر التوصيل (Extra Fields):**
    - يعتمد معظم تجار YouCan في الجزائر على نماذج الشراء السريعة أحادية الصفحة حيث تُخزن البيانات داخل `extra_fields` أو `custom_fields`.
    - يقوم محول `@akadli/provider-youcan` تلقائياً باستخراج ومعالجة العناوين من كلا المصدرين وتطبيع الولاية (`01`-`69`) والبلدية وفق تقسيم 2026 عبر `@akadli/dz-geo`.
+   - يستخرج تلقائياً الكمية `quantity` (مجموع `variants[].quantity` أو `items[].quantity` أو `line_items[].quantity` أو من `extra_fields`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`shipping.price` أو `shipping_cost` أو `shipping_total` أو من `extra_fields`، افتراضياً `0`).
+   - عند التعديل (`MODIFIED`)، يضيف الوسوم القياسية `akadli-modified` و `akadli-variant-{finalVariant}` و `akadli-qty-{finalQuantity}`.
 
 ---
 

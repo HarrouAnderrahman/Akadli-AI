@@ -12,8 +12,8 @@
 
 | Schema / Interface | Type | Description |
 | :--- | :--- | :--- |
-| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers |
-| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
+| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers (`quantity` default `1`, `shippingFeeDa` default `0`, `priceDa` total COD) |
+| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`, `finalVariant`, `finalQuantity` default `1`, `finalWilaya`, `finalCommune`) |
 | `OrderConstraintsSchema` | `OrderConstraints` | Anti-hallucination guardrails (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
 | `OrderDecisionStatusSchema` | `OrderDecisionStatus` | Enum: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
 | `WilayaCodeSchema` | `WilayaCode` | Official zero-padded 2-digit codes (`"01"` to `"69"`) |

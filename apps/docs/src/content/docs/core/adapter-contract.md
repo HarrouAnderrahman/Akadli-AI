@@ -45,6 +45,7 @@ export type StandardizedDzOrder = z.infer<typeof StandardizedDzOrderSchema>;
 ```
 
 ### Key Fields & Invariants
+- `quantity` & `shippingFeeDa`: Integer unit count (default `1`) and delivery fee in DZD (default `0`, `0` for free shipping), alongside `priceDa` (final total COD price to pay the courier).
 - `currentVariant`: Replaces legacy `currentSize`. Captures product attributes such as clothing size, shoe number, color, or bundle variant.
 - `currentWilaya`: Zero-padded two-digit string (`"01"` through `"69"`) representing official 2026 Algerian divisions.
 - `constraints`: Defines `allowedVariants`, `allowedWilayas`, and `allowedCommunes` passed to the voice AI as strict guardrails to prevent hallucinated changes.

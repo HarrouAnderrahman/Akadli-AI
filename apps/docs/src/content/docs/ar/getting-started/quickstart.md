@@ -100,6 +100,7 @@ app.post(
 في لوحة ElevenLabs، قم بإضافة أداة باسم `finalize_order_decision` بالمعاملات التالية:
 - `orderId` (string)
 - `status` ("CONFIRMED" | "REFUSED" | "MODIFIED")
+- `finalQuantity` (integer, اختياري، افتراضياً `order.quantity` أو `1`)
 - `finalVariant` (string, اختياري)
 - `finalWilaya` (string, اختياري)
 - `finalCommune` (string, اختياري)
@@ -137,6 +138,6 @@ app.post("/api/elevenlabs/finalize", express.json(), async (req, res) => {
 ## 5. التحقق من النتيجة في لوحة المتجر
 
 بعد تنفيذ القرار، ستشاهد في لوحة إدارة شوبيفاي:
-- **الوسوم (Tags):** `akadli-confirmed` أو (`akadli-modified` و `akadli-variant-42`) أو `akadli-refused`.
+- **الوسوم (Tags):** `akadli-confirmed` أو (`akadli-modified` و `akadli-variant-42` و `akadli-qty-2`) أو `akadli-refused`.
 - **الملاحظات (Notes):** ملاحظة تبدأ بـ `[Akadli-AI]` توضح تفاصيل المكالمة وسبب التعديل أو الرفض.
 - **تحديث العنوان والمنتج:** يتم تعديل البلدية والولاية والمقاس مباشرة إذا اختار المشتري التعديل (`MODIFIED`).

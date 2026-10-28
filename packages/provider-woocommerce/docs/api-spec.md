@@ -60,7 +60,9 @@ WooCommerce `order.created` or `order.updated` payloads for Algerian COD merchan
    - `storeName`: `payload.store_name || "WooCommerce Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.name || "Article"`)
    - `currentVariant`: Extracted by scanning `line_items[0]?.meta_data` for keys matching `/(?:pa_size|size|taille|pointure|variant|pa_variant)/i` or variant name/title, defaulting to `"Standard"`.
-   - `priceDa`: `Math.round(Number(payload.total || 0))`
+   - `quantity`: Sum of `payload.line_items[].quantity` (default `1`).
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `payload.shipping_total` $\rightarrow$ `payload.shipping_lines?.[0]?.total` $\rightarrow$ `meta_data` matching `_shipping_fee`, `shipping_fee`, `shipping`, `livraison`, `frais_de_livraison` (default `0`).
+   - `priceDa`: `Math.round(Number(payload.total || 0))` (total COD price including shipping).
 
 2. **Multi-Source Address & Phone Extraction (Standard + COD Plugin Meta):**
    - **Primary Source (Billing & Shipping objects):**
@@ -141,14 +143,15 @@ Base endpoint: `{siteUrl}/wp-json/wc/v3`
     },
     "meta_data": [
       { "key": "_akadli_status", "value": "akadli-modified" },
-      { "key": "_akadli_variant", "value": "XL" }
+      { "key": "_akadli_variant", "value": "akadli-variant-XL" },
+      { "key": "_akadli_qty", "value": "akadli-qty-2" }
     ]
   }
   ```
 - `POST /wp-json/wc/v3/orders/{orderId}/notes`:
   ```json
   {
-    "note": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Maghnia",
+    "note": "[Akadli-AI] Order MODIFIED (akadli-modified): Variant -> XL; Qty -> 2; Wilaya -> 13; Commune -> Maghnia.",
     "customer_note": false
   }
   ```

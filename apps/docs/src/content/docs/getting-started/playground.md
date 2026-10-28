@@ -10,6 +10,7 @@ description: Testing live WebRTC Darja phone calls over LAN Wi-Fi and real store
 - **Desktop Admin Console (`/admin`):** Load test order fixtures for all providers, dispatch simulated orders, inspect payloads, and monitor real-time conversation transcripts.
 - **Mobile Phone Simulator (`/phone`):** Open this URL on your smartphone over the same local Wi-Fi. It simulates an incoming phone call complete with ringtone, answer/reject buttons, and low-latency audio via LiveKit WebRTC.
 - **Provider Registry Integration:** Ingest live store webhooks or simulated payloads for Shopify, YouCan, WooCommerce, Google Sheets, and Tassyir ERP.
+- **Call Transcript (STT) & MP3 Audio Archiving (`/api/logs`):** When `SAVE_CALL_LOGS=true` (default), completed calls are automatically archived into `CALL_LOGS_DIR` (`./logs/calls`) as `.json` STT transcripts and `.mp3` audio recordings via `@akadli/core`, with inline `<audio controls>` playback and JSON download in `/admin`.
 
 ---
 

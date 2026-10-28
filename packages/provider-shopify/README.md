@@ -18,8 +18,10 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for Shopify stor
    - *Without this, Shopify redacts customer details from webhooks and blocks shipping address updates.*
 3. **Configure Webhook:**
    - In Shopify Admin -> **Settings** -> **Notifications** -> **Webhooks**, create an `Order creation` JSON webhook pointing to `/api/webhooks/shopify`.
-4. **Algerian Address Fallback (`province: null`):**
+4. **Algerian Address, Quantity & Shipping Fee Extraction (`province: null`):**
    - Standard Shopify checkout hides the state/province dropdown for Algeria. Customers input Wilayas in `city`, `address1`, or 5-digit `zip` (`13000` -> Wilaya `13`). COD apps store details in `note_attributes`. `@akadli/provider-shopify` extracts and normalizes all candidates via `@akadli/dz-geo`.
+   - Automatically extracts `quantity` (sum of `line_items[].quantity` or `note_attributes` `quantity`/`qty`, default `1`) and `shippingFeeDa` (`total_shipping_price_set.shop_money.amount` -> sum of `shipping_lines[].price` -> `note_attributes` `shipping`/`livraison`, default `0`).
+   - On `MODIFIED`, appends canonical tags `akadli-modified`, `akadli-variant-{finalVariant}`, and `akadli-qty-{finalQuantity}`.
 
 ---
 

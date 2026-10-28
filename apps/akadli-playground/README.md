@@ -32,6 +32,7 @@ pnpm --filter @akadli/playground dev
 | :--- | :--- | :--- | :--- |
 | **Server** | `PORT` / `SERVER_PORT` | `3000` / `3001` | Frontend Vite and backend Express ports |
 | **ElevenLabs** | `ELEVENLABS_API_KEY` / `_AGENT_ID` | — | ElevenAgents voice synthesis credentials |
+| **Call Logs** | `SAVE_CALL_LOGS` / `CALL_LOGS_DIR` | `"true"` / `"./logs/calls"` | Archive post-call STT `.json` transcripts & `.mp3` recordings |
 | **Shopify** | `SHOPIFY_SHOP_DOMAIN` / `_ACCESS_TOKEN` | — | Store domain & permanent access token |
 | **Shopify** | `SHOPIFY_CLIENT_ID` / `_CLIENT_SECRET` | — | OAuth client credentials (auto token exchange) |
 | **Shopify** | `SHOPIFY_WEBHOOK_SECRET` / `_API_VERSION` | `"2025-01"` | HMAC verification secret & API version |
@@ -58,6 +59,15 @@ All store adapters register live ingestion and fixture simulation routes in `pro
 | **WooCommerce** | `POST /api/webhooks/woocommerce` | `POST /api/webhooks/woocommerce/simulate` |
 | **Google Sheets** | `POST /api/webhooks/gsheets` | `POST /api/webhooks/gsheets/simulate` |
 | **Tassyir ERP** | `POST /api/webhooks/tassyir` | `POST /api/webhooks/tassyir/simulate` |
+
+---
+
+## Call Transcript (STT) & Audio Archiving (`/api/logs`)
+
+When `SAVE_CALL_LOGS=true` (default), `@akadli/playground` automatically archives completed ElevenAgents calls into `CALL_LOGS_DIR` (`./logs/calls`) using `@akadli/core`:
+- `GET /api/logs` — Lists recent archived calls with order metadata, decision status, `transcriptFile` (`.json`), and `audioFile` (`.mp3`).
+- `GET /api/logs/:filename` — Serves the local `.json` STT conversation transcript or `.mp3` call recording (fetching on-demand from ElevenLabs if not yet cached on disk).
+- **Dashboard Playback (`/admin`):** Listen to full call recordings via the inline `<audio controls>` player or inspect/download the JSON transcript directly from the Finalized Decision card and Recent Call Logs panel.
 
 ---
 

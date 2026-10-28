@@ -57,7 +57,7 @@ pnpm add @akadli/provider-shopify
 - الرمز البريدي المكون من 5 أرقام (`13000` تشير لولاية تلمسان `13`).
 - حقول الملاحظات `note_attributes` في تطبيقات الشراء بصفحة واحدة (EasySell أو Releasit).
 
-تقوم حزمة `@akadli/provider-shopify` بفحص جميع هذه الحقول وتمريرها على معالج `@akadli/dz-geo` لتحديد الولاية الصحيحة بدقة بين 01 و 69.
+تقوم حزمة `@akadli/provider-shopify` بفحص جميع هذه الحقول وتمريرها على معالج `@akadli/dz-geo` لتحديد الولاية الصحيحة بدقة بين 01 و 69، كما تستخرج الكمية `quantity` (مجموع `line_items[].quantity` أو `note_attributes`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`total_shipping_price_set.shop_money.amount` أو مجموع `shipping_lines[].price` أو `note_attributes`، افتراضياً `0`).
 
 ---
 
@@ -93,12 +93,13 @@ const isValid = await provider.verifyWebhook(
 // 2. تحليل الطلبية وفق التقسيم الجزائري 2026
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تحديث المتجر بقرار المكالمة
+// 3. تحديث المتجر بقرار المكالمة (الوسوم: akadli-confirmed / akadli-modified / akadli-variant-42 / akadli-qty-2)
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "تم التأكيد صوتياً بالدارجة"
   },
   {

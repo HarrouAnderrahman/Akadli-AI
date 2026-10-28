@@ -79,7 +79,9 @@ Shopify `orders/create` payloads for Algerian cash-on-delivery merchants arrive 
    - `storeName`: `payload.shop_name || payload.store_name || "Shopify Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.title || "Article"`)
    - `currentVariant`: First line item variant title (`payload.line_items?.[0]?.variant_title || "Standard"`)
-   - `priceDa`: `Math.round(Number(payload.total_price || 0))`
+   - `quantity`: Sum of `payload.line_items[].quantity` (or `note_attributes` matching `quantity`, `qty`, `quantite`, `qte`, `الكمية`, default `1`)
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `payload.total_shipping_price_set?.shop_money?.amount` $\rightarrow$ sum of `payload.shipping_lines[].price` $\rightarrow$ `note_attributes` matching `shipping`, `shipping_fee`, `livraison`, `frais_de_livraison`, `التوصيل` (default `0`)
+   - `priceDa`: `Math.round(Number(payload.total_price || 0))` (total COD price including shipping)
 
 2. **Dual-Source Address & Phone Fallback:**
    Scan `shipping_address`, `billing_address`, and `note_attributes` (case-insensitive substring match):
@@ -135,8 +137,8 @@ export interface ShopifyProviderCredentials {
 {
   "order": {
     "id": 1029384756,
-    "tags": "akadli-modified, akadli-variant-43",
-    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Commune -> Maghnia; Note -> Près de la mosquée.",
+    "tags": "akadli-modified, akadli-variant-43, akadli-qty-2",
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Qty -> 2; Commune -> Maghnia; Note -> Près de la mosquée.",
     "shipping_address": {
       "province": "13",
       "city": "Maghnia",

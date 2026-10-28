@@ -43,19 +43,21 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
     const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
     const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-    // 2. Build ElevenAgents dynamic variables (currentVariant, allowedVariants, phone)
+    // 2. Build ElevenAgents dynamic variables (quantity, shipping_fee_da, subtotal_da, price_da, currentVariant, etc.)
     const promptVars = buildElevenAgentsDynamicVariables(order);
 
     // 3. Receive tool call from ElevenLabs after call and apply store mutation
     const result = await handleFinalizeOrderToolCall(
       {
         orderId: order.orderId,
-        status: "CONFIRMED", // or "MODIFIED" (finalVariant, finalCommune) | "REFUSED"
+        status: "CONFIRMED", // or "MODIFIED" (finalVariant, finalQuantity, finalCommune) | "REFUSED"
+        finalQuantity: order.quantity,
         reasonOrNotes: "Confirmed in Algerian Darja via ElevenAgents"
       },
       provider,
       { shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!, accessToken: process.env.SHOPIFY_ACCESS_TOKEN! },
-      order.constraints
+      order.constraints,
+      order
     );
     ```
   </TabItem>
@@ -78,7 +80,7 @@ import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
     1. Use @akadli/adapter-contract for StandardizedDzOrder and FinalizedOrderDecision.
     2. Normalize Algerian addresses to the 2026 69-Wilaya division with @akadli/dz-geo.
     3. Use @akadli/core to generate ElevenAgents prompt variables and execute handleFinalizeOrderToolCall.
-    4. Store tags MUST follow: akadli-confirmed, akadli-modified, akadli-refused, and akadli-variant-{variant}.
+    4. Store tags MUST follow: akadli-confirmed, akadli-modified, akadli-refused, akadli-variant-{variant}, and akadli-qty-{qty}.
     5. Order notes MUST be prefixed with [Akadli-AI].
     6. Never invent ad-hoc status strings; use CONFIRMED, REFUSED, or MODIFIED.
     ```

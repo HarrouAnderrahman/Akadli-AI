@@ -75,13 +75,14 @@ const provider = new GSheetsProvider();
 // 1. التحقق من توقيع Webhook (ترويسة x-akadli-signature أو x-akadli-secret)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.GSHEETS_WEBHOOK_SECRET!);
 
-// 2. تحليل سطر الطلبية (يدعم أعمدة 'الاسم'، 'الهاتف'، 'الولاية'، 'البلدية')
+// 2. تحليل سطر الطلبية (يدعم أعمدة 'الاسم'، 'الهاتف'، 'الولاية'، 'البلدية'، 'الكمية'، 'التوصيل'، 'السعر')
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تحديث سطر الطلبية في Google Sheets (الطريقة ب أو أ)
+// 3. تحديث سطر الطلبية في Google Sheets (الطريقة ب ترسل أيضاً finalQuantity و finalVariant و finalWilaya)
 const result = await provider.applyOrderDecision(order.orderId, {
   orderId: order.orderId,
   status: "CONFIRMED",
+  finalQuantity: order.quantity,
   reasonOrNotes: "تم تأكيد الطلب مع الزبون هاتفياً"
 }, {
   appsScriptWebhookUrl: process.env.GSHEETS_APPS_SCRIPT_URL!

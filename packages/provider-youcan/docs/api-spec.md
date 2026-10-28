@@ -83,7 +83,9 @@ YouCan webhook deliveries can arrive in several envelope formats:
 2. **Order Basics & Line Item Extraction:**
    - `orderId`: `String(data.id)`
    - `storeName`: `data.store_name || data.shop_name || "YouCan Store"`
-   - `priceDa`: `Math.round(Number(data.total || 0))`
+   - `quantity`: Sum of `variants[].quantity` / `items[].quantity` / `line_items[].quantity` or `extra_fields` matching `quantity`, `qty`, `quantite`, `qte`, `الكمية` (default `1`)
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `shipping.price` $\rightarrow$ `shipping_cost` $\rightarrow$ `shipping_total` $\rightarrow$ `extra_fields` matching `shipping`, `livraison`, `frais_livraison`, `التوصيل` (default `0`)
+   - `priceDa`: `Math.round(Number(data.total || 0))` (total COD price including shipping)
    - **Product Name (`itemName`) Resolution (in priority order):**
      1. `variants[0]?.variant?.product?.name`
      2. `variants[0]?.variant?.product?.meta?.title`
@@ -163,8 +165,8 @@ All requests include headers:
       "first_line": "Near Pharmacie Centrale"
     }
   },
-  "tags": ["akadli-modified", "akadli-variant-XL"],
-  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
+  "tags": ["akadli-modified", "akadli-variant-XL", "akadli-qty-2"],
+  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Qty -> 2; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
 }
 ```
 - **Returns:** `{ success: true, externalStatus: "UPDATED_AND_CONFIRMED", rawResponse: ... }`

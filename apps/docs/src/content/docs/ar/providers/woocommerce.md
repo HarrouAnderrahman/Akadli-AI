@@ -40,7 +40,7 @@ pnpm add @akadli/provider-woocommerce
 يمثل نظام ووكومرس الافتراضي الولايات الجزائرية بصيغة `DZ-XX` (مثل `DZ-16` للجزائر، و `DZ-60` لبريكة، و `DZ-68` لبوسعادة).
 أما المتاجر التي تستخدم إضافات مخصصة (مثل إضافات COD Form الجزائرية) فتحفظ الولاية والبلدية في بيانات `meta_data` (مثل `_billing_wilaya` و `_shipping_commune`).
 
-تفحص حزمة `@akadli/provider-woocommerce` كلا المصدرين وتطابق الولاية والبلدية تلقائياً مع التقسيم الإداري 2026 عبر `@akadli/dz-geo`.
+تفحص حزمة `@akadli/provider-woocommerce` كلا المصدرين وتطابق الولاية والبلدية تلقائياً مع التقسيم الإداري 2026 عبر `@akadli/dz-geo`، كما تستخرج الكمية `quantity` (مجموع `line_items[].quantity`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`shipping_total` أو `shipping_lines[0].total` أو `meta_data`، افتراضياً `0`)، وتسجل `_akadli_qty: "akadli-qty-{finalQuantity}"` في `meta_data` عند التعديل (`MODIFIED`).
 
 ---
 

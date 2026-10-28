@@ -95,7 +95,9 @@ Column keys are evaluated case-insensitively, supporting trimmed Arabic, French,
 | **Address Note**| `address`, `adresse`, `note`, `العنوان`, `address_note` | `""` |
 | **Product** | `product`, `item_name`, `produit`, `المنتج`, `اسم_المنتج`, `article` | `"Article"` |
 | **Size / Variant** | `size`, `taille`, `variant`, `المقاس`, `الحجم` | `"Standard"` |
-| **Price (DZD)** | `price`, `total`, `prix`, `السعر`, `montant` | `0` |
+| **Quantity** | `quantity`, `qty`, `quantite`, `qte`, `الكمية`, `عدد` | `1` |
+| **Shipping (DZD)** | `shipping`, `shipping_fee`, `livraison`, `frais_livraison`, `التوصيل`, `سعر التوصيل` | `0` |
+| **Price (DZD)** | `price`, `total`, `prix`, `السعر`, `montant` | `0` (total COD price) |
 
 ### Normalization Pipeline
 1. Ingest flat or nested row payload (`payload.data` / `payload.row` / top-level keys).
@@ -180,10 +182,11 @@ export interface GSheetsAppsScriptCredentials {
   "status": "CONFIRMED",
   "externalStatus": "CONFIRMED",
   "finalVariant": "43",
+  "finalQuantity": 2,
   "finalWilaya": "16",
   "finalCommune": "Bab Ezzouar",
   "finalAddressNote": "Cité 8 Mai 1945",
-  "reasonOrNotes": "Confirmed with size change",
+  "reasonOrNotes": "[Akadli-AI] Confirmed with size change | Variant: 43 (akadli-variant-43) | Qty: 2 (akadli-qty-2) | Wilaya: 16 | Commune: Bab Ezzouar | Address: Cité 8 Mai 1945",
   "updatedAt": "2026-10-19T14:00:00.000Z"
 }
 ```

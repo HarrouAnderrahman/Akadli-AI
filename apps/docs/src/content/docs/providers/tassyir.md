@@ -132,15 +132,16 @@ if (!isValid) {
   throw new Error("Invalid Tassyir Ed25519 signature");
 }
 
-// 2. Parse 2026-10 order envelope and resolve 69-Wilaya division
+// 2. Parse 2026-10 order envelope (items[].quantity, shippingPrice & total) and resolve 69-Wilaya division
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. Mutate Tassyir order with idempotent confirmation
+// 3. Mutate Tassyir order with idempotent confirmation (notes include akadli-confirmed / akadli-modified / akadli-qty-{qty})
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "Confirmed in Darja via voice call"
   },
   {

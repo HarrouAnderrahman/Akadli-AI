@@ -74,9 +74,9 @@ Output:
 */
 ```
 
-### 3. `handleFinalizeOrderToolCall(payload, provider, creds, constraints)`
+### 3. `handleFinalizeOrderToolCall(payload, provider, creds, constraints?, order?)`
 
-Validates the tool call emitted by ElevenAgents (`finalize_order_decision`) against the order constraints, rejects invalid variants or non-existent communes, and dispatches the mutation to the target store adapter:
+Validates the tool call emitted by ElevenAgents (`finalize_order_decision`) against the order constraints, normalizes `finalQuantity` (from `finalQuantity ?? final_quantity ?? quantity ?? order.quantity ?? 1`), rejects invalid variants or non-existent communes, and dispatches the mutation to the target store adapter:
 
 ```typescript
 import { handleFinalizeOrderToolCall } from "@akadli/core";
@@ -89,6 +89,7 @@ const result = await handleFinalizeOrderToolCall(
     orderId: "1001",
     status: "MODIFIED",
     finalVariant: "44", // Customer requested a larger shoe size
+    finalQuantity: 1,
     finalCommune: "Barika",
     reasonOrNotes: "Customer requested size 44 instead of 43"
   },
@@ -97,11 +98,35 @@ const result = await handleFinalizeOrderToolCall(
     shopDomain: "dz-store.myshopify.com",
     accessToken: "shpat_xxxxxxxx"
   },
-  order.constraints // Validates that "44" is in allowedVariants
+  order.constraints, // Validates that "44" is in allowedVariants
+  order
 );
 
 console.log(result.success); // true
 console.log(result.externalStatus); // "MODIFIED"
+```
+
+### 4. `fetchElevenLabsConversationTranscript` & `fetchElevenLabsConversationAudio`
+
+Zero-dependency helpers using native `fetch` to retrieve the full STT conversation transcript and raw MP3 audio bytes from ElevenLabs after a voice call finishes:
+
+```typescript
+import {
+  fetchElevenLabsConversationTranscript,
+  fetchElevenLabsConversationAudio
+} from "@akadli/core";
+
+// 1. Retrieve structured STT transcript, call status, and duration
+const transcript = await fetchElevenLabsConversationTranscript(
+  conversationId,
+  process.env.ELEVENLABS_API_KEY!
+);
+
+// 2. Download raw MP3 recording bytes (Uint8Array)
+const mp3Bytes = await fetchElevenLabsConversationAudio(
+  conversationId,
+  process.env.ELEVENLABS_API_KEY!
+);
 ```
 
 ---

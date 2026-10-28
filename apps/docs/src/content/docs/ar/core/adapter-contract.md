@@ -31,7 +31,9 @@ export const StandardizedDzOrderSchema = z.object({
   customerName: z.string().min(1),
   customerPhone: DzPhoneSchema, // صيغة محلية 05/06/07 أو دولية +213
   itemName: z.string().min(1),
-  priceDa: z.number().nonnegative(),
+  quantity: z.number().int().min(1).default(1),
+  shippingFeeDa: z.number().int().nonnegative().default(0),
+  priceDa: z.number().int().nonnegative(),
   currentVariant: z.string().min(1), // مثل المقاس "42" أو "XL" أو اللون "أسود"
   currentWilaya: WilayaCodeSchema, // كود من خانتين "01" إلى "69"
   currentCommune: z.string().min(1),
@@ -43,6 +45,7 @@ export type StandardizedDzOrder = z.infer<typeof StandardizedDzOrderSchema>;
 ```
 
 ### الحقول الأساسية وقواعد الثبات
+- `quantity` و `shippingFeeDa`: عدد الوحدات المطلوبة (افتراضياً `1`) وسعر التوصيل بالدينار الجزائري (افتراضياً `0`)، إلى جانب `priceDa` الذي يمثل المبلغ الإجمالي للدفع عند الاستلام.
 - `currentVariant`: الحقل المعياري المعتمد لتمثيل متغير المنتج (المقاس، الحجم، اللون).
 - `currentWilaya`: رمز الولاية المكون من رقمين (`01` إلى `69`) المطابق للتقسيم الإداري الرسمي 2026.
 - `constraints`: حواجز الأمان (`allowedVariants` و `allowedWilayas` و `allowedCommunes`) التي تمنع وكيل الذكاء الاصطناعي من اقتراح مقاسات غير متوفرة في المخزون أو بلديات غير مدعومة.
@@ -64,6 +67,7 @@ export const FinalizedOrderDecisionSchema = z
   .object({
     orderId: z.string().min(1),
     status: OrderDecisionStatusSchema,
+    finalQuantity: z.number().int().min(1).default(1),
     finalVariant: z.string().min(1).optional(),
     finalWilaya: WilayaCodeSchema.optional(),
     finalCommune: z.string().min(1).optional(),

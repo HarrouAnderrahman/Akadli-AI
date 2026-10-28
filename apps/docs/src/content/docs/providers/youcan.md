@@ -35,7 +35,7 @@ Algerian YouCan store owners commonly use single-page checkout templates with cu
 - `custom_fields`
 - Standard `shipping_address`
 
-`@akadli/provider-youcan` inspects all three data sources, normalizes the Wilaya to official 2026 codes (`01`–`69`), and resolves the delivery commune via `@akadli/dz-geo`.
+`@akadli/provider-youcan` inspects all three data sources, normalizes the Wilaya to official 2026 codes (`01`–`69`), and resolves the delivery commune via `@akadli/dz-geo`. It also extracts `quantity` (sum of `variants[].quantity` / `items[].quantity` / `line_items[].quantity` or `extra_fields` `quantity`/`qty`, default `1`) and `shippingFeeDa` (`shipping.price` / `shipping_cost` / `shipping_total` or `extra_fields` `shipping`/`livraison`, default `0`), and appends `akadli-qty-{finalQuantity}` on `MODIFIED`.
 
 ---
 

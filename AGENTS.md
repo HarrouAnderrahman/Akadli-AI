@@ -9,7 +9,7 @@ Canonical architectural reference for stateless AI coding sessions across the Ak
 ## 2. Monorepo Architecture & Package Boundaries
 - `packages/adapter-contract`: Pure Zod schemas & TypeScript interfaces (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`). Zero runtime logic.
 - `packages/dz-geo`: Official 2026 Algerian administrative divisions (**69 Wilayas, 1,708 Communes**) + `+213` phone normalization.
-- `packages/core`: Stateless voice orchestration (`createStandardizedDzOrder`, `buildElevenAgentsDynamicVariables`, `handleFinalizeOrderToolCall`). Note: ElevenLabs system prompts and tool definitions live in the ElevenLabs dashboard, NOT in local code.
+- `packages/core`: Stateless voice orchestration (`createStandardizedDzOrder`, `buildElevenAgentsDynamicVariables`, `handleFinalizeOrderToolCall`, `fetchElevenLabsConversationTranscript`, `fetchElevenLabsConversationAudio`). Note: ElevenLabs system prompts and tool definitions live in the ElevenLabs dashboard, NOT in local code.
 - `packages/provider-<name>`: Stateless e-commerce adapters implementing `IEcommerceProvider`. Each provider MUST have:
   - `docs/api-spec.md` & `fixtures/*.json`
   - `src/schemas.ts`, `src/<name>-client.ts`, `src/<name>-provider.ts`, `src/index.ts`

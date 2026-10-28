@@ -14,8 +14,8 @@
 
 | المخطط / الواجهة | النوع | الوصف |
 | :--- | :--- | :--- |
-| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | نموذج الطلبية الموحد بعد استخراجه وتطبيعه من أي متجر |
-| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | هيكل قرار ElevenAgents النهائي (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
+| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | نموذج الطلبية الموحد بعد استخراجه وتطبيعه من أي متجر (`quantity` افتراضياً `1`، `shippingFeeDa` افتراضياً `0`، `priceDa` الإجمالي) |
+| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | هيكل قرار ElevenAgents النهائي (`CONFIRMED`, `REFUSED`, `MODIFIED`, `finalVariant`, `finalQuantity` افتراضياً `1`, `finalWilaya`, `finalCommune`) |
 | `OrderConstraintsSchema` | `OrderConstraints` | قيود منع الهلوسة الصوتية (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
 | `OrderDecisionStatusSchema` | `OrderDecisionStatus` | قيم الحالات المسموحة: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
 | `WilayaCodeSchema` | `WilayaCode` | رموز الولايات الجزائرية الرسمية من خانتين (`"01"` إلى `"69"`) |

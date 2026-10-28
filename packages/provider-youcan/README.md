@@ -15,9 +15,11 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for YouCan store
    - In **Settings** -> **Webhooks**, create a new webhook for the event `order.created`.
    - Set the URL to your endpoint (e.g. `https://your-domain.com/api/webhooks/youcan`).
    - Copy the generated Webhook Secret (`x-youcan-signature` hex digest verification).
-3. **Algerian 1-Page COD Parsing:**
+3. **Algerian 1-Page COD, Quantity & Shipping Parsing:**
    - In Algeria, YouCan merchants often use single-page checkout forms where customer inputs are stored inside `extra_fields` or `custom_fields`.
    - `@akadli/provider-youcan` automatically extracts address information from both standard `shipping.address` and `extra_fields` / `custom_fields`, normalizing the Wilaya (`01`-`69`) and commune via `@akadli/dz-geo`.
+   - Extracts `quantity` (sum of `variants[].quantity` / `items[].quantity` / `line_items[].quantity` or `extra_fields` `quantity`/`qty`/`qte`, default `1`) and `shippingFeeDa` (`shipping.price` / `shipping_cost` / `shipping_total` or `extra_fields` `shipping`/`livraison`, default `0`).
+   - On `MODIFIED`, appends canonical tags `akadli-modified`, `akadli-variant-{finalVariant}`, and `akadli-qty-{finalQuantity}`.
 
 ---
 

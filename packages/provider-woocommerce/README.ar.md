@@ -21,10 +21,11 @@
    - الحالة: **Active** • الموضوع: **Order created** • رابط التسليم: `https://your-domain.com/api/webhooks/woocommerce`.
    - المفتاح السري: اكتب المفتاح السري المخصص للتحقق من ترويسة `x-wc-webhook-signature` (Base64).
    - إصدار الواجهة: **WP REST API Integration v3**.
-3. **رموز الولايات الجزائرية `DZ-XX` وإضافات COD:**
+3. **رموز الولايات الجزائرية `DZ-XX` واستخراج الكمية والتوصيل وإضافات COD:**
    - يعرّف نظام WooCommerce الولايات الجزائرية بصيغة `DZ-XX` (مثل `DZ-16` للجزائر أو `DZ-68` لبوسعادة).
    - المتاجر التي تستخدم إضافات COD جزائرية تخزن تفاصيل الولاية والبلدية داخل `meta_data`.
-   - يدعم محول `@akadli/provider-woocommerce` كلا النظامين ويطابقهما بسلاسة مع تقسيم 2026 عبر `@akadli/dz-geo`.
+   - يدعم محول `@akadli/provider-woocommerce` كلا النظامين ويطابقهما بسلاسة مع تقسيم 2026 عبر `@akadli/dz-geo`، كما يستخرج الكمية `quantity` (مجموع `line_items[].quantity`، افتراضياً `1`) وسعر التوصيل `shippingFeeDa` (`shipping_total` أو `shipping_lines[0].total` أو `meta_data`، افتراضياً `0`).
+   - عند التعديل (`MODIFIED`)، يسجل `_akadli_status` (`akadli-modified`) و `_akadli_variant` (`akadli-variant-{finalVariant}`) و `_akadli_qty` (`akadli-qty-{finalQuantity}`) في `meta_data` ويضيف ملاحظة `[Akadli-AI]`.
 
 ---
 

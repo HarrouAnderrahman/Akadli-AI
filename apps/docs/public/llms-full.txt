@@ -19,7 +19,7 @@ Canonical architectural reference for stateless AI coding sessions across the Ak
 ## 2. Monorepo Architecture & Package Boundaries
 - `packages/adapter-contract`: Pure Zod schemas & TypeScript interfaces (`StandardizedDzOrder`, `FinalizedOrderDecision`, `IEcommerceProvider`). Zero runtime logic.
 - `packages/dz-geo`: Official 2026 Algerian administrative divisions (**69 Wilayas, 1,708 Communes**) + `+213` phone normalization.
-- `packages/core`: Stateless voice orchestration (`createStandardizedDzOrder`, `buildElevenAgentsDynamicVariables`, `handleFinalizeOrderToolCall`). Note: ElevenLabs system prompts and tool definitions live in the ElevenLabs dashboard, NOT in local code.
+- `packages/core`: Stateless voice orchestration (`createStandardizedDzOrder`, `buildElevenAgentsDynamicVariables`, `handleFinalizeOrderToolCall`, `fetchElevenLabsConversationTranscript`, `fetchElevenLabsConversationAudio`). Note: ElevenLabs system prompts and tool definitions live in the ElevenLabs dashboard, NOT in local code.
 - `packages/provider-<name>`: Stateless e-commerce adapters implementing `IEcommerceProvider`. Each provider MUST have:
   - `docs/api-spec.md` & `fixtures/*.json`
   - `src/schemas.ts`, `src/<name>-client.ts`, `src/<name>-provider.ts`, `src/index.ts`
@@ -76,7 +76,7 @@ Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilay
 | :--- | :--- | :--- |
 | [`@akadli/adapter-contract`](./packages/adapter-contract) | Contracts | Pure Zod schemas & `IEcommerceProvider` contract |
 | [`@akadli/dz-geo`](./packages/dz-geo) | Geo / Phone | 2026 Algerian 69 Wilayas, 1,708 Communes & `+213` phone normalizer |
-| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder & `handleFinalizeOrderToolCall` orchestrator |
+| [`@akadli/core`](./packages/core) | Core Engine | ElevenAgents dynamic variable builder, `handleFinalizeOrderToolCall` orchestrator & call transcript/MP3 audio helpers |
 | [`@akadli/provider-shopify`](./packages/provider-shopify) | Adapter | Shopify HMAC verification, Algeria missing-province fallback, OAuth `client_credentials` & REST mutations |
 | [`@akadli/provider-youcan`](./packages/provider-youcan) | Adapter | YouCan `.shop` webhook verification, 1-page COD `extra_fields` parser & order close/update API |
 | [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | Adapter | WooCommerce REST v3 Basic Auth, `DZ-XX` state & COD plugin `meta_data` adapter |
@@ -93,22 +93,23 @@ import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "
 
 const provider = new ShopifyProvider();
 
-// 1. Verify webhook signature & parse standardized Algerian COD order
+// 1. Verify webhook signature & parse standardized Algerian COD order (with quantity & shippingFeeDa)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 2. Inject dynamic prompt variables into ElevenAgents for Darja voice confirmation call
+// 2. Inject dynamic prompt variables (price_da, shipping_fee_da, subtotal_da, quantity, etc.) into ElevenAgents
 const promptVars = buildElevenAgentsDynamicVariables(order);
 
 // 3. Handle ElevenAgents finalize_order_decision tool call & mutate live store
 const result = await handleFinalizeOrderToolCall(
-  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED" }
+  agentToolPayload, // e.g. { orderId: order.orderId, status: "CONFIRMED", finalQuantity: order.quantity }
   provider,
   {
     shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
   },
-  order.constraints
+  order.constraints,
+  order
 );
 ```
 
@@ -135,7 +136,7 @@ pnpm --filter @akadli/playground dev
 
 Review [`./AGENTS.md`](./AGENTS.md) and [`.agents/skills/`](./.agents/skills/) before modifying code:
 - Maintain `@akadli/*` package boundaries and zero-bloat runtime dependencies.
-- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`).
+- Preserve 2026 Wilaya mappings (`01`-`69`) and canonical tags (`akadli-confirmed`, `akadli-modified`, `akadli-refused`, `akadli-variant-{variant}`, `akadli-qty-{qty}`).
 - Enforce the pre-commit verification gate: `pnpm turbo run build typecheck lint test`.
 
 ---
@@ -185,7 +186,7 @@ Store Webhook -> @akadli/provider-* (Verify & Parse) -> @akadli/dz-geo (69 Wilay
 | :--- | :--- | :--- |
 | [`@akadli/adapter-contract`](./packages/adapter-contract) | العقود البرمجية | مخططات Zod نقية وواجهة `IEcommerceProvider` بدون تبعيات تشغيلية خارجية |
 | [`@akadli/dz-geo`](./packages/dz-geo) | الجغرافيا / الهاتف | التقسيم الإداري الجزائري 2026 (69 ولاية و 1708 بلدية) ومعالج أرقام الهاتف `+213` |
-| [`@akadli/core`](./packages/core) | المحرك الأساسي | منشئ المتغيرات الديناميكية لـ ElevenAgents ومنسق استدعاءات `handleFinalizeOrderToolCall` |
+| [`@akadli/core`](./packages/core) | المحرك الأساسي | منشئ المتغيرات الديناميكية لـ ElevenAgents ومنسق `handleFinalizeOrderToolCall` واسترجاع نصوص وتسجيلات المكالمات (STT/MP3) |
 | [`@akadli/provider-shopify`](./packages/provider-shopify) | محول المتجر | التحقق من توقيع HMAC لـ Shopify، معالجة غياب حقل الولاية، وتبادل OAuth `client_credentials` وتحديثات REST |
 | [`@akadli/provider-youcan`](./packages/provider-youcan) | محول المتجر | التحقق من Webhook لـ YouCan `.shop`، واستخراج حقول COD أحادية الصفحة وتحديث وحفظ الطلبات |
 | [`@akadli/provider-woocommerce`](./packages/provider-woocommerce) | محول المتجر | واجهة WooCommerce REST v3 وتطبيع رموز الولايات `DZ-XX` وحقول `meta_data` لإضافات COD |
@@ -206,22 +207,23 @@ import { handleFinalizeOrderToolCall, buildElevenAgentsDynamicVariables } from "
 
 const provider = new ShopifyProvider();
 
-// 1. التحقق من توقيع Webhook وتحليل الطلبية وفق النموذج الجزائري القياسي
+// 1. التحقق من توقيع Webhook وتحليل الطلبية وفق النموذج الجزائري القياسي (بما في ذلك quantity و shippingFeeDa)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.SHOPIFY_WEBHOOK_SECRET!);
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 2. حقن المتغيرات الديناميكية في ElevenAgents لبدء المكالمة الصوتية بالدارجة
+// 2. حقن المتغيرات الديناميكية (price_da, shipping_fee_da, subtotal_da, quantity, ...) في ElevenAgents
 const promptVars = buildElevenAgentsDynamicVariables(order);
 
 // 3. معالجة قرار أداة finalize_order_decision وتحديث المتجر مباشرة
 const result = await handleFinalizeOrderToolCall(
-  agentToolPayload, // مثلاً: { orderId: order.orderId, status: "CONFIRMED" }
+  agentToolPayload, // مثلاً: { orderId: order.orderId, status: "CONFIRMED", finalQuantity: order.quantity }
   provider,
   {
     shopDomain: process.env.SHOPIFY_SHOP_DOMAIN!,
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN!,
   },
-  order.constraints
+  order.constraints,
+  order
 );
 ```
 
@@ -260,7 +262,7 @@ pnpm --filter @akadli/playground dev
 
 يُرجى مراجعة [`./AGENTS.md`](./AGENTS.md) ومجلد [`.agents/skills/`](./.agents/skills/) قبل إجراء أي تعديل برمجي:
 - الحفاظ على حدود حزم `@akadli/*` والاعتماد حصرياً على دوال Node.js الأصلية بدون مكاتب زائدة.
-- الالتزام بتقسيم 2026 الإداري (`01`-`69`) والوسوم المعتمدة (`akadli-confirmed`، `akadli-modified`، `akadli-refused`).
+- الالتزام بتقسيم 2026 الإداري (`01`-`69`) والوسوم المعتمدة (`akadli-confirmed`، `akadli-modified`، `akadli-refused`، `akadli-variant-{variant}`، `akadli-qty-{qty}`).
 - تنفيذ بوابة التحقق الإلزامية قبل التثبيت: `pnpm turbo run build typecheck lint test`.
 
 ---
@@ -292,8 +294,8 @@ pnpm --filter @akadli/playground dev
 
 | Schema / Interface | Type | Description |
 | :--- | :--- | :--- |
-| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers |
-| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`) |
+| `StandardizedDzOrderSchema` | `StandardizedDzOrder` | Universal order payload normalized across all store providers (`quantity` default `1`, `shippingFeeDa` default `0`, `priceDa` total COD) |
+| `FinalizedOrderDecisionSchema` | `FinalizedOrderDecision` | ElevenAgents `finalize_order_decision` payload (`CONFIRMED`, `REFUSED`, `MODIFIED`, `finalVariant`, `finalQuantity` default `1`, `finalWilaya`, `finalCommune`) |
 | `OrderConstraintsSchema` | `OrderConstraints` | Anti-hallucination guardrails (`allowedVariants`, `allowedWilayas`, `allowedCommunes`) |
 | `OrderDecisionStatusSchema` | `OrderDecisionStatus` | Enum: `"CONFIRMED" \| "REFUSED" \| "MODIFIED"` |
 | `WilayaCodeSchema` | `WilayaCode` | Official zero-padded 2-digit codes (`"01"` to `"69"`) |
@@ -438,9 +440,11 @@ pnpm add @akadli/dz-geo
 
 | Function | Signature | Description |
 | :--- | :--- | :--- |
-| `createStandardizedDzOrder(params)` | `StandardizedDzOrder` | Normalizes phone, Wilaya, and commune via `@akadli/dz-geo` and sets validation constraints |
-| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | Generates prompt variables (`customer_phone_e164`, `price_da`, `allowed_variants`, `allowed_wilayas`, `allowed_communes`) |
-| `handleFinalizeOrderToolCall(payload, provider, creds, constraints)` | `Promise<FinalizeOrderToolResult>` | Validates `finalize_order_decision` tool calls, checks constraints, and calls `provider.applyOrderDecision` |
+| `createStandardizedDzOrder(params)` | `StandardizedDzOrder` | Normalizes phone, Wilaya, commune, `quantity` (default `1`), `shippingFeeDa` (default `0`), and validation constraints |
+| `buildElevenAgentsDynamicVariables(order)` | `ElevenAgentsDynamicVariables` | Generates prompt variables (`customer_phone_e164`, `quantity`, `price_da`, `shipping_fee_da`, `subtotal_da`, `allowed_variants`, `allowed_wilayas`, `allowed_communes`) |
+| `handleFinalizeOrderToolCall(payload, provider, creds, constraints?, order?)` | `Promise<FinalizeOrderToolResult>` | Validates `finalize_order_decision` tool calls (including `finalQuantity` / `final_quantity` fallback), checks constraints, and calls `provider.applyOrderDecision` |
+| `fetchElevenLabsConversationTranscript(conversationId, apiKey, baseUrl?)` | `Promise<ElevenLabsConversationTranscript>` | Zero-dependency helper to retrieve full post-call STT conversation transcript and metadata from ElevenLabs |
+| `fetchElevenLabsConversationAudio(conversationId, apiKey, baseUrl?)` | `Promise<Uint8Array>` | Zero-dependency helper to download raw MP3 audio recording bytes for a completed ElevenLabs call |
 
 ---
 
@@ -458,7 +462,9 @@ StandardizedDzOrder -> buildElevenAgentsDynamicVariables() -> ElevenLabs WebRTC 
 import {
   createStandardizedDzOrder,
   buildElevenAgentsDynamicVariables,
-  handleFinalizeOrderToolCall
+  handleFinalizeOrderToolCall,
+  fetchElevenLabsConversationTranscript,
+  fetchElevenLabsConversationAudio
 } from "@akadli/core";
 import { ShopifyProvider } from "@akadli/provider-shopify";
 
@@ -469,7 +475,9 @@ const order = createStandardizedDzOrder({
   customerName: "Karim Ziani",
   rawCustomerPhone: "0550123456",
   itemName: "Sneakers Air Max",
+  quantity: 2,
   priceDa: 4500,
+  shippingFeeDa: 600,
   currentVariant: "42",
   rawWilaya: "Barika",
   rawCommune: "Barika",
@@ -477,6 +485,7 @@ const order = createStandardizedDzOrder({
 });
 
 // 2. Build dynamic variables for ElevenAgents prompt
+// Includes quantity ("2"), price_da ("4500"), shipping_fee_da ("600"), subtotal_da ("3900")
 const promptVariables = buildElevenAgentsDynamicVariables(order);
 
 // 3. Handle finalize_order_decision tool call from the agent
@@ -484,18 +493,25 @@ const provider = new ShopifyProvider();
 const result = await handleFinalizeOrderToolCall(
   {
     orderId: "1001",
-    status: "CONFIRMED",
-    reasonOrNotes: "Confirmed by Karim over phone"
+    status: "MODIFIED",
+    finalVariant: "43",
+    finalQuantity: 2,
+    reasonOrNotes: "Confirmed by Karim over phone, switched size to 43"
   },
   provider,
   {
     shopDomain: "store.myshopify.com",
     accessToken: "shpat_xxxxxxxx"
   },
-  order.constraints
+  order.constraints,
+  order
 );
 
-console.log(result.success, result.externalStatus);
+// 4. Optional: Retrieve post-call STT transcript & MP3 recording from ElevenLabs
+const transcript = await fetchElevenLabsConversationTranscript(conversationId, process.env.ELEVENLABS_API_KEY!);
+const mp3Bytes = await fetchElevenLabsConversationAudio(conversationId, process.env.ELEVENLABS_API_KEY!);
+
+console.log(result.success, result.externalStatus, transcript.transcript.length, mp3Bytes.byteLength);
 ```
 
 ---
@@ -533,8 +549,10 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for Shopify stor
    - *Without this, Shopify redacts customer details from webhooks and blocks shipping address updates.*
 3. **Configure Webhook:**
    - In Shopify Admin -> **Settings** -> **Notifications** -> **Webhooks**, create an `Order creation` JSON webhook pointing to `/api/webhooks/shopify`.
-4. **Algerian Address Fallback (`province: null`):**
+4. **Algerian Address, Quantity & Shipping Fee Extraction (`province: null`):**
    - Standard Shopify checkout hides the state/province dropdown for Algeria. Customers input Wilayas in `city`, `address1`, or 5-digit `zip` (`13000` -> Wilaya `13`). COD apps store details in `note_attributes`. `@akadli/provider-shopify` extracts and normalizes all candidates via `@akadli/dz-geo`.
+   - Automatically extracts `quantity` (sum of `line_items[].quantity` or `note_attributes` `quantity`/`qty`, default `1`) and `shippingFeeDa` (`total_shipping_price_set.shop_money.amount` -> sum of `shipping_lines[].price` -> `note_attributes` `shipping`/`livraison`, default `0`).
+   - On `MODIFIED`, appends canonical tags `akadli-modified`, `akadli-variant-{finalVariant}`, and `akadli-qty-{finalQuantity}`.
 
 ---
 
@@ -665,7 +683,9 @@ Shopify `orders/create` payloads for Algerian cash-on-delivery merchants arrive 
    - `storeName`: `payload.shop_name || payload.store_name || "Shopify Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.title || "Article"`)
    - `currentVariant`: First line item variant title (`payload.line_items?.[0]?.variant_title || "Standard"`)
-   - `priceDa`: `Math.round(Number(payload.total_price || 0))`
+   - `quantity`: Sum of `payload.line_items[].quantity` (or `note_attributes` matching `quantity`, `qty`, `quantite`, `qte`, `الكمية`, default `1`)
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `payload.total_shipping_price_set?.shop_money?.amount` $\rightarrow$ sum of `payload.shipping_lines[].price` $\rightarrow$ `note_attributes` matching `shipping`, `shipping_fee`, `livraison`, `frais_de_livraison`, `التوصيل` (default `0`)
+   - `priceDa`: `Math.round(Number(payload.total_price || 0))` (total COD price including shipping)
 
 2. **Dual-Source Address & Phone Fallback:**
    Scan `shipping_address`, `billing_address`, and `note_attributes` (case-insensitive substring match):
@@ -721,8 +741,8 @@ export interface ShopifyProviderCredentials {
 {
   "order": {
     "id": 1029384756,
-    "tags": "akadli-modified, akadli-variant-43",
-    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Commune -> Maghnia; Note -> Près de la mosquée.",
+    "tags": "akadli-modified, akadli-variant-43, akadli-qty-2",
+    "note": "[Akadli-AI] Order MODIFIED: Variant -> 43; Qty -> 2; Commune -> Maghnia; Note -> Près de la mosquée.",
     "shipping_address": {
       "province": "13",
       "city": "Maghnia",
@@ -777,9 +797,11 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for YouCan store
    - In **Settings** -> **Webhooks**, create a new webhook for the event `order.created`.
    - Set the URL to your endpoint (e.g. `https://your-domain.com/api/webhooks/youcan`).
    - Copy the generated Webhook Secret (`x-youcan-signature` hex digest verification).
-3. **Algerian 1-Page COD Parsing:**
+3. **Algerian 1-Page COD, Quantity & Shipping Parsing:**
    - In Algeria, YouCan merchants often use single-page checkout forms where customer inputs are stored inside `extra_fields` or `custom_fields`.
    - `@akadli/provider-youcan` automatically extracts address information from both standard `shipping.address` and `extra_fields` / `custom_fields`, normalizing the Wilaya (`01`-`69`) and commune via `@akadli/dz-geo`.
+   - Extracts `quantity` (sum of `variants[].quantity` / `items[].quantity` / `line_items[].quantity` or `extra_fields` `quantity`/`qty`/`qte`, default `1`) and `shippingFeeDa` (`shipping.price` / `shipping_cost` / `shipping_total` or `extra_fields` `shipping`/`livraison`, default `0`).
+   - On `MODIFIED`, appends canonical tags `akadli-modified`, `akadli-variant-{finalVariant}`, and `akadli-qty-{finalQuantity}`.
 
 ---
 
@@ -908,7 +930,9 @@ YouCan webhook deliveries can arrive in several envelope formats:
 2. **Order Basics & Line Item Extraction:**
    - `orderId`: `String(data.id)`
    - `storeName`: `data.store_name || data.shop_name || "YouCan Store"`
-   - `priceDa`: `Math.round(Number(data.total || 0))`
+   - `quantity`: Sum of `variants[].quantity` / `items[].quantity` / `line_items[].quantity` or `extra_fields` matching `quantity`, `qty`, `quantite`, `qte`, `الكمية` (default `1`)
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `shipping.price` $\rightarrow$ `shipping_cost` $\rightarrow$ `shipping_total` $\rightarrow$ `extra_fields` matching `shipping`, `livraison`, `frais_livraison`, `التوصيل` (default `0`)
+   - `priceDa`: `Math.round(Number(data.total || 0))` (total COD price including shipping)
    - **Product Name (`itemName`) Resolution (in priority order):**
      1. `variants[0]?.variant?.product?.name`
      2. `variants[0]?.variant?.product?.meta?.title`
@@ -988,8 +1012,8 @@ All requests include headers:
       "first_line": "Near Pharmacie Centrale"
     }
   },
-  "tags": ["akadli-modified", "akadli-variant-XL"],
-  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
+  "tags": ["akadli-modified", "akadli-variant-XL", "akadli-qty-2"],
+  "notes": "[Akadli-AI] Order MODIFIED: Variant -> XL; Qty -> 2; Wilaya -> 13; Commune -> Mansourah; Note -> Near Pharmacie Centrale; Details: Customer requested XL"
 }
 ```
 - **Returns:** `{ success: true, externalStatus: "UPDATED_AND_CONFIRMED", rawResponse: ... }`
@@ -1049,10 +1073,11 @@ Implements `IEcommerceProvider` from `@akadli/adapter-contract` for WordPress Wo
    - Status: **Active** • Topic: **Order created** • Delivery URL: `https://your-domain.com/api/webhooks/woocommerce`.
    - Secret: Enter your signing secret (used for Base64 `x-wc-webhook-signature` verification).
    - API Version: **WP REST API Integration v3**.
-3. **Algerian `DZ-XX` States & COD Plugins:**
+3. **Algerian `DZ-XX` States, Quantity, Shipping & COD Plugins:**
    - Standard WooCommerce represents Algerian Wilayas as `DZ-XX` state codes (e.g. `DZ-16` for Alger, `DZ-68` for Bou Saada).
    - Stores using Algerian COD checkout plugins store custom entries in order `meta_data` (e.g., `_billing_wilaya`, `_shipping_commune`).
-   - `@akadli/provider-woocommerce` parses both standard address objects and plugin `meta_data` into canonical `@akadli/dz-geo` Wilayas (`01`-`69`).
+   - `@akadli/provider-woocommerce` parses both standard address objects and plugin `meta_data` into canonical `@akadli/dz-geo` Wilayas (`01`-`69`), extracts `quantity` (sum of `line_items[].quantity`, default `1`) and `shippingFeeDa` (`shipping_total` -> `shipping_lines[0].total` -> `meta_data` `_shipping_fee`/`livraison`, default `0`).
+   - On `MODIFIED`, sets `_akadli_status` (`akadli-modified`), `_akadli_variant` (`akadli-variant-{finalVariant}`), and `_akadli_qty` (`akadli-qty-{finalQuantity}`) in `meta_data` and appends an `[Akadli-AI]` order note.
 
 ---
 
@@ -1169,7 +1194,9 @@ WooCommerce `order.created` or `order.updated` payloads for Algerian COD merchan
    - `storeName`: `payload.store_name || "WooCommerce Store"`
    - `itemName`: First line item title (`payload.line_items?.[0]?.name || "Article"`)
    - `currentVariant`: Extracted by scanning `line_items[0]?.meta_data` for keys matching `/(?:pa_size|size|taille|pointure|variant|pa_variant)/i` or variant name/title, defaulting to `"Standard"`.
-   - `priceDa`: `Math.round(Number(payload.total || 0))`
+   - `quantity`: Sum of `payload.line_items[].quantity` (default `1`).
+   - `shippingFeeDa`: Rounded integer (`>= 0`) from `payload.shipping_total` $\rightarrow$ `payload.shipping_lines?.[0]?.total` $\rightarrow$ `meta_data` matching `_shipping_fee`, `shipping_fee`, `shipping`, `livraison`, `frais_de_livraison` (default `0`).
+   - `priceDa`: `Math.round(Number(payload.total || 0))` (total COD price including shipping).
 
 2. **Multi-Source Address & Phone Extraction (Standard + COD Plugin Meta):**
    - **Primary Source (Billing & Shipping objects):**
@@ -1250,14 +1277,15 @@ Base endpoint: `{siteUrl}/wp-json/wc/v3`
     },
     "meta_data": [
       { "key": "_akadli_status", "value": "akadli-modified" },
-      { "key": "_akadli_variant", "value": "XL" }
+      { "key": "_akadli_variant", "value": "akadli-variant-XL" },
+      { "key": "_akadli_qty", "value": "akadli-qty-2" }
     ]
   }
   ```
 - `POST /wp-json/wc/v3/orders/{orderId}/notes`:
   ```json
   {
-    "note": "[Akadli-AI] Order MODIFIED: Variant -> XL; Wilaya -> 13; Commune -> Maghnia",
+    "note": "[Akadli-AI] Order MODIFIED (akadli-modified): Variant -> XL; Qty -> 2; Wilaya -> 13; Commune -> Maghnia.",
     "customer_note": false
   }
   ```
@@ -1349,13 +1377,14 @@ const provider = new GSheetsProvider();
 // 1. Verify Webhook (supports x-akadli-signature hex HMAC or x-akadli-secret)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.GSHEETS_WEBHOOK_SECRET!);
 
-// 2. Parse row payload (supports Arabic headers like 'الاسم', 'الهاتف', 'الولاية')
+// 2. Parse row payload (supports Arabic/French/English headers for Name, Phone, Wilaya, Quantity, Shipping, Total)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. Mutate Google Sheet row (Mode B Apps Script or Mode A REST API)
+// 3. Mutate Google Sheet row (Mode B Apps Script sends finalVariant, finalQuantity, finalWilaya, finalCommune, reasonOrNotes)
 const result = await provider.applyOrderDecision(order.orderId, {
   orderId: order.orderId,
   status: "CONFIRMED",
+  finalQuantity: order.quantity,
   reasonOrNotes: "Confirmed via voice agent"
 }, {
   appsScriptWebhookUrl: process.env.GSHEETS_APPS_SCRIPT_URL!
@@ -1466,7 +1495,9 @@ Column keys are evaluated case-insensitively, supporting trimmed Arabic, French,
 | **Address Note**| `address`, `adresse`, `note`, `العنوان`, `address_note` | `""` |
 | **Product** | `product`, `item_name`, `produit`, `المنتج`, `اسم_المنتج`, `article` | `"Article"` |
 | **Size / Variant** | `size`, `taille`, `variant`, `المقاس`, `الحجم` | `"Standard"` |
-| **Price (DZD)** | `price`, `total`, `prix`, `السعر`, `montant` | `0` |
+| **Quantity** | `quantity`, `qty`, `quantite`, `qte`, `الكمية`, `عدد` | `1` |
+| **Shipping (DZD)** | `shipping`, `shipping_fee`, `livraison`, `frais_livraison`, `التوصيل`, `سعر التوصيل` | `0` |
+| **Price (DZD)** | `price`, `total`, `prix`, `السعر`, `montant` | `0` (total COD price) |
 
 ### Normalization Pipeline
 1. Ingest flat or nested row payload (`payload.data` / `payload.row` / top-level keys).
@@ -1551,10 +1582,11 @@ export interface GSheetsAppsScriptCredentials {
   "status": "CONFIRMED",
   "externalStatus": "CONFIRMED",
   "finalVariant": "43",
+  "finalQuantity": 2,
   "finalWilaya": "16",
   "finalCommune": "Bab Ezzouar",
   "finalAddressNote": "Cité 8 Mai 1945",
-  "reasonOrNotes": "Confirmed with size change",
+  "reasonOrNotes": "[Akadli-AI] Confirmed with size change | Variant: 43 (akadli-variant-43) | Qty: 2 (akadli-qty-2) | Wilaya: 16 | Commune: Bab Ezzouar | Address: Cité 8 Mai 1945",
   "updatedAt": "2026-10-19T14:00:00.000Z"
 }
 ```
@@ -1707,15 +1739,16 @@ if (!isValid) {
   throw new Error("Invalid Tassyir Ed25519 signature");
 }
 
-// 3. Parse standardized Algerian COD order (supports 2026-10 envelope)
+// 3. Parse standardized Algerian COD order (supports 2026-10 envelope, items[].quantity & shippingPrice)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 4. Apply post-call decision to Tassyir Admin API
+// 4. Apply post-call decision to Tassyir Admin API (notes include akadli-confirmed / akadli-modified / akadli-qty-{qty})
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "Customer confirmed via ElevenAgents voice call",
   },
   {
@@ -1896,7 +1929,10 @@ Tassyir emits `orders/created` events with a nested envelope (`data.order`) or f
 
 ### Field Mapping & Guards
 1. **Order ID:** `String(order.id)` (e.g. `"741000000000000001"`).
-2. **Total Price:** Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA).
+2. **Quantity & Prices:**
+   - `quantity`: Sum of `order.items[].quantity` (default `1`).
+   - `shippingFeeDa`: Parsed from decimal string `order.shippingPrice` (e.g. `"500.00"` -> `500` DA, default `0`).
+   - `priceDa`: Parsed from decimal string `order.total` (`"8500.00"` -> `8500` DA, total COD amount).
 3. **Buyer Contact Guard:**
    - If `order.waiting === true` or `buyer.phone` is masked (`"**********"`), the adapter throws:
      `"Tassyir order buyer contact is masked or missing: ensure your Tassyir app has the 'read_customer_contact' scope and the order is not in WAITING state."`
@@ -1950,7 +1986,7 @@ Returns `externalStatus: "CONFIRMED"`.
        "provinceCode": 13,
        "address": "Maghnia - Cite Imama"
      },
-     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed size"
+     "note": "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L, akadli-qty-2) — Commune: Maghnia | Variant: L | Qty: 2 | Address: Cite Imama | Notes: Customer changed size"
    }
    ```
 3. If `credentials.confirmOnModified !== "false"`:
@@ -2024,6 +2060,7 @@ pnpm --filter @akadli/playground dev
 | :--- | :--- | :--- | :--- |
 | **Server** | `PORT` / `SERVER_PORT` | `3000` / `3001` | Frontend Vite and backend Express ports |
 | **ElevenLabs** | `ELEVENLABS_API_KEY` / `_AGENT_ID` | — | ElevenAgents voice synthesis credentials |
+| **Call Logs** | `SAVE_CALL_LOGS` / `CALL_LOGS_DIR` | `"true"` / `"./logs/calls"` | Archive post-call STT `.json` transcripts & `.mp3` recordings |
 | **Shopify** | `SHOPIFY_SHOP_DOMAIN` / `_ACCESS_TOKEN` | — | Store domain & permanent access token |
 | **Shopify** | `SHOPIFY_CLIENT_ID` / `_CLIENT_SECRET` | — | OAuth client credentials (auto token exchange) |
 | **Shopify** | `SHOPIFY_WEBHOOK_SECRET` / `_API_VERSION` | `"2025-01"` | HMAC verification secret & API version |
@@ -2050,6 +2087,15 @@ All store adapters register live ingestion and fixture simulation routes in `pro
 | **WooCommerce** | `POST /api/webhooks/woocommerce` | `POST /api/webhooks/woocommerce/simulate` |
 | **Google Sheets** | `POST /api/webhooks/gsheets` | `POST /api/webhooks/gsheets/simulate` |
 | **Tassyir ERP** | `POST /api/webhooks/tassyir` | `POST /api/webhooks/tassyir/simulate` |
+
+---
+
+## Call Transcript (STT) & Audio Archiving (`/api/logs`)
+
+When `SAVE_CALL_LOGS=true` (default), `@akadli/playground` automatically archives completed ElevenAgents calls into `CALL_LOGS_DIR` (`./logs/calls`) using `@akadli/core`:
+- `GET /api/logs` — Lists recent archived calls with order metadata, decision status, `transcriptFile` (`.json`), and `audioFile` (`.mp3`).
+- `GET /api/logs/:filename` — Serves the local `.json` STT conversation transcript or `.mp3` call recording (fetching on-demand from ElevenLabs if not yet cached on disk).
+- **Dashboard Playback (`/admin`):** Listen to full call recordings via the inline `<audio controls>` player or inspect/download the JSON transcript directly from the Finalized Decision card and Recent Call Logs panel.
 
 ---
 

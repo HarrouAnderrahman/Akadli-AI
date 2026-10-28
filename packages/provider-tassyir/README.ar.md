@@ -124,15 +124,16 @@ if (!isValid) {
   throw new Error("Invalid Tassyir Ed25519 signature");
 }
 
-// 2. تحليل وتطبيع بيانات الطلبية للدفع عند الاستلام في الجزائر
+// 2. تحليل وتطبيع بيانات الطلبية للدفع عند الاستلام في الجزائر (بما فيها items[].quantity و shippingPrice)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. تطبيق قرار المكالمة على واجهة تسيير
+// 3. تطبيق قرار المكالمة على واجهة تسيير (تتضمن الملاحظات akadli-confirmed / akadli-modified / akadli-qty-{qty})
 const result = await provider.applyOrderDecision(
   order.orderId,
   {
     orderId: order.orderId,
     status: "CONFIRMED",
+    finalQuantity: order.quantity,
     reasonOrNotes: "تم تأكيد الطلبية عبر مكالمة صوتية",
   },
   {

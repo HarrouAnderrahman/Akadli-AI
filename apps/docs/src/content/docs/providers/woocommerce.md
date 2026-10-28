@@ -40,7 +40,7 @@ pnpm add @akadli/provider-woocommerce
 Standard WooCommerce represents Algerian Wilayas as `DZ-XX` state codes (e.g., `DZ-16` for Alger, `DZ-60` for Barika, `DZ-68` for Bou Saada).
 Stores using Algerian COD checkout plugins (such as COD Form Algeria or Easy COD) typically write customer Wilayas and communes to order `meta_data` (e.g., `_billing_wilaya`, `_shipping_commune`).
 
-`@akadli/provider-woocommerce` inspects both the standard `shipping.state` property and all custom `meta_data` keys, automatically mapping them into canonical `@akadli/dz-geo` Wilayas (`01`–`69`).
+`@akadli/provider-woocommerce` inspects both the standard `shipping.state` property and all custom `meta_data` keys, automatically mapping them into canonical `@akadli/dz-geo` Wilayas (`01`–`69`). It also extracts `quantity` (sum of `line_items[].quantity`, default `1`) and `shippingFeeDa` (`shipping_total` -> `shipping_lines[0].total` -> `meta_data` `_shipping_fee`/`livraison`, default `0`), and records `_akadli_qty: "akadli-qty-{finalQuantity}"` in `meta_data` on `MODIFIED`.
 
 ---
 

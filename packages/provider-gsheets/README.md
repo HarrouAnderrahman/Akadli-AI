@@ -60,13 +60,14 @@ const provider = new GSheetsProvider();
 // 1. Verify Webhook (supports x-akadli-signature hex HMAC or x-akadli-secret)
 const isValid = await provider.verifyWebhook(headers, rawBody, process.env.GSHEETS_WEBHOOK_SECRET!);
 
-// 2. Parse row payload (supports Arabic headers like 'الاسم', 'الهاتف', 'الولاية')
+// 2. Parse row payload (supports Arabic/French/English headers for Name, Phone, Wilaya, Quantity, Shipping, Total)
 const order = await provider.parseWebhookOrder(JSON.parse(rawBody));
 
-// 3. Mutate Google Sheet row (Mode B Apps Script or Mode A REST API)
+// 3. Mutate Google Sheet row (Mode B Apps Script sends finalVariant, finalQuantity, finalWilaya, finalCommune, reasonOrNotes)
 const result = await provider.applyOrderDecision(order.orderId, {
   orderId: order.orderId,
   status: "CONFIRMED",
+  finalQuantity: order.quantity,
   reasonOrNotes: "Confirmed via voice agent"
 }, {
   appsScriptWebhookUrl: process.env.GSHEETS_APPS_SCRIPT_URL!
