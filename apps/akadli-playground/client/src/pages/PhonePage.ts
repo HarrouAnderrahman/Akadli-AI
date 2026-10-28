@@ -40,6 +40,7 @@ export class PhonePage {
   private hasFinalizedOrder = false;
   private hasAgentSpokenGoodbye = false;
   private activeConversationId: string | null = null;
+  private goodbyeHangupTimer: number | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -146,6 +147,10 @@ export class PhonePage {
       this.isAnswering = false;
       this.isStartingSession = false;
       this.activeSessionToken = null;
+      if (this.goodbyeHangupTimer !== null) {
+        clearTimeout(this.goodbyeHangupTimer);
+        this.goodbyeHangupTimer = null;
+      }
       this.stopCallTimer();
       this.audioManager.stopAll();
       if (this.elevenConversation) {
@@ -288,30 +293,25 @@ export class PhonePage {
         }
       };
 
-      sessionOptions.onConversationMetadata = (meta: any) => {
-        const convId = meta?.conversation_id || meta?.conversationId;
-        if (convId) {
-          this.activeConversationId = convId;
-        }
-      };
-
       sessionOptions.onMessage = (message: any) => {
         const isAgent = message.source === 'ai' || message.role === 'agent';
+        const text = typeof message.message === 'string' ? message.message.trim() : '';
+        if (!text) return;
+
         if (this.hasFinalizedOrder && isAgent) {
           this.hasAgentSpokenGoodbye = true;
         }
 
-        const conversationId = this.getConversationId();
         this.ws?.send(
           JSON.stringify({
             type: 'TRANSCRIPT_UPDATE',
             data: {
-              conversationId,
+              conversationId: this.getConversationId(),
               turn: {
                 id: `eleven-${Date.now()}`,
                 speaker: isAgent ? 'agent' : 'user',
                 role: isAgent ? 'agent' : 'user',
-                text: message.message,
+                text,
                 timestamp: Date.now(),
                 isFinal: true,
               },
@@ -321,15 +321,28 @@ export class PhonePage {
       };
 
       sessionOptions.onModeChange = ({ mode }: { mode: 'speaking' | 'listening' }) => {
-        if (this.hasFinalizedOrder && (this.hasAgentSpokenGoodbye || mode === 'listening')) {
-          if (mode === 'listening') {
-            console.log('[Phone] Agent completed goodbye statement. Hanging up call in 1.5s...');
-            setTimeout(() => {
-              if (this.currentCallState === 'active') {
-                this.ws?.send(JSON.stringify({ type: 'HANGUP_CALL' }));
-              }
-            }, 1500);
+        if (mode === 'speaking') {
+          if (this.hasFinalizedOrder) {
+            this.hasAgentSpokenGoodbye = true;
           }
+          if (this.goodbyeHangupTimer !== null) {
+            clearTimeout(this.goodbyeHangupTimer);
+            this.goodbyeHangupTimer = null;
+          }
+          return;
+        }
+
+        if (this.hasFinalizedOrder && this.hasAgentSpokenGoodbye && mode === 'listening') {
+          console.log('[Phone] Agent completed goodbye statement. Hanging up call in 2s...');
+          if (this.goodbyeHangupTimer !== null) {
+            clearTimeout(this.goodbyeHangupTimer);
+          }
+          this.goodbyeHangupTimer = window.setTimeout(() => {
+            this.goodbyeHangupTimer = null;
+            if (this.currentCallState === 'active') {
+              this.ws?.send(JSON.stringify({ type: 'HANGUP_CALL' }));
+            }
+          }, 2000);
         }
       };
 

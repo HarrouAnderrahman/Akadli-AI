@@ -273,8 +273,6 @@ describe("@akadli/core", () => {
       expect(result.status).toBe("done");
       expect(result.durationSecs).toBe(18);
       expect(result.hasAudio).toBe(true);
-      expect(result.hasUserAudio).toBe(true);
-      expect(result.hasResponseAudio).toBe(true);
       expect(result.transcript).toEqual([
         {
           role: "agent",

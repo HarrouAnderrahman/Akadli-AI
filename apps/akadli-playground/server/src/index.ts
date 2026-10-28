@@ -328,123 +328,96 @@ let isInitiatingSession = false;
 let currentConversationId: string | null = null;
 let currentTranscript: CallLogTranscriptItem[] = [];
 let activeCallLogPath: string | null = null;
-const inFlightAudioDownloads = new Map<string, Promise<Uint8Array | null>>();
+let pendingAudioLog: CallLogEntry | null = null;
+let finalizeHangupTimer: NodeJS.Timeout | null = null;
 
 function getCallLogsDir(): string {
   return path.resolve(process.cwd(), config.callLogsDir);
 }
 
 /**
- * Polls ElevenLabs ConvAI API until the conversation finishes processing (`status === "done"`
- * or `hasAudio === true`), downloads the MP3 recording, and saves it to `mp3Path`.
- * Deduplicates concurrent requests for the same `conversationId`.
+ * Fetches the ElevenLabs MP3 recording once the conversation reaches `status === "done"`,
+ * saves it to `mp3Path`, and enriches `jsonPath` if closing transcript turns were added.
  */
 async function fetchAndSaveConversationMp3(
   conversationId: string,
   mp3Path: string,
   jsonPath?: string
-): Promise<Uint8Array | null> {
+): Promise<boolean> {
   const cleanConvId = conversationId.trim();
   if (!cleanConvId || !config.elevenlabsApiKey) {
-    return null;
+    return false;
   }
 
   if (fs.existsSync(mp3Path)) {
+    return true;
+  }
+
+  const apiKey = config.elevenlabsApiKey;
+  const maxAttempts = 8;
+  const pollIntervalMs = 2500;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const existing = await fsPromises.readFile(mp3Path);
-      if (existing.byteLength > 0) {
-        return new Uint8Array(existing);
-      }
-    } catch {
-      // Proceed to download if reading existing file failed
-    }
-  }
+      const details = await fetchElevenLabsConversationTranscript(cleanConvId, apiKey);
 
-  const existingPromise = inFlightAudioDownloads.get(cleanConvId);
-  if (existingPromise) {
-    return existingPromise;
-  }
-
-  const downloadTask = (async (): Promise<Uint8Array | null> => {
-    const apiKey = config.elevenlabsApiKey;
-    const maxAttempts = 16; // Up to ~40 seconds (covers goodbye speech + hangup + ElevenLabs post-processing)
-    const pollIntervalMs = 2500;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const details = await fetchElevenLabsConversationTranscript(cleanConvId, apiKey);
-
-        // Update saved JSON transcript if ElevenLabs has additional turns (e.g. closing goodbye)
-        if (jsonPath && details.transcript.length > 0 && fs.existsSync(jsonPath)) {
-          try {
-            const rawJson = await fsPromises.readFile(jsonPath, 'utf-8');
-            const parsedJson = JSON.parse(rawJson);
-            const existingCount = Array.isArray(parsedJson.transcript)
-              ? parsedJson.transcript.length
-              : 0;
-            if (details.transcript.length > existingCount) {
-              const baseTs =
-                typeof parsedJson.timestamp === 'number' ? parsedJson.timestamp : Date.now();
-              parsedJson.transcript = details.transcript.map((t) => ({
-                role: t.role,
-                text: t.message,
-                timestamp: baseTs + (t.timeInCallSecs ?? 0) * 1000,
-              }));
-              await fsPromises.writeFile(jsonPath, JSON.stringify(parsedJson, null, 2), 'utf-8');
-            }
-          } catch {
-            // Ignore non-fatal JSON enrichment errors
+      if (jsonPath && details.transcript.length > 0 && fs.existsSync(jsonPath)) {
+        try {
+          const parsedJson = JSON.parse(await fsPromises.readFile(jsonPath, 'utf-8'));
+          const existingCount = Array.isArray(parsedJson.transcript)
+            ? parsedJson.transcript.length
+            : 0;
+          if (details.transcript.length > existingCount) {
+            const baseTs =
+              typeof parsedJson.timestamp === 'number' ? parsedJson.timestamp : Date.now();
+            parsedJson.transcript = details.transcript.map((t) => ({
+              role: t.role,
+              text: t.message,
+              timestamp: baseTs + (t.timeInCallSecs ?? 0) * 1000,
+            }));
+            await fsPromises.writeFile(jsonPath, JSON.stringify(parsedJson, null, 2), 'utf-8');
           }
+        } catch {
+          // Ignore non-fatal JSON transcript update errors
         }
+      }
 
-        const isStillRunning =
-          details.status === 'initiated' ||
+      if (
+        (details.status === 'initiated' ||
           details.status === 'in-progress' ||
-          details.status === 'processing';
-
-        if (isStillRunning && !details.hasAudio) {
-          if (attempt < maxAttempts) {
-            await new Promise((r) => setTimeout(r, pollIntervalMs));
-            continue;
-          }
-        }
-      } catch {
-        // If metadata endpoint fails transiently, still attempt audio fetch or wait for next poll
-      }
-
-      try {
-        const audioBytes = await fetchElevenLabsConversationAudio(cleanConvId, apiKey);
-        if (audioBytes.byteLength > 0) {
-          await fsPromises.mkdir(path.dirname(mp3Path), { recursive: true });
-          await fsPromises.writeFile(mp3Path, audioBytes);
-          console.log(
-            `[Call Logs] Saved ElevenLabs MP3 audio (${audioBytes.byteLength} bytes, attempt ${attempt}) to ${mp3Path}`
-          );
-          return audioBytes;
-        }
-      } catch (err: any) {
-        if (attempt === maxAttempts) {
-          console.warn(
-            `[Call Logs] Failed to fetch ElevenLabs MP3 audio for ${cleanConvId} after ${maxAttempts} attempts:`,
-            err.message || err
-          );
+          details.status === 'processing') &&
+        !details.hasAudio
+      ) {
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
+          continue;
         }
       }
 
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      const audioBytes = await fetchElevenLabsConversationAudio(cleanConvId, apiKey);
+      if (audioBytes.byteLength > 0) {
+        await fsPromises.mkdir(path.dirname(mp3Path), { recursive: true });
+        await fsPromises.writeFile(mp3Path, audioBytes);
+        console.log(
+          `[Call Logs] Saved ElevenLabs MP3 audio (${audioBytes.byteLength} bytes) to ${mp3Path}`
+        );
+        return true;
+      }
+    } catch (err: any) {
+      if (attempt === maxAttempts) {
+        console.warn(
+          `[Call Logs] Could not archive MP3 audio for ${cleanConvId}:`,
+          err.message || err
+        );
       }
     }
 
-    return null;
-  })();
-
-  inFlightAudioDownloads.set(cleanConvId, downloadTask);
-  try {
-    return await downloadTask;
-  } finally {
-    inFlightAudioDownloads.delete(cleanConvId);
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
   }
+
+  return false;
 }
 
 function recordTranscriptTurn(turn: TranscriptTurn | undefined, conversationId?: string) {
@@ -582,36 +555,24 @@ app.get('/api/logs', async (_req, res) => {
         const baseName = jsonFile.slice(0, -'.json'.length);
         const mp3Filename = `${baseName}.mp3`;
         const mp3Path = path.join(logsDir, mp3Filename);
-        const hasMp3OnDisk = fs.existsSync(mp3Path);
-        const logTimestamp = typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now();
-        const canFetchAudio = Boolean(parsed.conversationId && config.elevenlabsApiKey);
-        const isCurrentlyArchiving =
-          !hasMp3OnDisk &&
-          canFetchAudio &&
-          (inFlightAudioDownloads.has(String(parsed.conversationId).trim()) ||
-            Date.now() - logTimestamp < 15000);
-        const hasAudioAvailable = hasMp3OnDisk || (canFetchAudio && !isCurrentlyArchiving);
-
-        if (!hasMp3OnDisk && canFetchAudio) {
-          // Proactively backfill missing MP3 in the background for completed conversations
-          void fetchAndSaveConversationMp3(parsed.conversationId, mp3Path, fullJsonPath);
-        }
+        const hasMp3 = fs.existsSync(mp3Path);
+        const isPending = pendingAudioLog?.id === baseName;
 
         logs.push({
           id: baseName,
           orderId: String(parsed.orderId || baseName),
           provider: String(parsed.provider || 'manual'),
-          timestamp: logTimestamp,
+          timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
           conversationId: parsed.conversationId || null,
           status: parsed.decision?.status || 'COMPLETED',
           customerName: parsed.order?.customer_name || parsed.order?.customerName || '',
           itemName: parsed.order?.item_name || parsed.order?.itemName || '',
           jsonFilename: jsonFile,
           jsonUrl: `/api/logs/${encodeURIComponent(jsonFile)}`,
-          mp3Filename: hasAudioAvailable ? mp3Filename : null,
-          mp3Url: hasAudioAvailable ? `/api/logs/${encodeURIComponent(mp3Filename)}` : null,
-          hasAudio: hasAudioAvailable,
-          audioPending: isCurrentlyArchiving,
+          mp3Filename: hasMp3 ? mp3Filename : null,
+          mp3Url: hasMp3 ? `/api/logs/${encodeURIComponent(mp3Filename)}` : null,
+          hasAudio: hasMp3,
+          audioPending: isPending,
           transcriptCount: Array.isArray(parsed.transcript) ? parsed.transcript.length : 0,
         });
       } catch {
@@ -1049,6 +1010,10 @@ app.get('/api/locations/validate', (req, res) => {
 
 // Call Lifecycle Management
 function initiateCall(payload: OrderPayload, vConfig?: VoiceConfig) {
+  if (finalizeHangupTimer) {
+    clearTimeout(finalizeHangupTimer);
+    finalizeHangupTimer = null;
+  }
   currentOrder = payload;
   currentConfig = vConfig || {
     engine: 'elevenagents',
@@ -1057,6 +1022,7 @@ function initiateCall(payload: OrderPayload, vConfig?: VoiceConfig) {
   currentConversationId = null;
   currentTranscript = [];
   activeCallLogPath = null;
+  pendingAudioLog = null;
 
   setCallState('ringing');
 
@@ -1277,9 +1243,7 @@ async function archiveCallTranscriptAndAudio(params: {
     const safeOrderId = String(params.orderId || 'order').replace(/[^a-zA-Z0-9_-]/g, '_');
     const baseName = `${safeOrderId}-${params.timestamp}`;
     const jsonFilename = `${baseName}.json`;
-    const mp3Filename = `${baseName}.mp3`;
     const jsonPath = path.join(logsDir, jsonFilename);
-    const mp3Path = path.join(logsDir, mp3Filename);
 
     activeCallLogPath = jsonPath;
 
@@ -1316,60 +1280,62 @@ async function archiveCallTranscriptAndAudio(params: {
       transcriptCount: params.transcript.length,
     };
 
+    pendingAudioLog = willFetchAudio ? initialLogEntry : null;
+
     broadcastToAdmins({
       type: 'CALL_LOG_SAVED',
       data: { log: initialLogEntry },
     });
-
-    if (params.conversationId && config.elevenlabsApiKey) {
-      const convId = params.conversationId;
-
-      setTimeout(async () => {
-        const audioBytes = await fetchAndSaveConversationMp3(convId, mp3Path, jsonPath);
-        if (audioBytes && audioBytes.byteLength > 0) {
-          let finalTranscriptCount = Math.max(
-            initialLogEntry.transcriptCount,
-            currentTranscript.length
-          );
-          try {
-            const updatedRaw = await fsPromises.readFile(jsonPath, 'utf-8');
-            const updatedParsed = JSON.parse(updatedRaw);
-            if (Array.isArray(updatedParsed.transcript)) {
-              finalTranscriptCount = updatedParsed.transcript.length;
-            }
-          } catch {
-            // Keep existing count
-          }
-
-          const updatedEntry: CallLogEntry = {
-            ...initialLogEntry,
-            mp3Filename,
-            mp3Url: `/api/logs/${encodeURIComponent(mp3Filename)}`,
-            hasAudio: true,
-            audioPending: false,
-            transcriptCount: finalTranscriptCount,
-          };
-
-          broadcastToAdmins({
-            type: 'CALL_LOG_SAVED',
-            data: { log: updatedEntry },
-          });
-        } else {
-          broadcastToAdmins({
-            type: 'CALL_LOG_SAVED',
-            data: {
-              log: {
-                ...initialLogEntry,
-                audioPending: false,
-              },
-            },
-          });
-        }
-      }, 2000);
-    }
   } catch (err: any) {
     console.error('[Call Logs] Failed to write call log:', err);
   }
+}
+
+function flushPendingCallAudioArchive() {
+  if (!pendingAudioLog || !pendingAudioLog.conversationId || !config.elevenlabsApiKey) {
+    return;
+  }
+
+  const logToArchive = pendingAudioLog;
+  pendingAudioLog = null;
+
+  const logsDir = getCallLogsDir();
+  const mp3Filename = `${logToArchive.id}.mp3`;
+  const mp3Path = path.join(logsDir, mp3Filename);
+  const jsonPath = path.join(logsDir, logToArchive.jsonFilename);
+
+  // Wait 2s after call disconnect so ElevenLabs finishes flushing the conversation audio
+  setTimeout(async () => {
+    const saved = await fetchAndSaveConversationMp3(
+      logToArchive.conversationId!,
+      mp3Path,
+      jsonPath
+    );
+
+    let transcriptCount = logToArchive.transcriptCount;
+    try {
+      const updatedParsed = JSON.parse(await fsPromises.readFile(jsonPath, 'utf-8'));
+      if (Array.isArray(updatedParsed.transcript)) {
+        transcriptCount = updatedParsed.transcript.length;
+      }
+    } catch {
+      // Keep previous count
+    }
+
+    const updatedEntry: CallLogEntry = {
+      ...logToArchive,
+      mp3Filename: saved ? mp3Filename : null,
+      mp3Url: saved ? `/api/logs/${encodeURIComponent(mp3Filename)}` : null,
+      hasAudio: saved,
+      audioPending: false,
+      transcriptCount,
+    };
+
+    broadcastToAdmins({
+      type: 'CALL_LOG_SAVED',
+      data: { log: updatedEntry },
+    });
+  }, 2000);
 }
 
 async function handleOrderFinalized(
@@ -1401,7 +1367,7 @@ async function handleOrderFinalized(
     mutationResult = await dispatchOrderMutation(matchedProvider, currentOrder, decision);
   }
 
-  // Save .json STT transcript and background .mp3 audio recording if enabled
+  // Save .json STT transcript and schedule .mp3 audio archiving on disconnect
   const orderId = currentOrder?.order_id || decision.order_id || 'unknown';
   const providerName = matchedProvider?.key || currentOrder?.source || 'manual';
   await archiveCallTranscriptAndAudio({
@@ -1415,15 +1381,23 @@ async function handleOrderFinalized(
     transcript: [...currentTranscript],
   });
 
-  // Fallback auto hangup after 8 seconds (allows agent to generate and complete goodbye statement)
-  setTimeout(() => {
+  // Fallback auto hangup after 15 seconds if client has not already disconnected after goodbye
+  if (finalizeHangupTimer) {
+    clearTimeout(finalizeHangupTimer);
+  }
+  finalizeHangupTimer = setTimeout(() => {
+    finalizeHangupTimer = null;
     if (currentCallState === 'finalizing' || currentCallState === 'active') {
       terminateCall('Order finalized successfully');
     }
-  }, 8000);
+  }, 15000);
 }
 
 async function terminateCall(reason = 'Call ended') {
+  if (finalizeHangupTimer) {
+    clearTimeout(finalizeHangupTimer);
+    finalizeHangupTimer = null;
+  }
   isInitiatingSession = false;
   if (activeAdapter) {
     try {
@@ -1433,6 +1407,7 @@ async function terminateCall(reason = 'Call ended') {
   }
 
   setCallState('ended');
+  flushPendingCallAudioArchive();
 
   const endedMsg: WSMessage = {
     type: 'CALL_ENDED',
