@@ -1,4 +1,4 @@
-import { WilayaCode, WILAYA_CODES } from "@akadli/adapter-contract";
+import { WilayaCode } from "@akadli/adapter-contract";
 import { WILAYAS_ALL, WILAYAS_MAP } from "./data/wilayas.js";
 import { NormalizedWilayaResult, WilayaRecord } from "./types.js";
 
@@ -15,7 +15,7 @@ export class InvalidWilayaError extends Error {
  */
 export function canonicalizeGeoToken(input: string): string {
   return input
-    .normalize("NFD")
+    .normalize("NFD") // Converts a string into Unicode Normalization
     .replace(/[\u0300-\u036f]/g, "") // Strip Latin accents
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // Strip Arabic tashkeel & tatweel
     .replace(/[أإآ]/g, "ا")
@@ -61,7 +61,7 @@ export function normalizeWilaya(rawInput: string | number): NormalizedWilayaResu
   // --- Stage 1: Numeric & Prefix Extraction ---
   if (typeof rawInput === "number") {
     if (rawInput >= 1 && rawInput <= 69) {
-      const code = String(rawInput).padStart(2, "0") as WilayaCode;
+      const code = String(rawInput).padStart(2, "0") as WilayaCode; // Prefixing single digits with 0
       const record = WILAYAS_MAP.get(code);
       if (record) {
         return {
