@@ -1,6 +1,6 @@
 {
   "name": "@akadli/provider-tassyir",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stateless Tassyir ERP adapter for Akadli-AI Algerian COD voice confirmation",
   "license": "MIT",
   "homepage": "https://akadli.me",

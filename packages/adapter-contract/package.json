@@ -1,6 +1,6 @@
 {
   "name": "@akadli/adapter-contract",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Standardized Zod schemas and TypeScript interfaces for Algerian COD voice confirmation and store adapters",
   "license": "MIT",
   "homepage": "https://akadli.me",

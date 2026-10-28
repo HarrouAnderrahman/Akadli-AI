@@ -1,6 +1,6 @@
 {
   "name": "@akadli/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stateless ElevenAgents voice session orchestrator and dynamic variable builder for Algerian COD confirmation",
   "license": "MIT",
   "homepage": "https://akadli.me",

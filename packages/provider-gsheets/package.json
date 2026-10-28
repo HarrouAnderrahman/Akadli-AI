@@ -1,6 +1,6 @@
 {
   "name": "@akadli/provider-gsheets",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stateless Google Sheets adapter for Akadli-AI Algerian COD order sync and voice confirmation",
   "license": "MIT",
   "homepage": "https://akadli.me",
