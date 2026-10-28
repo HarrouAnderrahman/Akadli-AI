@@ -1,6 +1,7 @@
 import {
   StandardizedDzOrder,
   StandardizedDzOrderSchema,
+  WILAYA_CODES,
   WilayaCode,
   OrderConstraints
 } from "@akadli/adapter-contract";
@@ -48,18 +49,23 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
   const normCommune = normalizeCommune(params.rawCommune, currentWilaya);
   const currentCommune = normCommune.canonicalCommune;
 
-  // 4. Derive constraints if not explicitly provided
+  // 4. Derive constraints if not explicitly provided (default to all 69 Wilayas & 1,708 Communes)
   const allowedVariants = params.allowedVariants && params.allowedVariants.length > 0
     ? params.allowedVariants
     : [params.currentVariant];
 
   const allowedWilayas = params.allowedWilayas && params.allowedWilayas.length > 0
     ? params.allowedWilayas
-    : [currentWilaya];
+    : [...WILAYA_CODES];
 
   const allowedCommunes = params.allowedCommunes && params.allowedCommunes.length > 0
     ? params.allowedCommunes
-    : [...getCommunesForWilaya(currentWilaya)];
+    : [
+        ...getCommunesForWilaya(currentWilaya),
+        ...WILAYA_CODES.filter((code) => code !== currentWilaya).flatMap((code) =>
+          getCommunesForWilaya(code)
+        )
+      ];
 
   const constraints: OrderConstraints = {
     allowedVariants,

@@ -16,13 +16,18 @@ import { YouCanProvider } from '@akadli/provider-youcan';
 import { WooCommerceProvider, isWooCommerceWebhookPing } from '@akadli/provider-woocommerce';
 import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { TassyirProvider, TassyirClient } from '@akadli/provider-tassyir';
-import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
+import { normalizeWilaya, normalizeCommune, getAllCommunes } from '@akadli/dz-geo';
 import {
   handleFinalizeOrderToolCall,
   fetchElevenLabsConversationAudio,
   fetchElevenLabsConversationTranscript,
 } from '@akadli/core';
-import { IEcommerceProvider, OrderConstraints, StandardizedDzOrder } from '@akadli/adapter-contract';
+import {
+  IEcommerceProvider,
+  OrderConstraints,
+  StandardizedDzOrder,
+  WILAYA_CODES,
+} from '@akadli/adapter-contract';
 import { config, getLocalIpAddress } from './config.js';
 import {
   CallLogEntry,
@@ -1130,13 +1135,21 @@ async function dispatchOrderMutation(
   );
   try {
     const credentials = desc.getMutationCredentials();
+    const currentWilayaCode = (order.current_wilaya?.match(/^(\d{2})/)?.[1] ||
+      order.current_wilaya) as WilayaCode;
     const constraints: OrderConstraints = {
       allowedVariants: order.constraints?.allowed_variants || [order.current_variant],
-      allowedWilayas: (order.constraints?.allowed_wilayas?.map((w) => {
-        const match = w.match(/^(\d{2})/);
-        return (match ? match[1] : w) as WilayaCode;
-      }) || [order.current_wilaya.slice(0, 2) as WilayaCode]),
-      allowedCommunes: order.constraints?.allowed_communes || [order.current_commune],
+      allowedWilayas:
+        order.constraints?.allowed_wilayas && order.constraints.allowed_wilayas.length > 0
+          ? order.constraints.allowed_wilayas.map((w) => {
+              const match = w.match(/^(\d{2})/);
+              return (match ? match[1] : w) as WilayaCode;
+            })
+          : [...WILAYA_CODES],
+      allowedCommunes:
+        order.constraints?.allowed_communes && order.constraints.allowed_communes.length > 0
+          ? order.constraints.allowed_communes
+          : [...getAllCommunes()],
     };
 
     const resolvedFinalQuantity =
@@ -1156,7 +1169,10 @@ async function dispatchOrderMutation(
       desc.provider,
       credentials,
       constraints,
-      { quantity: order.quantity ?? 1 }
+      {
+        quantity: order.quantity ?? 1,
+        currentWilaya: currentWilayaCode,
+      }
     );
 
     console.log(`[@akadli/core ${desc.key === 'shopify' ? '' : desc.displayName + ' '}Tool Result]:`, toolResult);

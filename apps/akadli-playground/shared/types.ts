@@ -1,10 +1,12 @@
-import type {
-  StandardizedDzOrder,
-  FinalizedOrderDecision as StandardizedFinalizedOrderDecision,
-  WilayaCode,
-  OrderConstraints as StandardizedOrderConstraints
+import {
+  WILAYA_CODES,
+  type StandardizedDzOrder,
+  type FinalizedOrderDecision as StandardizedFinalizedOrderDecision,
+  type WilayaCode,
+  type OrderConstraints as StandardizedOrderConstraints
 } from "@akadli/adapter-contract";
 import type { ElevenAgentsDynamicVariables } from "@akadli/core";
+import { COMMUNES_2026 } from "./algeria2026Data.js";
 
 export type {
   StandardizedDzOrder,
@@ -40,6 +42,18 @@ export interface OrderPayload {
 }
 
 export function orderPayloadToStandardizedDzOrder(order: OrderPayload): StandardizedDzOrder {
+  const allowedWilayas =
+    order.constraints?.allowed_wilayas && order.constraints.allowed_wilayas.length > 0
+      ? (order.constraints.allowed_wilayas.map((w) => {
+          const match = String(w).match(/^(\d{2})/);
+          return (match ? match[1] : w) as WilayaCode;
+        }) as WilayaCode[])
+      : [...WILAYA_CODES];
+  const allowedCommunes =
+    order.constraints?.allowed_communes && order.constraints.allowed_communes.length > 0
+      ? order.constraints.allowed_communes
+      : COMMUNES_2026.map((c) => c.name);
+
   return {
     orderId: order.order_id,
     storeName: order.store_name,
@@ -54,9 +68,9 @@ export function orderPayloadToStandardizedDzOrder(order: OrderPayload): Standard
     currentCommune: order.current_commune,
     currentAddressNote: order.current_address_note || "",
     constraints: {
-      allowedVariants: order.constraints.allowed_variants,
-      allowedWilayas: order.constraints.allowed_wilayas as WilayaCode[],
-      allowedCommunes: order.constraints.allowed_communes
+      allowedVariants: order.constraints?.allowed_variants || [order.current_variant],
+      allowedWilayas,
+      allowedCommunes
     }
   };
 }

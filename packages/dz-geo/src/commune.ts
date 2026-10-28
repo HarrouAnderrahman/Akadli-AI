@@ -1,4 +1,4 @@
-import { WilayaCode } from "@akadli/adapter-contract";
+import { WILAYA_CODES, WilayaCode } from "@akadli/adapter-contract";
 import { COMMUNES_BY_WILAYA, ARABIC_TO_FRENCH_COMMUNES } from "./data/communes.js";
 import { canonicalizeGeoToken, levenshteinDistance } from "./wilaya.js";
 import { CommuneMatchResult } from "./types.js";
@@ -22,7 +22,21 @@ export const LEGACY_PARENT_WILAYAS: Record<string, WilayaCode> = {
 };
 
 /**
- * Returns all official communes for a given Wilaya code ("01" to "58").
+ * Complete list of all 1,708 official communes across all 69 Algerian Wilayas ("01" to "69").
+ */
+export const ALL_COMMUNES: readonly string[] = WILAYA_CODES.flatMap(
+  (code) => COMMUNES_BY_WILAYA[code] || []
+);
+
+/**
+ * Returns all official communes across all 69 Algerian Wilayas ("01" to "69").
+ */
+export function getAllCommunes(): readonly string[] {
+  return ALL_COMMUNES;
+}
+
+/**
+ * Returns all official communes for a given Wilaya code ("01" to "69").
  */
 export function getCommunesForWilaya(wilayaCode: WilayaCode): readonly string[] {
   return COMMUNES_BY_WILAYA[wilayaCode] || [];

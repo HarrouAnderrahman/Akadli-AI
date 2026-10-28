@@ -9,6 +9,7 @@ import {
   fetchElevenLabsConversationAudio
 } from "../src/index.js";
 import { IEcommerceProvider, FinalizedOrderDecision } from "@akadli/adapter-contract";
+import { getAllCommunes } from "@akadli/dz-geo";
 
 describe("@akadli/core", () => {
   const baseOrderParams = {
@@ -36,9 +37,12 @@ describe("@akadli/core", () => {
       expect(order.currentWilaya).toBe("13");
       expect(order.currentCommune).toBe("Mansourah");
       expect(order.constraints.allowedVariants).toEqual(["41", "42", "43", "44"]);
-      expect(order.constraints.allowedWilayas).toEqual(["13"]);
-      expect(order.constraints.allowedCommunes.length).toBeGreaterThan(5);
+      expect(order.constraints.allowedWilayas).toHaveLength(69);
+      expect(order.constraints.allowedWilayas).toContain("13");
+      expect(order.constraints.allowedWilayas).toContain("16");
+      expect(order.constraints.allowedCommunes).toHaveLength(getAllCommunes().length);
       expect(order.constraints.allowedCommunes).toContain("Tlemcen");
+      expect(order.constraints.allowedCommunes).toContain("Bab El Oued");
     });
 
     it("should accept and coerce explicit quantity and shippingFeeDa", () => {
@@ -77,8 +81,10 @@ describe("@akadli/core", () => {
       expect(vars.current_commune).toBe("Mansourah");
       expect(vars.current_address_note).toBe("Near the grand mosque");
       expect(vars.allowed_variants).toBe("41, 42, 43, 44");
-      expect(vars.allowed_wilayas).toBe("13");
+      expect(vars.allowed_wilayas).toContain("13");
+      expect(vars.allowed_wilayas.split(", ")).toHaveLength(69);
       expect(vars.allowed_communes).toContain("Mansourah");
+      expect(vars.allowed_communes.split(", ")).toHaveLength(getAllCommunes().length);
     });
   });
 

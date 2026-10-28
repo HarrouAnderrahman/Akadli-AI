@@ -6,7 +6,12 @@ import {
   OrderConstraints,
   StandardizedDzOrder
 } from "@akadli/adapter-contract";
-import { normalizeWilaya, normalizeCommune, getCommunesForWilaya } from "@akadli/dz-geo";
+import {
+  normalizeWilaya,
+  normalizeCommune,
+  resolveCommuneForWilaya,
+  getAllCommunes
+} from "@akadli/dz-geo";
 
 export interface FinalizeOrderToolResult {
   success: boolean;
@@ -72,7 +77,7 @@ export async function handleFinalizeOrderToolCall(
   provider: IEcommerceProvider,
   credentials: Record<string, string>,
   constraints?: OrderConstraints,
-  order?: Partial<Pick<StandardizedDzOrder, "quantity">>
+  order?: Partial<Pick<StandardizedDzOrder, "quantity" | "currentWilaya">>
 ): Promise<FinalizeOrderToolResult> {
   // 1. Normalize and validate payload against schema
   const normalized = normalizeRawToolPayload(rawToolPayload, order);
@@ -111,17 +116,50 @@ export async function handleFinalizeOrderToolCall(
     }
 
     if (decision.finalCommune) {
-      const targetWilaya = decision.finalWilaya || constraints?.allowedWilayas[0];
-      if (targetWilaya) {
-        const allowedCommunes = getCommunesForWilaya(targetWilaya);
-        const matchResult = normalizeCommune(decision.finalCommune, targetWilaya);
+      const explicitWilaya =
+        decision.finalWilaya ||
+        order?.currentWilaya ||
+        (constraints?.allowedWilayas.length === 1 ? constraints.allowedWilayas[0] : undefined);
+
+      if (explicitWilaya) {
+        const matchResult = normalizeCommune(decision.finalCommune, explicitWilaya);
         if (matchResult.matched) {
-          // Normalize to canonical spelling
+          decision.finalCommune = matchResult.canonicalCommune;
+        } else if (!decision.finalWilaya && constraints?.allowedCommunes?.length) {
+          const fallbackMatch = resolveCommuneForWilaya(
+            decision.finalCommune,
+            constraints.allowedCommunes
+          );
+          if (fallbackMatch.matched) {
+            decision.finalCommune = fallbackMatch.canonicalCommune;
+          } else if (!constraints.allowedCommunes.includes(decision.finalCommune)) {
+            return {
+              success: false,
+              message: `Commune "${decision.finalCommune}" could not be verified for Wilaya ${explicitWilaya}.`,
+              decision,
+              error: "INVALID_COMMUNE_CONSTRAINT"
+            };
+          }
+        } else if (constraints && !constraints.allowedCommunes.includes(decision.finalCommune)) {
+          return {
+            success: false,
+            message: `Commune "${decision.finalCommune}" could not be verified for Wilaya ${explicitWilaya}.`,
+            decision,
+            error: "INVALID_COMMUNE_CONSTRAINT"
+          };
+        }
+      } else {
+        const candidatePool =
+          constraints?.allowedCommunes && constraints.allowedCommunes.length > 0
+            ? constraints.allowedCommunes
+            : getAllCommunes();
+        const matchResult = resolveCommuneForWilaya(decision.finalCommune, candidatePool);
+        if (matchResult.matched) {
           decision.finalCommune = matchResult.canonicalCommune;
         } else if (constraints && !constraints.allowedCommunes.includes(decision.finalCommune)) {
           return {
             success: false,
-            message: `Commune "${decision.finalCommune}" could not be verified for Wilaya ${targetWilaya}.`,
+            message: `Commune "${decision.finalCommune}" could not be verified in allowed communes.`,
             decision,
             error: "INVALID_COMMUNE_CONSTRAINT"
           };

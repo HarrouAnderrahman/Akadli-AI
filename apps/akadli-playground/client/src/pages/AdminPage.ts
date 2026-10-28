@@ -9,6 +9,7 @@ import {
   ShopifyMutationData,
 } from '../../../shared/types.js';
 import {
+  COMMUNES_2026,
   getAllWilayas,
   getCommunesByWilayaId,
   validateLocation,
@@ -40,15 +41,8 @@ const DEFAULT_ORDER: OrderPayload = {
   current_address_note: 'Cite Imama',
   constraints: {
     allowed_variants: ['S', 'M', 'L', 'XL'],
-    allowed_wilayas: ['13 - Tlemcen', '16 - Alger', '31 - Oran', '68 - Bou Saada'],
-    allowed_communes: [
-      'Mansourah',
-      'Chetouane',
-      'Tlemcen',
-      'Beni Mester',
-      'Remchi',
-      'Bou Saada',
-    ],
+    allowed_wilayas: getAllWilayas().map((w) => w.code),
+    allowed_communes: COMMUNES_2026.map((c) => c.name),
   },
 };
 
