@@ -32,6 +32,8 @@ const order = createStandardizedDzOrder({
   customerName: "Amine Belkacem",
   rawCustomerPhone: "0550123456",
   itemName: "Air Jordan 1 High",
+  quantity: 1,
+  shippingFeeDa: 600,
   priceDa: 12500,
   currentVariant: "43",
   rawWilaya: "Barika",
@@ -43,7 +45,7 @@ const order = createStandardizedDzOrder({
 
 ### 2. `buildElevenAgentsDynamicVariables(order)`
 
-Builds the prompt injection object sent when starting an ElevenLabs conversation session. It formats prices and geographic details to ensure natural pronunciation in Algerian Darja:
+Builds the prompt injection object sent when starting an ElevenLabs conversation session. It formats prices, quantity, shipping fee, subtotal, and geographic details to ensure natural pronunciation in Algerian Darja:
 
 ```typescript
 import { buildElevenAgentsDynamicVariables } from "@akadli/core";
@@ -52,20 +54,21 @@ const dynamicVariables = buildElevenAgentsDynamicVariables(order);
 /*
 Output:
 {
+  order_id: "1001",
+  store_name: "Algeria Sneaker House",
   customer_name: "Amine Belkacem",
   customer_phone_e164: "+213550123456",
-  customer_phone_local: "0550123456",
-  store_name: "Algeria Sneaker House",
   item_name: "Air Jordan 1 High",
+  quantity: "1",
+  shipping_fee_da: "600",
+  subtotal_da: "11900",
   price_da: "12500",
   current_variant: "43",
-  current_wilaya_code: "60",
-  current_wilaya_name_fr: "Barika",
-  current_wilaya_name_ar: "بريكة",
+  current_wilaya: "60",
   current_commune: "Barika",
   current_address_note: "Near the central mosque",
   allowed_variants: "42, 43, 44",
-  allowed_wilayas: "01, 02, ..., 69",
+  allowed_wilayas: "60",
   allowed_communes: "Barika, M'doukal, Bitam"
 }
 */
@@ -116,6 +119,7 @@ In the ElevenLabs Conversational AI Dashboard under **Tools** -> **Add Server To
     "properties": {
       "orderId": { "type": "string" },
       "status": { "type": "string", "enum": ["CONFIRMED", "REFUSED", "MODIFIED"] },
+      "finalQuantity": { "type": "integer", "minimum": 1 },
       "finalVariant": { "type": "string" },
       "finalWilaya": { "type": "string" },
       "finalCommune": { "type": "string" },

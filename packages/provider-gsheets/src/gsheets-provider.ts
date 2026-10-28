@@ -3,6 +3,7 @@ import {
   IEcommerceProvider,
   StandardizedDzOrder,
   FinalizedOrderDecision,
+  FinalizedOrderDecisionInput,
   FinalizedOrderDecisionSchema,
   ApplyOrderDecisionResult
 } from "@akadli/adapter-contract";
@@ -215,6 +216,14 @@ export class GSheetsProvider implements IEcommerceProvider {
     const currentVariant =
       extract(COLUMN_CANDIDATE_KEYS.variant) || "Standard";
 
+    const rawQuantity = extract(COLUMN_CANDIDATE_KEYS.quantity);
+    const numQuantity = rawQuantity ? Math.round(Number(rawQuantity.replace(/[^\d.]/g, ""))) : 1;
+    const quantity = Number.isFinite(numQuantity) && numQuantity >= 1 ? numQuantity : 1;
+
+    const rawShipping = extract(COLUMN_CANDIDATE_KEYS.shipping);
+    const numShipping = rawShipping ? Math.round(Number(rawShipping.replace(/[^\d.]/g, ""))) : 0;
+    const shippingFeeDa = Number.isFinite(numShipping) && numShipping >= 0 ? numShipping : 0;
+
     const rawPrice = extract(COLUMN_CANDIDATE_KEYS.price);
     const numPrice = rawPrice ? Number(rawPrice.replace(/[^\d.]/g, "")) : 0;
     const priceDa = isNaN(numPrice) ? 0 : Math.round(numPrice);
@@ -229,6 +238,8 @@ export class GSheetsProvider implements IEcommerceProvider {
       customerName,
       rawCustomerPhone,
       itemName,
+      quantity,
+      shippingFeeDa,
       priceDa,
       currentVariant,
       rawWilaya,
@@ -245,10 +256,10 @@ export class GSheetsProvider implements IEcommerceProvider {
    */
   async applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult> {
-    FinalizedOrderDecisionSchema.parse(decision);
+    const validDecision = FinalizedOrderDecisionSchema.parse(decision);
     GSheetsCredentialsSchema.parse(credentials);
 
     const rowNumber = parseGSheetsRowNumber(orderId);
@@ -266,36 +277,47 @@ export class GSheetsProvider implements IEcommerceProvider {
       }
 
       const statusVal =
-        decision.status === "CONFIRMED"
+        validDecision.status === "CONFIRMED"
           ? "akadli-confirmed"
-          : decision.status === "MODIFIED"
+          : validDecision.status === "MODIFIED"
             ? "akadli-modified"
             : "akadli-refused";
 
       const statusCol = credentials.statusColumn || "G";
       const notesCol = credentials.notesColumn || "L";
 
+      const defaultNote =
+        validDecision.status === "MODIFIED"
+          ? `[Akadli-AI] Order MODIFIED (akadli-modified, akadli-qty-${validDecision.finalQuantity}) — Qty: ${validDecision.finalQuantity}`
+          : `AI decision: ${validDecision.status}`;
+
       const updates: CellUpdate[] = [
         { column: statusCol, value: statusVal },
-        { column: notesCol, value: decision.reasonOrNotes || `AI decision: ${decision.status}` }
+        { column: notesCol, value: validDecision.reasonOrNotes || defaultNote }
       ];
 
-      if (decision.status === "MODIFIED") {
-        if (decision.finalVariant) {
+      if (validDecision.status === "MODIFIED") {
+        if (credentials.quantityColumn) {
+          updates.push({
+            column: credentials.quantityColumn,
+            value: String(validDecision.finalQuantity)
+          });
+        }
+        if (validDecision.finalVariant) {
           const variantCol = credentials.variantColumn || credentials.sizeColumn || "H";
-          updates.push({ column: variantCol, value: decision.finalVariant });
+          updates.push({ column: variantCol, value: validDecision.finalVariant });
         }
-        if (decision.finalWilaya) {
+        if (validDecision.finalWilaya) {
           const wilayaCol = credentials.wilayaColumn || "I";
-          updates.push({ column: wilayaCol, value: decision.finalWilaya });
+          updates.push({ column: wilayaCol, value: validDecision.finalWilaya });
         }
-        if (decision.finalCommune) {
+        if (validDecision.finalCommune) {
           const communeCol = credentials.communeColumn || "J";
-          updates.push({ column: communeCol, value: decision.finalCommune });
+          updates.push({ column: communeCol, value: validDecision.finalCommune });
         }
-        if (decision.finalAddressNote) {
+        if (validDecision.finalAddressNote) {
           const addressCol = credentials.addressColumn || "K";
-          updates.push({ column: addressCol, value: decision.finalAddressNote });
+          updates.push({ column: addressCol, value: validDecision.finalAddressNote });
         }
       }
 
@@ -316,7 +338,7 @@ export class GSheetsProvider implements IEcommerceProvider {
 
       return {
         success: true,
-        externalStatus: decision.status === "MODIFIED" ? "UPDATED_AND_CONFIRMED" : decision.status,
+        externalStatus: validDecision.status === "MODIFIED" ? "UPDATED_AND_CONFIRMED" : validDecision.status,
         rawResponse: res.rawResponse
       };
     }
@@ -326,13 +348,14 @@ export class GSheetsProvider implements IEcommerceProvider {
       const callbackPayload = {
         orderId,
         rowNumber: rowNumber ?? null,
-        status: decision.status,
-        externalStatus: decision.status,
-        finalVariant: decision.finalVariant ?? null,
-        finalWilaya: decision.finalWilaya ?? null,
-        finalCommune: decision.finalCommune ?? null,
-        finalAddressNote: decision.finalAddressNote ?? null,
-        reasonOrNotes: decision.reasonOrNotes || "",
+        status: validDecision.status,
+        externalStatus: validDecision.status,
+        finalQuantity: validDecision.finalQuantity,
+        finalVariant: validDecision.finalVariant ?? null,
+        finalWilaya: validDecision.finalWilaya ?? null,
+        finalCommune: validDecision.finalCommune ?? null,
+        finalAddressNote: validDecision.finalAddressNote ?? null,
+        reasonOrNotes: validDecision.reasonOrNotes || "",
         updatedAt: new Date().toISOString()
       };
 

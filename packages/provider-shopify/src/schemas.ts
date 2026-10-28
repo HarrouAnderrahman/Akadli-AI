@@ -37,19 +37,41 @@ export const ShopifyCustomerSchema = z.object({
   email: z.string().nullable().optional()
 });
 
-export const ShopifyOrderWebhookPayloadSchema = z.object({
-  id: z.number().or(z.string()),
-  name: z.string().optional(),
-  shop_name: z.string().optional(),
-  store_name: z.string().optional(),
-  currency: z.string().default("DZD"),
-  total_price: z.string().or(z.number()).default(0),
-  line_items: z.array(ShopifyLineItemSchema).default([]),
-  shipping_address: ShopifyAddressSchema.nullable().optional(),
-  billing_address: ShopifyAddressSchema.nullable().optional(),
-  customer: ShopifyCustomerSchema.nullable().optional(),
-  note_attributes: z.array(ShopifyNoteAttributeSchema).default([])
-});
+export const ShopifyShippingLineSchema = z
+  .object({
+    price: z.string().or(z.number()).nullable().optional()
+  })
+  .passthrough();
+
+export const ShopifyOrderWebhookPayloadSchema = z
+  .object({
+    id: z.number().or(z.string()),
+    name: z.string().optional(),
+    shop_name: z.string().optional(),
+    store_name: z.string().optional(),
+    currency: z.string().default("DZD"),
+    total_price: z.string().or(z.number()).default(0),
+    total_shipping_price_set: z
+      .object({
+        shop_money: z
+          .object({
+            amount: z.string().or(z.number()).nullable().optional()
+          })
+          .passthrough()
+          .nullable()
+          .optional()
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    shipping_lines: z.array(ShopifyShippingLineSchema).default([]),
+    line_items: z.array(ShopifyLineItemSchema).default([]),
+    shipping_address: ShopifyAddressSchema.nullable().optional(),
+    billing_address: ShopifyAddressSchema.nullable().optional(),
+    customer: ShopifyCustomerSchema.nullable().optional(),
+    note_attributes: z.array(ShopifyNoteAttributeSchema).default([])
+  })
+  .passthrough();
 
 export type ShopifyOrderWebhookPayload = z.infer<
   typeof ShopifyOrderWebhookPayloadSchema

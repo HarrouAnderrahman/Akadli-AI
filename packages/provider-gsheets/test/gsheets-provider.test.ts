@@ -196,6 +196,8 @@ describe("@akadli/provider-gsheets (GSheetsProvider Suite)", () => {
       expect(order.currentAddressNote).toBe("Cité 8 Mai 1945, Bâtiment C");
       expect(order.itemName).toBe("Sneakers Air Dz Sport");
       expect(order.currentVariant).toBe("42");
+      expect(order.quantity).toBe(1);
+      expect(order.shippingFeeDa).toBe(0);
       expect(order.priceDa).toBe(5500);
 
       expect(order.constraints.allowedVariants).toContain("42");
@@ -343,6 +345,7 @@ describe("@akadli/provider-gsheets (GSheetsProvider Suite)", () => {
       expect(req.body.orderId).toBe("SS-1042#ROW-42");
       expect(req.body.rowNumber).toBe(42);
       expect(req.body.status).toBe("CONFIRMED");
+      expect(req.body.finalQuantity).toBe(1);
       expect(req.body.reasonOrNotes).toBe("Confirmed through voice call");
     });
   });

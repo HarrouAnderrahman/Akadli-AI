@@ -113,6 +113,8 @@ export const TassyirOrderSchema = z
     total: z.union([z.number(), z.string()]).nullable().optional(),
     total_price: z.union([z.number(), z.string()]).nullable().optional(),
     cod_amount: z.union([z.number(), z.string()]).nullable().optional(),
+    shippingPrice: z.union([z.number(), z.string()]).nullable().optional(),
+    shipping_price: z.union([z.number(), z.string()]).nullable().optional(),
     waiting: z.boolean().nullable().optional(),
     buyer: TassyirBuyerSchema.nullable().optional(),
     customer: TassyirCustomerSchema.nullable().optional(),

@@ -1139,10 +1139,14 @@ async function dispatchOrderMutation(
       allowedCommunes: order.constraints?.allowed_communes || [order.current_commune],
     };
 
+    const resolvedFinalQuantity =
+      decision.final_quantity ?? decision.finalQuantity ?? order.quantity ?? 1;
+
     const toolResult = await handleFinalizeOrderToolCall(
       {
         orderId: order.order_id || decision.order_id,
         status: decision.status,
+        finalQuantity: resolvedFinalQuantity,
         finalVariant: decision.final_variant || undefined,
         finalWilaya: decision.final_wilaya || undefined,
         finalCommune: decision.final_commune || undefined,
@@ -1151,7 +1155,8 @@ async function dispatchOrderMutation(
       },
       desc.provider,
       credentials,
-      constraints
+      constraints,
+      { quantity: order.quantity ?? 1 }
     );
 
     console.log(`[@akadli/core ${desc.key === 'shopify' ? '' : desc.displayName + ' '}Tool Result]:`, toolResult);
@@ -1159,6 +1164,7 @@ async function dispatchOrderMutation(
     const standardizedDecision: StandardizedFinalizedOrderDecision = toolResult.decision || {
       orderId: order.order_id || decision.order_id,
       status: decision.status,
+      finalQuantity: resolvedFinalQuantity,
       finalVariant: decision.final_variant || undefined,
       finalWilaya: (decision.final_wilaya ? normalizeWilaya(decision.final_wilaya).code : undefined) as WilayaCode | undefined,
       finalCommune: decision.final_commune || undefined,
@@ -1193,6 +1199,7 @@ async function dispatchOrderMutation(
     const standardizedDecision: StandardizedFinalizedOrderDecision = {
       orderId: order.order_id || decision.order_id,
       status: decision.status,
+      finalQuantity: decision.final_quantity ?? decision.finalQuantity ?? order.quantity ?? 1,
       finalVariant: decision.final_variant || undefined,
       finalWilaya: fallbackWilaya,
       finalCommune: decision.final_commune || undefined,

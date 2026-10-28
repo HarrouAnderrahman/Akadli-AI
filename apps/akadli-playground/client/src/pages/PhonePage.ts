@@ -539,7 +539,7 @@ export class PhonePage {
                   ${this.currentOrder?.item_name || 'Article'} (${this.currentOrder?.current_variant})
                 </div>
                 <div class="text-zinc-400 text-[11px]">
-                  ${this.currentOrder?.price_da} DA • ${this.currentOrder?.current_commune}
+                  Qty: ${this.currentOrder?.quantity ?? 1} • Shipping: ${(this.currentOrder?.shipping_fee_da ?? this.currentOrder?.shippingFeeDa ?? 0) > 0 ? `${this.currentOrder?.shipping_fee_da ?? this.currentOrder?.shippingFeeDa} DA` : 'Free'} • Total: ${this.currentOrder?.price_da} DA • ${this.currentOrder?.current_commune}
                 </div>
               </div>
             </div>

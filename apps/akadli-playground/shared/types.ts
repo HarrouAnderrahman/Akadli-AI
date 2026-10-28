@@ -26,6 +26,9 @@ export interface OrderPayload {
   customer_name: string;
   customer_phone: string;
   item_name: string;
+  quantity?: number;
+  shipping_fee_da?: number;
+  shippingFeeDa?: number;
   price_da: number;
   current_variant: string;
   current_wilaya: string;
@@ -43,6 +46,8 @@ export function orderPayloadToStandardizedDzOrder(order: OrderPayload): Standard
     customerName: order.customer_name,
     customerPhone: order.customer_phone,
     itemName: order.item_name,
+    quantity: order.quantity ?? 1,
+    shippingFeeDa: order.shipping_fee_da ?? order.shippingFeeDa ?? 0,
     priceDa: order.price_da,
     currentVariant: order.current_variant,
     currentWilaya: order.current_wilaya as WilayaCode,
@@ -66,6 +71,9 @@ export function standardizedDzOrderToOrderPayload(
     customer_name: stdOrder.customerName,
     customer_phone: stdOrder.customerPhone,
     item_name: stdOrder.itemName,
+    quantity: stdOrder.quantity ?? 1,
+    shipping_fee_da: stdOrder.shippingFeeDa ?? 0,
+    shippingFeeDa: stdOrder.shippingFeeDa ?? 0,
     price_da: stdOrder.priceDa,
     current_variant: stdOrder.currentVariant,
     current_wilaya: stdOrder.currentWilaya,
@@ -82,11 +90,13 @@ export function standardizedDzOrderToOrderPayload(
 
 export type OrderDecisionStatus = 'CONFIRMED' | 'REFUSED' | 'MODIFIED';
 
-export type ModificationField = 'variant' | 'wilaya' | 'commune' | 'address_note';
+export type ModificationField = 'quantity' | 'variant' | 'wilaya' | 'commune' | 'address_note';
 
 export interface FinalizeOrderDecision {
   order_id: string;
   status: OrderDecisionStatus;
+  final_quantity?: number;
+  finalQuantity?: number;
   final_variant: string;
   final_wilaya: string;
   final_commune: string;

@@ -39,21 +39,33 @@ export const WooCommerceLineItemSchema = z.object({
 
 export type WooCommerceLineItem = z.infer<typeof WooCommerceLineItemSchema>;
 
-export const WooCommerceOrderWebhookPayloadSchema = z.object({
-  id: z.number().or(z.string()),
-  number: z.string().optional(),
-  order_key: z.string().optional(),
-  status: z.string().optional(),
-  currency: z.string().default("DZD"),
-  store_name: z.string().optional(),
-  total: z.string().or(z.number()).default(0),
-  billing: WooCommerceAddressSchema.nullable().optional(),
-  shipping: WooCommerceAddressSchema.nullable().optional(),
-  payment_method: z.string().optional(),
-  payment_method_title: z.string().optional(),
-  line_items: z.array(WooCommerceLineItemSchema).default([]),
-  meta_data: z.array(WooCommerceMetaItemSchema).default([])
-});
+export const WooCommerceShippingLineSchema = z
+  .object({
+    id: z.number().or(z.string()).optional(),
+    method_title: z.string().nullable().optional(),
+    total: z.string().or(z.number()).nullable().optional()
+  })
+  .passthrough();
+
+export const WooCommerceOrderWebhookPayloadSchema = z
+  .object({
+    id: z.number().or(z.string()),
+    number: z.string().optional(),
+    order_key: z.string().optional(),
+    status: z.string().optional(),
+    currency: z.string().default("DZD"),
+    store_name: z.string().optional(),
+    total: z.string().or(z.number()).default(0),
+    shipping_total: z.string().or(z.number()).nullable().optional(),
+    shipping_lines: z.array(WooCommerceShippingLineSchema).default([]),
+    billing: WooCommerceAddressSchema.nullable().optional(),
+    shipping: WooCommerceAddressSchema.nullable().optional(),
+    payment_method: z.string().optional(),
+    payment_method_title: z.string().optional(),
+    line_items: z.array(WooCommerceLineItemSchema).default([]),
+    meta_data: z.array(WooCommerceMetaItemSchema).default([])
+  })
+  .passthrough();
 
 export type WooCommerceOrderWebhookPayload = z.infer<
   typeof WooCommerceOrderWebhookPayloadSchema

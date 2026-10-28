@@ -58,6 +58,8 @@ describe("@akadli/adapter-contract", () => {
       customerName: "Karim Benali",
       customerPhone: "0550123456",
       itemName: "Veste Cuir Bomber Noir",
+      quantity: 2,
+      shippingFeeDa: 600,
       priceDa: 6500,
       currentVariant: "XL",
       currentWilaya: "16",
@@ -74,8 +76,17 @@ describe("@akadli/adapter-contract", () => {
       const parsed = StandardizedDzOrderSchema.parse(validOrder);
       expect(parsed.orderId).toBe("ord_12345");
       expect(parsed.currentWilaya).toBe("16");
+      expect(parsed.quantity).toBe(2);
+      expect(parsed.shippingFeeDa).toBe(600);
       expect(parsed.priceDa).toBe(6500);
       expect(parsed.constraints.allowedVariants).toContain("XL");
+    });
+
+    it("should apply backwards-compatible defaults (quantity: 1, shippingFeeDa: 0)", () => {
+      const { quantity: _q, shippingFeeDa: _s, ...legacyOrder } = validOrder;
+      const parsed = StandardizedDzOrderSchema.parse(legacyOrder);
+      expect(parsed.quantity).toBe(1);
+      expect(parsed.shippingFeeDa).toBe(0);
     });
 
     it("should reject orders with missing required fields", () => {
@@ -102,39 +113,44 @@ describe("@akadli/adapter-contract", () => {
   });
 
   describe("FinalizedOrderDecisionSchema", () => {
-    it("should validate CONFIRMED decision without modification fields", () => {
-      const decision: FinalizedOrderDecision = {
+    it("should validate CONFIRMED decision without modification fields and default finalQuantity to 1", () => {
+      const decision = {
         orderId: "ord_12345",
-        status: "CONFIRMED",
+        status: "CONFIRMED" as const,
         reasonOrNotes: "Customer confirmed all items unchanged"
       };
       const parsed = FinalizedOrderDecisionSchema.parse(decision);
       expect(parsed.status).toBe("CONFIRMED");
+      expect(parsed.finalQuantity).toBe(1);
       expect(parsed.finalVariant).toBeUndefined();
     });
 
     it("should validate REFUSED decision with cancellation reason", () => {
-      const decision: FinalizedOrderDecision = {
+      const decision = {
         orderId: "ord_12345",
-        status: "REFUSED",
+        status: "REFUSED" as const,
         reasonOrNotes: "Customer found it too expensive"
       };
       const parsed = FinalizedOrderDecisionSchema.parse(decision);
       expect(parsed.status).toBe("REFUSED");
+      expect(parsed.finalQuantity).toBe(1);
     });
 
     it("should validate MODIFIED decision when at least one modification is provided", () => {
-      const variantModified: FinalizedOrderDecision = {
+      const variantModified = {
         orderId: "ord_12345",
-        status: "MODIFIED",
+        status: "MODIFIED" as const,
+        finalQuantity: 3,
         finalVariant: "L",
-        reasonOrNotes: "Customer requested L instead of XL"
+        reasonOrNotes: "Customer requested 3 units of L instead of XL"
       };
-      expect(FinalizedOrderDecisionSchema.parse(variantModified).finalVariant).toBe("L");
+      const parsedVariant = FinalizedOrderDecisionSchema.parse(variantModified);
+      expect(parsedVariant.finalVariant).toBe("L");
+      expect(parsedVariant.finalQuantity).toBe(3);
 
-      const communeModified: FinalizedOrderDecision = {
+      const communeModified = {
         orderId: "ord_12345",
-        status: "MODIFIED",
+        status: "MODIFIED" as const,
         finalCommune: "Hydra",
         reasonOrNotes: "Deliver to office instead"
       };

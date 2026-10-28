@@ -150,6 +150,8 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
     expect(order.customerPhone).toBe("0770987654");
     expect(order.itemName).toBe("Karakou Algérois Velours");
     expect(order.currentVariant).toBe("38");
+    expect(order.quantity).toBe(1);
+    expect(order.shippingFeeDa).toBe(0);
     expect(order.priceDa).toBe(6400);
     expect(order.currentWilaya).toBe("31"); // Oran
     expect(order.currentCommune).toBe("Bir El Djir");
@@ -368,6 +370,7 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
       {
         orderId: "ord_yc_882910",
         status: "MODIFIED",
+        finalQuantity: 3,
         finalVariant: "40",
         finalWilaya: "31",
         finalCommune: "Bir El Djir",
@@ -386,9 +389,9 @@ describe("@akadli/provider-youcan (YouCanProvider Suite)", () => {
       `Bearer ${ACCESS_TOKEN}`
     );
     expect(putReq.body).toEqual({
-      tags: ["akadli-modified", "akadli-variant-40"],
+      tags: ["akadli-modified", "akadli-variant-40", "akadli-qty-3"],
       notes:
-        "[Akadli-AI] Order MODIFIED: Variant -> 40; Wilaya -> 31; Commune -> Bir El Djir; Note -> Nouvelle adresse près du rond-point; Details: Taille changée de 38 à 40",
+        "[Akadli-AI] Order MODIFIED: Qty: 3; Variant -> 40; Wilaya -> 31; Commune -> Bir El Djir; Note -> Nouvelle adresse près du rond-point; Details: Taille changée de 38 à 40",
       shipping: {
         address: {
           region: "31",

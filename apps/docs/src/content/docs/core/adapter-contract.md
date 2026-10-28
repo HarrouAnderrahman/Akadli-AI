@@ -31,7 +31,9 @@ export const StandardizedDzOrderSchema = z.object({
   customerName: z.string().min(1),
   customerPhone: DzPhoneSchema, // 05/06/07XXXXXXXX or +213...
   itemName: z.string().min(1),
-  priceDa: z.number().nonnegative(),
+  quantity: z.number().int().min(1).default(1),
+  shippingFeeDa: z.number().int().nonnegative().default(0),
+  priceDa: z.number().int().nonnegative(),
   currentVariant: z.string().min(1), // e.g. "42", "XL", "Noir"
   currentWilaya: WilayaCodeSchema, // Zero-padded "01" to "69"
   currentCommune: z.string().min(1),
@@ -64,6 +66,7 @@ export const FinalizedOrderDecisionSchema = z
   .object({
     orderId: z.string().min(1),
     status: OrderDecisionStatusSchema,
+    finalQuantity: z.number().int().min(1).default(1),
     finalVariant: z.string().min(1).optional(),
     finalWilaya: WilayaCodeSchema.optional(),
     finalCommune: z.string().min(1).optional(),

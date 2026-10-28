@@ -9,6 +9,7 @@ import {
   IEcommerceProvider,
   StandardizedDzOrder,
   FinalizedOrderDecision,
+  FinalizedOrderDecisionInput,
   FinalizedOrderDecisionSchema,
   ApplyOrderDecisionResult,
 } from "@akadli/adapter-contract";
@@ -417,6 +418,17 @@ export class TassyirProvider implements IEcommerceProvider {
     const rawPrice = orderData.total ?? orderData.total_price ?? orderData.cod_amount ?? 0;
     const priceDa = Math.round(Number(rawPrice));
 
+    const rawShippingPrice =
+      orderData.shippingPrice ??
+      orderData.shipping_price ??
+      (orderData.delivery as Record<string, unknown> | undefined)?.price ??
+      0;
+    const parsedShippingPrice = Number(rawShippingPrice);
+    const shippingFeeDa =
+      Number.isFinite(parsedShippingPrice) && Math.round(parsedShippingPrice) >= 0
+        ? Math.round(parsedShippingPrice)
+        : 0;
+
     const rawPhone = String(
       orderData.buyer?.phone ||
       orderData.customer?.phone ||
@@ -483,6 +495,12 @@ export class TassyirProvider implements IEcommerceProvider {
         : undefined);
 
     const items = orderData.items || [];
+    const itemsQuantitySum = items.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0),
+      0
+    );
+    const quantity = itemsQuantitySum >= 1 ? Math.round(itemsQuantitySum) : 1;
+
     const firstItem = items[0];
     const itemName =
       firstItem?.title || firstItem?.name || orderData.product_name || "Article";
@@ -539,6 +557,8 @@ export class TassyirProvider implements IEcommerceProvider {
       customerName,
       rawCustomerPhone: rawPhone,
       itemName,
+      quantity,
+      shippingFeeDa,
       priceDa,
       currentVariant,
       rawWilaya,
@@ -553,7 +573,7 @@ export class TassyirProvider implements IEcommerceProvider {
    */
   async applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult> {
     const validDecision = FinalizedOrderDecisionSchema.parse(decision);
@@ -600,11 +620,14 @@ export class TassyirProvider implements IEcommerceProvider {
       ].filter(Boolean);
       const address = addressParts.length > 0 ? addressParts.join(" - ") : undefined;
 
-      const tagsStr = validDecision.finalVariant
-        ? `(akadli-modified, akadli-variant-${validDecision.finalVariant})`
-        : `(akadli-modified)`;
+      const modTags = ["akadli-modified"];
+      if (validDecision.finalVariant) {
+        modTags.push(`akadli-variant-${validDecision.finalVariant}`);
+      }
+      modTags.push(`akadli-qty-${validDecision.finalQuantity}`);
+      const tagsStr = `(${modTags.join(", ")})`;
 
-      const detailParts: string[] = [];
+      const detailParts: string[] = [`Qty: ${validDecision.finalQuantity}`];
       if (validDecision.finalCommune) {
         detailParts.push(`Commune: ${validDecision.finalCommune}`);
       }

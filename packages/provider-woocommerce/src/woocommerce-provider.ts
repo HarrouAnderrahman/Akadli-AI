@@ -3,6 +3,7 @@ import {
   IEcommerceProvider,
   StandardizedDzOrder,
   FinalizedOrderDecision,
+  FinalizedOrderDecisionInput,
   FinalizedOrderDecisionSchema,
   ApplyOrderDecisionResult,
   WilayaCode
@@ -340,6 +341,37 @@ export class WooCommerceProvider implements IEcommerceProvider {
       }
     }
 
+    const lineItemsQuantitySum = data.line_items.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0),
+      0
+    );
+    const quantity = lineItemsQuantitySum >= 1 ? Math.round(lineItemsQuantitySum) : 1;
+
+    const hasShippingTotal =
+      data.shipping_total !== undefined &&
+      data.shipping_total !== null &&
+      String(data.shipping_total).trim() !== "";
+    const firstShippingLineTotal = data.shipping_lines[0]?.total;
+    const hasFirstShippingLine =
+      firstShippingLineTotal !== undefined &&
+      firstShippingLineTotal !== null &&
+      String(firstShippingLineTotal).trim() !== "";
+    const metaShippingRaw = findInMeta([
+      /^(?:_?shipping_fee|_?shipping|_?livraison|frais_de_livraison|frais_livraison|التوصيل|سعر التوصيل)$/i
+    ]);
+    let rawShippingFee = 0;
+    if (hasShippingTotal) {
+      rawShippingFee = Number(data.shipping_total);
+    } else if (hasFirstShippingLine) {
+      rawShippingFee = Number(firstShippingLineTotal);
+    } else if (metaShippingRaw) {
+      rawShippingFee = Number(metaShippingRaw.replace(/[^\d.]/g, ""));
+    }
+    const shippingFeeDa =
+      Number.isFinite(rawShippingFee) && Math.round(rawShippingFee) >= 0
+        ? Math.round(rawShippingFee)
+        : 0;
+
     const priceDa = Math.round(Number(data.total || 0));
     const storeName = data.store_name || "WooCommerce Store";
 
@@ -360,6 +392,8 @@ export class WooCommerceProvider implements IEcommerceProvider {
       customerName,
       rawCustomerPhone,
       itemName,
+      quantity,
+      shippingFeeDa,
       priceDa,
       currentVariant,
       rawWilaya,
@@ -373,7 +407,7 @@ export class WooCommerceProvider implements IEcommerceProvider {
    */
   async applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult> {
     const validDecision = FinalizedOrderDecisionSchema.parse(decision);
@@ -447,7 +481,16 @@ export class WooCommerceProvider implements IEcommerceProvider {
         };
       }
 
-      const noteParts: string[] = [];
+      const modTags = ["akadli-modified"];
+      if (validDecision.finalVariant) {
+        modTags.push(`akadli-variant-${validDecision.finalVariant}`);
+      }
+      modTags.push(`akadli-qty-${validDecision.finalQuantity}`);
+
+      const noteParts: string[] = [
+        `Qty: ${validDecision.finalQuantity}`,
+        `Tags: ${modTags.join(", ")}`
+      ];
       if (validDecision.finalVariant) {
         noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }

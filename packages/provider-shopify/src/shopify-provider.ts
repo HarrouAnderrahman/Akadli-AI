@@ -3,6 +3,7 @@ import {
   IEcommerceProvider,
   StandardizedDzOrder,
   FinalizedOrderDecision,
+  FinalizedOrderDecisionInput,
   FinalizedOrderDecisionSchema,
   ApplyOrderDecisionResult,
   WilayaCode
@@ -241,10 +242,55 @@ export class ShopifyProvider implements IEcommerceProvider {
       (shippingAddressLines.length > 0 ? shippingAddressLines : undefined) ||
       findInNotes(addressPatterns);
 
-    // 6. Items & Pricing
+    // 6. Items, Quantity, Shipping & Pricing
     const firstItem = data.line_items[0];
     const itemName = firstItem?.title || "Article";
     const currentVariant = firstItem?.variant_title || "Standard";
+
+    const lineItemsQuantitySum = data.line_items.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0),
+      0
+    );
+    const noteQtyRaw = findInNotes([
+      /^(?:quantity|qty|quantite|quantité|qte|الكمية|عدد)$/i
+    ]);
+    const parsedNoteQty = noteQtyRaw
+      ? Math.round(Number(noteQtyRaw.replace(/[^\d.]/g, "")))
+      : NaN;
+    const quantity =
+      lineItemsQuantitySum > 1
+        ? Math.round(lineItemsQuantitySum)
+        : Number.isFinite(parsedNoteQty) && parsedNoteQty >= 1
+          ? parsedNoteQty
+          : lineItemsQuantitySum >= 1
+            ? Math.round(lineItemsQuantitySum)
+            : 1;
+
+    const shopMoneyShipping = data.total_shipping_price_set?.shop_money?.amount;
+    const hasShopMoneyShipping =
+      shopMoneyShipping !== undefined &&
+      shopMoneyShipping !== null &&
+      String(shopMoneyShipping).trim() !== "";
+    const shippingLinesSum = data.shipping_lines.reduce(
+      (sum, line) => sum + (Number(line.price) || 0),
+      0
+    );
+    const noteShippingRaw = findInNotes([
+      /^(?:shipping|shipping_fee|livraison|frais_de_livraison|frais_livraison|التوصيل|سعر التوصيل)$/i
+    ]);
+    let rawShippingFee = 0;
+    if (hasShopMoneyShipping) {
+      rawShippingFee = Number(shopMoneyShipping);
+    } else if (data.shipping_lines.length > 0) {
+      rawShippingFee = shippingLinesSum;
+    } else if (noteShippingRaw) {
+      rawShippingFee = Number(noteShippingRaw.replace(/[^\d.]/g, ""));
+    }
+    const shippingFeeDa =
+      Number.isFinite(rawShippingFee) && Math.round(rawShippingFee) >= 0
+        ? Math.round(rawShippingFee)
+        : 0;
+
     const priceDa = Math.round(Number(data.total_price || 0));
     const storeName = data.shop_name || data.store_name || "Shopify Store";
 
@@ -260,6 +306,8 @@ export class ShopifyProvider implements IEcommerceProvider {
       customerName,
       rawCustomerPhone,
       itemName,
+      quantity,
+      shippingFeeDa,
       priceDa,
       currentVariant,
       rawWilaya,
@@ -273,7 +321,7 @@ export class ShopifyProvider implements IEcommerceProvider {
    */
   async applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult> {
     const validDecision = FinalizedOrderDecisionSchema.parse(decision);
@@ -298,9 +346,10 @@ export class ShopifyProvider implements IEcommerceProvider {
       if (validDecision.finalVariant) {
         tagsList.push(`akadli-variant-${validDecision.finalVariant}`);
       }
+      tagsList.push(`akadli-qty-${validDecision.finalQuantity}`);
       const tags = tagsList.join(", ");
 
-      const noteParts: string[] = [];
+      const noteParts: string[] = [`Qty: ${validDecision.finalQuantity}`];
       if (validDecision.finalVariant) {
         noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }

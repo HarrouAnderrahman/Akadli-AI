@@ -30,6 +30,9 @@ describe("@akadli/core", () => {
       const order = createStandardizedDzOrder(baseOrderParams);
       expect(order.orderId).toBe("ord_dz_999");
       expect(order.customerPhone).toBe("0550112233");
+      expect(order.quantity).toBe(1);
+      expect(order.shippingFeeDa).toBe(0);
+      expect(order.priceDa).toBe(8900);
       expect(order.currentWilaya).toBe("13");
       expect(order.currentCommune).toBe("Mansourah");
       expect(order.constraints.allowedVariants).toEqual(["41", "42", "43", "44"]);
@@ -37,11 +40,27 @@ describe("@akadli/core", () => {
       expect(order.constraints.allowedCommunes.length).toBeGreaterThan(5);
       expect(order.constraints.allowedCommunes).toContain("Tlemcen");
     });
+
+    it("should accept and coerce explicit quantity and shippingFeeDa", () => {
+      const order = createStandardizedDzOrder({
+        ...baseOrderParams,
+        quantity: 2,
+        shippingFeeDa: 600,
+        priceDa: 9500
+      });
+      expect(order.quantity).toBe(2);
+      expect(order.shippingFeeDa).toBe(600);
+      expect(order.priceDa).toBe(9500);
+    });
   });
 
   describe("buildElevenAgentsDynamicVariables", () => {
-    it("should format all required ElevenAgents dynamic variables", () => {
-      const order = createStandardizedDzOrder(baseOrderParams);
+    it("should format all required ElevenAgents dynamic variables including quantity, shipping_fee_da, and subtotal_da", () => {
+      const order = createStandardizedDzOrder({
+        ...baseOrderParams,
+        quantity: 2,
+        shippingFeeDa: 600
+      });
       const vars = buildElevenAgentsDynamicVariables(order);
 
       expect(vars.order_id).toBe("ord_dz_999");
@@ -49,6 +68,9 @@ describe("@akadli/core", () => {
       expect(vars.customer_name).toBe("Ahmed Mansouri");
       expect(vars.customer_phone_e164).toBe("+213550112233");
       expect(vars.item_name).toBe("Chaussures Cuir Oxford");
+      expect(vars.quantity).toBe("2");
+      expect(vars.shipping_fee_da).toBe("600");
+      expect(vars.subtotal_da).toBe("8300");
       expect(vars.price_da).toBe("8900");
       expect(vars.current_variant).toBe("42");
       expect(vars.current_wilaya).toBe("13");
@@ -175,12 +197,13 @@ describe("@akadli/core", () => {
       expect(result.decision?.finalCommune).toBe("Mansourah");
     });
 
-    it("should support backwards-compatible final_size in tool payload", async () => {
-      const order = createStandardizedDzOrder(baseOrderParams);
+    it("should support backwards-compatible final_size and final_quantity in tool payload", async () => {
+      const order = createStandardizedDzOrder({ ...baseOrderParams, quantity: 2 });
       const legacyPayload = {
         order_id: "ord_dz_999",
         status: "MODIFIED",
         final_size: "42",
+        final_quantity: 3,
         final_wilaya: "13 - Tlemcen",
         reason_or_notes: "Legacy tool call"
       };
@@ -189,11 +212,27 @@ describe("@akadli/core", () => {
         legacyPayload,
         mockProvider,
         { apiKey: "test_key" },
-        order.constraints
+        order.constraints,
+        order
       );
 
       expect(result.success).toBe(true);
       expect(result.decision?.finalVariant).toBe("42");
+      expect(result.decision?.finalQuantity).toBe(3);
+
+      // Also verify fallback to order.quantity when final_quantity is omitted
+      const fallbackResult = await handleFinalizeOrderToolCall(
+        {
+          order_id: "ord_dz_999",
+          status: "CONFIRMED"
+        },
+        mockProvider,
+        { apiKey: "test_key" },
+        order.constraints,
+        order
+      );
+      expect(fallbackResult.success).toBe(true);
+      expect(fallbackResult.decision?.finalQuantity).toBe(2);
     });
   });
 

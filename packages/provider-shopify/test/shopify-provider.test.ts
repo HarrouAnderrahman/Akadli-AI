@@ -129,6 +129,8 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Chaussures de Sport Orthopédiques");
     expect(order.currentVariant).toBe("42");
+    expect(order.quantity).toBe(1);
+    expect(order.shippingFeeDa).toBe(0);
     expect(order.priceDa).toBe(4500);
     expect(order.currentWilaya).toBe("13"); // Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
@@ -192,6 +194,7 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
       {
         orderId: "1029384756",
         status: "MODIFIED",
+        finalQuantity: 2,
         finalVariant: "43",
         finalWilaya: "13",
         finalCommune: "Maghnia",
@@ -210,8 +213,8 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
     expect(putReq.body).toEqual({
       order: {
         id: 1029384756,
-        tags: "akadli-modified, akadli-variant-43",
-        note: "[Akadli-AI] Order MODIFIED: Variant -> 43; Wilaya -> 13; Commune -> Maghnia; Note -> Nouvelle adresse près du stade; Details: Taille changée de 42 à 43",
+        tags: "akadli-modified, akadli-variant-43, akadli-qty-2",
+        note: "[Akadli-AI] Order MODIFIED: Qty: 2; Variant -> 43; Wilaya -> 13; Commune -> Maghnia; Note -> Nouvelle adresse près du stade; Details: Taille changée de 42 à 43",
         shipping_address: {
           city: "Maghnia (13)",
           address1: "Nouvelle adresse près du stade",
@@ -283,14 +286,19 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
       name: "#1002",
       shop_name: "DzShop Live",
       currency: "DZD",
-      total_price: "5000",
+      total_price: "5600",
+      total_shipping_price_set: {
+        shop_money: {
+          amount: "600.00"
+        }
+      },
       line_items: [
         {
           id: 11223344,
           title: "Pack Chaussures",
           variant_title: "42",
-          quantity: 1,
-          price: "5000"
+          quantity: 2,
+          price: "2500"
         }
       ],
       shipping_address: {
@@ -320,6 +328,9 @@ describe("@akadli/provider-shopify (ShopifyProvider Suite)", () => {
 
     expect(order.orderId).toBe("9988776655");
     expect(order.customerPhone).toBe("0770987654");
+    expect(order.quantity).toBe(2);
+    expect(order.shippingFeeDa).toBe(600);
+    expect(order.priceDa).toBe(5600);
     expect(order.currentWilaya).toBe("13"); // 13 - Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
     expect(order.constraints.allowedWilayas).toContain("13");

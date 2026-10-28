@@ -7,6 +7,9 @@ export interface ElevenAgentsDynamicVariables {
   customer_name: string;
   customer_phone_e164: string;
   item_name: string;
+  quantity: string;
+  shipping_fee_da: string;
+  subtotal_da: string;
   price_da: string;
   current_variant: string;
   current_wilaya: string;
@@ -27,12 +30,19 @@ export function buildElevenAgentsDynamicVariables(
   order: StandardizedDzOrder
 ): ElevenAgentsDynamicVariables {
   const phoneE164 = normalizeDzPhone(order.customerPhone, "e164");
+  const quantity = order.quantity ?? 1;
+  const shippingFeeDa = order.shippingFeeDa ?? 0;
+  const subtotalDa = Math.max(0, Math.round(order.priceDa) - shippingFeeDa);
+
   return {
     order_id: order.orderId,
     store_name: order.storeName,
     customer_name: order.customerName,
     customer_phone_e164: phoneE164,
     item_name: order.itemName,
+    quantity: String(quantity),
+    shipping_fee_da: String(shippingFeeDa),
+    subtotal_da: String(subtotalDa),
     price_da: String(Math.round(order.priceDa)),
     current_variant: order.currentVariant,
     current_wilaya: order.currentWilaya,

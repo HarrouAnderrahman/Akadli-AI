@@ -3,7 +3,8 @@ import {
   FinalizedOrderDecision,
   IEcommerceProvider,
   ApplyOrderDecisionResult,
-  OrderConstraints
+  OrderConstraints,
+  StandardizedDzOrder
 } from "@akadli/adapter-contract";
 import { normalizeWilaya, normalizeCommune, getCommunesForWilaya } from "@akadli/dz-geo";
 
@@ -16,7 +17,10 @@ export interface FinalizeOrderToolResult {
   error?: string;
 }
 
-function normalizeRawToolPayload(raw: any): unknown {
+function normalizeRawToolPayload(
+  raw: any,
+  order?: Partial<Pick<StandardizedDzOrder, "quantity">>
+): unknown {
   if (!raw || typeof raw !== "object") return raw;
 
   let finalWilaya = raw.finalWilaya ?? raw.final_wilaya;
@@ -32,9 +36,23 @@ function normalizeRawToolPayload(raw: any): unknown {
   const legacyFinalSize = (raw as Record<string, unknown>)["final" + "Size"] ?? (raw as Record<string, unknown>)["final_size"];
   const finalVariant = raw.finalVariant ?? raw.final_variant ?? legacyFinalSize;
 
+  const rawQuantity =
+    raw.finalQuantity ??
+    raw.final_quantity ??
+    raw.quantity ??
+    raw.order?.quantity ??
+    order?.quantity ??
+    1;
+  const parsedQuantity = Number(rawQuantity);
+  const finalQuantity =
+    Number.isFinite(parsedQuantity) && Math.round(parsedQuantity) >= 1
+      ? Math.round(parsedQuantity)
+      : 1;
+
   return {
     orderId: raw.orderId ?? raw.order_id,
     status: raw.status,
+    finalQuantity,
     finalVariant,
     finalWilaya,
     finalCommune: raw.finalCommune ?? raw.final_commune,
@@ -53,10 +71,11 @@ export async function handleFinalizeOrderToolCall(
   rawToolPayload: unknown,
   provider: IEcommerceProvider,
   credentials: Record<string, string>,
-  constraints?: OrderConstraints
+  constraints?: OrderConstraints,
+  order?: Partial<Pick<StandardizedDzOrder, "quantity">>
 ): Promise<FinalizeOrderToolResult> {
   // 1. Normalize and validate payload against schema
-  const normalized = normalizeRawToolPayload(rawToolPayload);
+  const normalized = normalizeRawToolPayload(rawToolPayload, order);
   const parseResult = FinalizedOrderDecisionSchema.safeParse(normalized);
   if (!parseResult.success) {
     const errorMsg = parseResult.error.errors.map((e: { path: (string | number)[]; message: string }) => e.message).join("; ");

@@ -93,6 +93,25 @@ export const COLUMN_CANDIDATE_KEYS = {
     "المبلغ",
     "montant",
     "tarif"
+  ],
+  quantity: [
+    "quantity",
+    "qty",
+    "quantite",
+    "quantité",
+    "qte",
+    "الكمية",
+    "عدد"
+  ],
+  shipping: [
+    "shipping",
+    "shipping_fee",
+    "livraison",
+    "frais_livraison",
+    "frais_de_livraison",
+    "التوصيل",
+    "سعر التوصيل",
+    "سعر_التوصيل"
   ]
 } as const;
 

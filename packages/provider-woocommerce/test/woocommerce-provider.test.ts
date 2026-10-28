@@ -140,6 +140,8 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
     expect(order.customerPhone).toBe("0550123456");
     expect(order.itemName).toBe("Chaussures de Sport Orthopédiques");
     expect(order.currentVariant).toBe("42");
+    expect(order.quantity).toBe(1);
+    expect(order.shippingFeeDa).toBe(0);
     expect(order.priceDa).toBe(6500);
     expect(order.currentWilaya).toBe("13"); // Tlemcen
     expect(order.currentCommune).toBe("Maghnia");
@@ -244,6 +246,8 @@ describe("@akadli/provider-woocommerce (WooCommerceProvider Suite)", () => {
 
     expect(capturedNoteRequests.length).toBe(1);
     const noteReq = capturedNoteRequests[0];
+    expect(noteReq.body.note).toContain("Qty: 1");
+    expect(noteReq.body.note).toContain("akadli-qty-1");
     expect(noteReq.body.note).toContain("Variant -> 43");
     expect(noteReq.body.note).toContain("Wilaya -> 13");
     expect(noteReq.body.note).toContain("Commune -> Maghnia");

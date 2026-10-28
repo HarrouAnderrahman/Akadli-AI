@@ -30,6 +30,9 @@ const DEFAULT_ORDER: OrderPayload = {
   customer_name: 'Abderrahman',
   customer_phone: '0550123456',
   item_name: 'Oversized Hoodie Black',
+  quantity: 1,
+  shipping_fee_da: 0,
+  shippingFeeDa: 0,
   price_da: 4500,
   current_variant: 'M',
   current_wilaya: '13 - Tlemcen',
@@ -562,14 +565,30 @@ export class AdminPage {
                   </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-3 gap-3">
                   <div>
-                    <label class="block text-[11px] text-zinc-400 mb-1">Price (DA)</label>
+                    <label class="block text-[11px] text-zinc-400 mb-1">Quantity</label>
+                    <input id="field-quantity" type="number" min="1" value="${this.order.quantity ?? 1}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-600" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-zinc-400 mb-1">Shipping (DA)</label>
+                    <input id="field-shipping-fee" type="number" min="0" value="${this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-600" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-zinc-400 mb-1">Total COD (DA)</label>
                     <input id="field-price" type="number" value="${this.order.price_da}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-600" />
                   </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="block text-[11px] text-zinc-400 mb-1">Store Name</label>
                     <input id="field-store-name" type="text" value="${this.order.store_name}" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600" />
+                  </div>
+                  <div class="flex flex-col justify-end">
+                    <div id="order-pricing-summary" class="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 text-[11px] font-mono text-zinc-300 truncate">
+                      Qty: ${this.order.quantity ?? 1} • Shipping: ${(this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0) > 0 ? `${this.order.shipping_fee_da ?? this.order.shippingFeeDa} DA` : 'Free'} • Total: ${this.order.price_da} DA
+                    </div>
                   </div>
                 </div>
 
@@ -760,6 +779,8 @@ export class AdminPage {
       const phone = (this.container.querySelector('#field-customer-phone') as HTMLInputElement)?.value;
       const item = (this.container.querySelector('#field-item-name') as HTMLInputElement)?.value;
       const variant = (this.container.querySelector('#field-item-variant') as HTMLInputElement)?.value;
+      const quantity = Math.max(1, parseInt((this.container.querySelector('#field-quantity') as HTMLInputElement)?.value || '1', 10) || 1);
+      const shippingFee = Math.max(0, parseInt((this.container.querySelector('#field-shipping-fee') as HTMLInputElement)?.value || '0', 10) || 0);
       const price = parseFloat((this.container.querySelector('#field-price') as HTMLInputElement)?.value || '0');
       const store = (this.container.querySelector('#field-store-name') as HTMLInputElement)?.value;
       const note = (this.container.querySelector('#field-address-note') as HTMLInputElement)?.value;
@@ -776,12 +797,20 @@ export class AdminPage {
         customer_phone: phone,
         item_name: item,
         current_variant: variant,
+        quantity,
+        shipping_fee_da: shippingFee,
+        shippingFeeDa: shippingFee,
         price_da: price,
         store_name: store,
         current_address_note: note,
         current_wilaya: formattedWilaya,
         current_commune: commune,
       };
+
+      const summaryEl = this.container.querySelector('#order-pricing-summary');
+      if (summaryEl) {
+        summaryEl.textContent = `Qty: ${quantity} • Shipping: ${shippingFee > 0 ? `${shippingFee} DA` : 'Free'} • Total: ${price} DA`;
+      }
 
       if (editor) {
         editor.value = JSON.stringify(this.order, null, 2);
@@ -920,9 +949,18 @@ export class AdminPage {
         (this.container.querySelector('#field-customer-phone') as HTMLInputElement).value = this.order.customer_phone;
         (this.container.querySelector('#field-item-name') as HTMLInputElement).value = this.order.item_name;
         (this.container.querySelector('#field-item-variant') as HTMLInputElement).value = this.order.current_variant;
+        const qtyInp = this.container.querySelector('#field-quantity') as HTMLInputElement | null;
+        const shipInp = this.container.querySelector('#field-shipping-fee') as HTMLInputElement | null;
+        if (qtyInp) qtyInp.value = String(this.order.quantity ?? 1);
+        if (shipInp) shipInp.value = String(this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0);
         (this.container.querySelector('#field-price') as HTMLInputElement).value = String(this.order.price_da);
         (this.container.querySelector('#field-store-name') as HTMLInputElement).value = this.order.store_name;
         (this.container.querySelector('#field-address-note') as HTMLInputElement).value = this.order.current_address_note || '';
+        const summaryEl = this.container.querySelector('#order-pricing-summary');
+        if (summaryEl) {
+          const shipVal = this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0;
+          summaryEl.textContent = `Qty: ${this.order.quantity ?? 1} • Shipping: ${shipVal > 0 ? `${shipVal} DA` : 'Free'} • Total: ${this.order.price_da} DA`;
+        }
 
         const wilayaSelect = this.container.querySelector('#field-wilaya-select') as HTMLSelectElement;
         if (wilayaSelect) {
@@ -1283,10 +1321,14 @@ export class AdminPage {
 
     body.innerHTML = `
       <div class="space-y-3 pt-1 text-xs">
-        <div class="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+        <div class="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
           <div>
             <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Final Variant</span>
             <span class="text-zinc-200 font-medium">${d.final_variant}</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Final Qty</span>
+            <span class="text-zinc-200 font-medium font-mono">${d.final_quantity ?? d.finalQuantity ?? this.order.quantity ?? 1}</span>
           </div>
           <div>
             <span class="text-[10px] text-zinc-500 uppercase tracking-wider block">Verified Location</span>
@@ -1610,19 +1652,28 @@ export class AdminPage {
     const phoneInp = this.container.querySelector('#field-customer-phone') as HTMLInputElement | null;
     const itemInp = this.container.querySelector('#field-item-name') as HTMLInputElement | null;
     const variantInp = this.container.querySelector('#field-item-variant') as HTMLInputElement | null;
+    const qtyInp = this.container.querySelector('#field-quantity') as HTMLInputElement | null;
+    const shipInp = this.container.querySelector('#field-shipping-fee') as HTMLInputElement | null;
     const priceInp = this.container.querySelector('#field-price') as HTMLInputElement | null;
     const storeInp = this.container.querySelector('#field-store-name') as HTMLInputElement | null;
     const noteInp = this.container.querySelector('#field-address-note') as HTMLInputElement | null;
     const wilayaSelect = this.container.querySelector('#field-wilaya-select') as HTMLSelectElement | null;
     const communeSelect = this.container.querySelector('#field-commune-select') as HTMLSelectElement | null;
+    const summaryEl = this.container.querySelector('#order-pricing-summary');
 
     if (nameInp) nameInp.value = this.order.customer_name;
     if (phoneInp) phoneInp.value = this.order.customer_phone;
     if (itemInp) itemInp.value = this.order.item_name;
     if (variantInp) variantInp.value = this.order.current_variant;
+    if (qtyInp) qtyInp.value = String(this.order.quantity ?? 1);
+    if (shipInp) shipInp.value = String(this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0);
     if (priceInp) priceInp.value = String(this.order.price_da);
     if (storeInp) storeInp.value = this.order.store_name;
     if (noteInp) noteInp.value = this.order.current_address_note || '';
+    if (summaryEl) {
+      const shipVal = this.order.shipping_fee_da ?? this.order.shippingFeeDa ?? 0;
+      summaryEl.textContent = `Qty: ${this.order.quantity ?? 1} • Shipping: ${shipVal > 0 ? `${shipVal} DA` : 'Free'} • Total: ${this.order.price_da} DA`;
+    }
 
     if (wilayaSelect) {
       wilayaSelect.innerHTML = this.renderWilayaOptions();

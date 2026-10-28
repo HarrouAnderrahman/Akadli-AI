@@ -55,7 +55,9 @@ export const StandardizedDzOrderSchema = z.object({
   customerName: z.string().min(1),
   customerPhone: DzPhoneSchema,
   itemName: z.string().min(1),
-  priceDa: z.number().nonnegative(),
+  quantity: z.number().int().min(1).default(1),
+  shippingFeeDa: z.number().int().nonnegative().default(0),
+  priceDa: z.number().int().nonnegative(),
   currentVariant: z.string().min(1),
   currentWilaya: WilayaCodeSchema,
   currentCommune: z.string().min(1),
@@ -64,6 +66,7 @@ export const StandardizedDzOrderSchema = z.object({
 });
 
 export type StandardizedDzOrder = z.infer<typeof StandardizedDzOrderSchema>;
+export type StandardizedDzOrderInput = z.input<typeof StandardizedDzOrderSchema>;
 
 /**
  * Allowed post-call order confirmation statuses from ElevenAgents.
@@ -84,6 +87,7 @@ export const FinalizedOrderDecisionSchema = z
   .object({
     orderId: z.string().min(1),
     status: OrderDecisionStatusSchema,
+    finalQuantity: z.number().int().min(1).default(1),
     finalVariant: z.string().min(1).optional(),
     finalWilaya: WilayaCodeSchema.optional(),
     finalCommune: z.string().min(1).optional(),
@@ -93,6 +97,7 @@ export const FinalizedOrderDecisionSchema = z
   .superRefine((decision, ctx) => {
     if (decision.status === "MODIFIED") {
       const hasModification =
+        decision.finalQuantity > 1 ||
         decision.finalVariant !== undefined ||
         decision.finalWilaya !== undefined ||
         decision.finalCommune !== undefined ||
@@ -108,6 +113,9 @@ export const FinalizedOrderDecisionSchema = z
   });
 
 export type FinalizedOrderDecision = z.infer<
+  typeof FinalizedOrderDecisionSchema
+>;
+export type FinalizedOrderDecisionInput = z.input<
   typeof FinalizedOrderDecisionSchema
 >;
 
@@ -146,7 +154,7 @@ export interface IEcommerceProvider {
    */
   applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult>;
 }

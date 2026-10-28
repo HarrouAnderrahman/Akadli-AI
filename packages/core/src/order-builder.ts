@@ -17,6 +17,8 @@ export interface CreateDzOrderParams {
   customerName: string;
   rawCustomerPhone: string;
   itemName: string;
+  quantity?: number;
+  shippingFeeDa?: number;
   priceDa: number;
   currentVariant: string;
   rawWilaya: string | number;
@@ -65,13 +67,27 @@ export function createStandardizedDzOrder(params: CreateDzOrderParams): Standard
     allowedCommunes: allowedCommunes.length > 0 ? allowedCommunes : [currentCommune]
   };
 
+  const parsedQuantity = Number(params.quantity);
+  const quantity =
+    Number.isFinite(parsedQuantity) && Math.round(parsedQuantity) >= 1
+      ? Math.round(parsedQuantity)
+      : 1;
+
+  const parsedShippingFee = Number(params.shippingFeeDa);
+  const shippingFeeDa =
+    Number.isFinite(parsedShippingFee) && Math.round(parsedShippingFee) >= 0
+      ? Math.round(parsedShippingFee)
+      : 0;
+
   const rawOrder = {
     orderId: params.orderId,
     storeName: params.storeName,
     customerName: params.customerName,
     customerPhone,
     itemName: params.itemName,
-    priceDa: params.priceDa,
+    quantity,
+    shippingFeeDa,
+    priceDa: Math.round(params.priceDa),
     currentVariant: params.currentVariant,
     currentWilaya,
     currentCommune,

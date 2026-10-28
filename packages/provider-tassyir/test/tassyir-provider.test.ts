@@ -490,6 +490,8 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
     expect(order.orderId).toBe("1000000000000000001");
     expect(order.customerPhone).toBe("0550112233");
     expect(order.currentWilaya).toBe("16");
+    expect(order.quantity).toBe(1);
+    expect(order.shippingFeeDa).toBe(600);
     expect(order.priceDa).toBe(4600);
     expect(order.currentAddressNote).toBe("12 Rue Didouche Mourad");
     expect(order.itemName).toBe("T-Shirt Algerie");
@@ -575,6 +577,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
       {
         orderId: "741000000000000001",
         status: "MODIFIED",
+        finalQuantity: 2,
         finalVariant: "L",
         finalWilaya: "13",
         finalCommune: "Maghnia",
@@ -595,7 +598,7 @@ describe("@akadli/provider-tassyir (Official 2026-10 Admin API & Webhook Suite)"
         provinceCode: 13,
         address: "Maghnia - Cite Imama",
       },
-      note: "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L) — Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed to size L and Maghnia",
+      note: "[Akadli-AI] Order MODIFIED (akadli-modified, akadli-variant-L, akadli-qty-2) — Qty: 2 | Commune: Maghnia | Variant: L | Address: Cite Imama | Notes: Customer changed to size L and Maghnia",
     });
 
     expect(capturedConfirmRequests.length).toBe(1);

@@ -3,6 +3,7 @@ import {
   IEcommerceProvider,
   StandardizedDzOrder,
   FinalizedOrderDecision,
+  FinalizedOrderDecisionInput,
   FinalizedOrderDecisionSchema,
   ApplyOrderDecisionResult,
   WilayaCode
@@ -468,6 +469,54 @@ export class YouCanProvider implements IEcommerceProvider {
       allowedVariants = [currentVariant];
     }
 
+    const variantsQtySum = (data.variants || []).reduce(
+      (sum, v) => sum + (Number(v.quantity) || 0),
+      0
+    );
+    const itemsQtySum = (data.items || []).reduce(
+      (sum, it) => sum + (Number(it.quantity) || 0),
+      0
+    );
+    const lineItemsQtySum = (data.line_items || []).reduce(
+      (sum, li) => sum + (Number(li.quantity) || 0),
+      0
+    );
+    const arrayQtySum = variantsQtySum || itemsQtySum || lineItemsQtySum;
+    const extraQtyRaw =
+      findInExtra([/^(?:quantity|qty|qte|quantite|quantité|الكمية|عدد)$/i]) ||
+      findInNotes([/^(?:quantity|qty|qte|quantite|quantité|الكمية|عدد)$/i]);
+    const parsedExtraQty = extraQtyRaw
+      ? Math.round(Number(extraQtyRaw.replace(/[^\d.]/g, "")))
+      : NaN;
+    const quantity =
+      arrayQtySum > 1
+        ? Math.round(arrayQtySum)
+        : Number.isFinite(parsedExtraQty) && parsedExtraQty >= 1
+          ? parsedExtraQty
+          : arrayQtySum >= 1
+            ? Math.round(arrayQtySum)
+            : 1;
+
+    const rawShippingCandidate =
+      data.shipping?.price ??
+      data.shipping?.cost ??
+      data.shipping_cost ??
+      data.shipping_total ??
+      findInExtra([
+        /^(?:shipping|shipping_fee|shipping_cost|livraison|frais_livraison|frais_de_livraison|التوصيل|سعر التوصيل)$/i
+      ]) ??
+      findInNotes([
+        /^(?:shipping|shipping_fee|shipping_cost|livraison|frais_livraison|frais_de_livraison|التوصيل|سعر التوصيل)$/i
+      ]);
+    const parsedShippingFee =
+      rawShippingCandidate !== undefined && rawShippingCandidate !== null
+        ? Number(String(rawShippingCandidate).replace(/[^\d.]/g, ""))
+        : 0;
+    const shippingFeeDa =
+      Number.isFinite(parsedShippingFee) && Math.round(parsedShippingFee) >= 0
+        ? Math.round(parsedShippingFee)
+        : 0;
+
     const priceDa = Math.round(Number(data.total || 0));
     const storeName = data.store_name || data.shop_name || "YouCan Store";
 
@@ -477,6 +526,8 @@ export class YouCanProvider implements IEcommerceProvider {
       customerName,
       rawCustomerPhone,
       itemName,
+      quantity,
+      shippingFeeDa,
       priceDa,
       currentVariant,
       rawWilaya,
@@ -491,7 +542,7 @@ export class YouCanProvider implements IEcommerceProvider {
    */
   async applyOrderDecision(
     orderId: string,
-    decision: FinalizedOrderDecision,
+    decision: FinalizedOrderDecision | FinalizedOrderDecisionInput,
     credentials: Record<string, string>
   ): Promise<ApplyOrderDecisionResult> {
     const validDecision = FinalizedOrderDecisionSchema.parse(decision);
@@ -518,8 +569,9 @@ export class YouCanProvider implements IEcommerceProvider {
       if (validDecision.finalVariant) {
         tags.push(`akadli-variant-${validDecision.finalVariant}`);
       }
+      tags.push(`akadli-qty-${validDecision.finalQuantity}`);
 
-      const noteParts: string[] = [];
+      const noteParts: string[] = [`Qty: ${validDecision.finalQuantity}`];
       if (validDecision.finalVariant) {
         noteParts.push(`Variant -> ${validDecision.finalVariant}`);
       }

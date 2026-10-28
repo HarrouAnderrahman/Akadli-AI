@@ -19,7 +19,7 @@ Canonical architectural reference for stateless AI coding sessions across the Ak
 ## 3. Strict Coding Invariants (Anti-Drift Rules)
 - **Zero Bloat Dependencies:** Use Node 20+ native `fetch` and `node:crypto` (`crypto.timingSafeEqual`). Never install `axios`, `node-fetch`, or `moment`.
 - **Canonical Order Tags & Notes:**
-  - Tags: Always use `akadli-confirmed`, `akadli-modified`, `akadli-refused`, and `akadli-variant-{variant}`.
+  - Tags: Always use `akadli-confirmed`, `akadli-modified`, `akadli-refused`, `akadli-variant-{variant}`, and `akadli-qty-{qty}`.
   - Notes: Always prefix automated notes with `[Akadli-AI]`. Zero leftover `dz-confirmed` strings anywhere in `packages/` or `apps/`.
 - **No Over-Engineering & Preserve Live Flows:** Keep adapters stateless. Do not break live-verified flows (such as `PhonePage.ts` `onModeChange` goodbye handling or Shopify Algeria `province: null` fallback).
 
