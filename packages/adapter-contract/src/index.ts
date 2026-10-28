@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Official 58 Algerian Wilaya codes ("01" through "58").
+ * Official 69 Algerian Wilaya codes ("01" through "69").
  * Zero-padded 2-digit strings are mandatory across all providers and couriers.
  */
 export const WILAYA_CODES = [
