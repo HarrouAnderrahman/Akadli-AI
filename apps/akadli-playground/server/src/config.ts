@@ -21,8 +21,18 @@ export const config = {
   get elevenLabsApiKey(): string {
     return (process.env.ELEVENLABS_API_KEY || '').trim();
   },
+  get elevenlabsApiKey(): string {
+    return (process.env.ELEVENLABS_API_KEY || '').trim();
+  },
   get elevenLabsAgentId(): string {
     return (process.env.ELEVENLABS_AGENT_ID || '').trim();
+  },
+  get saveCallLogs(): boolean {
+    const raw = (process.env.SAVE_CALL_LOGS || 'true').trim().toLowerCase();
+    return raw !== 'false' && raw !== '0' && raw !== 'no';
+  },
+  get callLogsDir(): string {
+    return (process.env.CALL_LOGS_DIR || './logs/calls').trim();
   },
   get shopifyShopDomain(): string {
     return (process.env.SHOPIFY_SHOP_DOMAIN || '').trim();

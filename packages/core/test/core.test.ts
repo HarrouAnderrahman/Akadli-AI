@@ -1,8 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterEach, afterAll } from "vitest";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 import {
   createStandardizedDzOrder,
   buildElevenAgentsDynamicVariables,
-  handleFinalizeOrderToolCall
+  handleFinalizeOrderToolCall,
+  fetchElevenLabsConversationTranscript,
+  fetchElevenLabsConversationAudio
 } from "../src/index.js";
 import { IEcommerceProvider, FinalizedOrderDecision } from "@akadli/adapter-contract";
 
@@ -190,6 +194,106 @@ describe("@akadli/core", () => {
 
       expect(result.success).toBe(true);
       expect(result.decision?.finalVariant).toBe("42");
+    });
+  });
+
+  describe("ElevenLabs Conversation Logs & Audio Helpers (MSW)", () => {
+    const CONV_ID = "conv_dz_test_12345";
+    const API_KEY = "xi_test_api_key_secret";
+    const FAKE_MP3_BYTES = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0xff, 0xfb, 0x90]);
+
+    let capturedHeaders: Record<string, string | null> = {};
+
+    const mswServer = setupServer(
+      http.get(
+        `https://api.elevenlabs.io/v1/convai/conversations/${CONV_ID}`,
+        ({ request }) => {
+          capturedHeaders["xi-api-key"] = request.headers.get("xi-api-key");
+          return HttpResponse.json({
+            conversation_id: CONV_ID,
+            status: "done",
+            transcript: [
+              {
+                role: "agent",
+                message: "Salam Ahmed, m3ak Akadli men Algeria Footwear.",
+                time_in_call_secs: 1
+              },
+              {
+                role: "user",
+                message: "Wa3likoum salam, oui rani nesma3 fik.",
+                time_in_call_secs: 5
+              },
+              {
+                role: "agent",
+                message: "Confirmينا الطلبية تاعك في منصورة تلمسان. شكرا!",
+                time_in_call_secs: 12
+              }
+            ],
+            metadata: {
+              call_duration_secs: 18
+            }
+          });
+        }
+      ),
+      http.get(
+        `https://api.elevenlabs.io/v1/convai/conversations/${CONV_ID}/audio`,
+        ({ request }) => {
+          capturedHeaders["xi-api-key"] = request.headers.get("xi-api-key");
+          return new HttpResponse(FAKE_MP3_BYTES, {
+            status: 200,
+            headers: {
+              "Content-Type": "audio/mpeg"
+            }
+          });
+        }
+      )
+    );
+
+    beforeAll(() => {
+      mswServer.listen({ onUnhandledRequest: "error" });
+    });
+
+    afterEach(() => {
+      capturedHeaders = {};
+      mswServer.resetHandlers();
+    });
+
+    afterAll(() => {
+      mswServer.close();
+    });
+
+    it("fetchElevenLabsConversationTranscript should retrieve and normalize STT transcript turns", async () => {
+      const result = await fetchElevenLabsConversationTranscript(CONV_ID, API_KEY);
+
+      expect(capturedHeaders["xi-api-key"]).toBe(API_KEY);
+      expect(result.conversationId).toBe(CONV_ID);
+      expect(result.status).toBe("done");
+      expect(result.durationSecs).toBe(18);
+      expect(result.transcript).toEqual([
+        {
+          role: "agent",
+          message: "Salam Ahmed, m3ak Akadli men Algeria Footwear.",
+          timeInCallSecs: 1
+        },
+        {
+          role: "user",
+          message: "Wa3likoum salam, oui rani nesma3 fik.",
+          timeInCallSecs: 5
+        },
+        {
+          role: "agent",
+          message: "Confirmينا الطلبية تاعك في منصورة تلمسان. شكرا!",
+          timeInCallSecs: 12
+        }
+      ]);
+    });
+
+    it("fetchElevenLabsConversationAudio should retrieve raw MP3 bytes as Uint8Array", async () => {
+      const audioBytes = await fetchElevenLabsConversationAudio(CONV_ID, API_KEY);
+
+      expect(capturedHeaders["xi-api-key"]).toBe(API_KEY);
+      expect(audioBytes).toBeInstanceOf(Uint8Array);
+      expect(Array.from(audioBytes)).toEqual(Array.from(FAKE_MP3_BYTES));
     });
   });
 });

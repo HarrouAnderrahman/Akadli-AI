@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import cors from 'cors';
 import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ShopifyProvider } from '@akadli/provider-shopify';
@@ -12,10 +13,16 @@ import { WooCommerceProvider, isWooCommerceWebhookPing } from '@akadli/provider-
 import { GSheetsProvider } from '@akadli/provider-gsheets';
 import { TassyirProvider, TassyirClient } from '@akadli/provider-tassyir';
 import { normalizeWilaya, normalizeCommune } from '@akadli/dz-geo';
-import { handleFinalizeOrderToolCall } from '@akadli/core';
+import {
+  handleFinalizeOrderToolCall,
+  fetchElevenLabsConversationAudio,
+  fetchElevenLabsConversationTranscript,
+} from '@akadli/core';
 import { IEcommerceProvider, OrderConstraints, StandardizedDzOrder } from '@akadli/adapter-contract';
 import { config, getLocalIpAddress } from './config.js';
 import {
+  CallLogEntry,
+  CallLogTranscriptItem,
   CallState,
   FinalizeOrderDecision,
   OrderPayload,
@@ -314,6 +321,48 @@ let currentOrder: OrderPayload | null = null;
 let currentConfig: VoiceConfig | null = null;
 let activeAdapter: VoiceEngineAdapter | null = null;
 let isInitiatingSession = false;
+let currentConversationId: string | null = null;
+let currentTranscript: CallLogTranscriptItem[] = [];
+let activeCallLogPath: string | null = null;
+
+function getCallLogsDir(): string {
+  return path.resolve(process.cwd(), config.callLogsDir);
+}
+
+function recordTranscriptTurn(turn: TranscriptTurn | undefined, conversationId?: string) {
+  if (conversationId && conversationId.trim()) {
+    currentConversationId = conversationId.trim();
+  }
+  if (!turn || typeof turn.text !== 'string' || !turn.text.trim()) {
+    return;
+  }
+  const role: 'user' | 'agent' =
+    turn.role === 'user' || turn.speaker === 'user' ? 'user' : 'agent';
+  currentTranscript.push({
+    role,
+    text: turn.text,
+    timestamp: turn.timestamp || Date.now(),
+  });
+
+  if (activeCallLogPath && config.saveCallLogs) {
+    const targetPath = activeCallLogPath;
+    const latestTranscript = [...currentTranscript];
+    const latestConvId = currentConversationId;
+    void (async () => {
+      try {
+        const raw = await fsPromises.readFile(targetPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        parsed.transcript = latestTranscript;
+        if (latestConvId && !parsed.conversationId) {
+          parsed.conversationId = latestConvId;
+        }
+        await fsPromises.writeFile(targetPath, JSON.stringify(parsed, null, 2), 'utf-8');
+      } catch {
+        // Ignore background update errors if file is being written
+      }
+    })();
+  }
+}
 
 // Helper to broadcast WS messages
 function broadcastToAdmins(msg: WSMessage) {
@@ -391,7 +440,90 @@ app.get('/api/status', (req, res) => {
       config.tassyirApiKey
     ),
     tassyirApiBaseUrl: config.tassyirApiBaseUrl,
+    saveCallLogs: config.saveCallLogs,
+    callLogsDir: config.callLogsDir,
   });
+});
+
+// Call Logs & Audio Archive Endpoints
+app.get('/api/logs', async (_req, res) => {
+  try {
+    const logsDir = getCallLogsDir();
+    if (!fs.existsSync(logsDir)) {
+      return res.json({ logs: [] });
+    }
+    const entries = await fsPromises.readdir(logsDir);
+    const jsonFiles = entries.filter((f) => f.endsWith('.json'));
+
+    const logs: CallLogEntry[] = [];
+    for (const jsonFile of jsonFiles) {
+      try {
+        const fullJsonPath = path.join(logsDir, jsonFile);
+        const rawContent = await fsPromises.readFile(fullJsonPath, 'utf-8');
+        const parsed = JSON.parse(rawContent);
+        const baseName = jsonFile.slice(0, -'.json'.length);
+        const mp3Filename = `${baseName}.mp3`;
+        const hasMp3 = fs.existsSync(path.join(logsDir, mp3Filename));
+
+        logs.push({
+          id: baseName,
+          orderId: String(parsed.orderId || baseName),
+          provider: String(parsed.provider || 'manual'),
+          timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
+          conversationId: parsed.conversationId || null,
+          status: parsed.decision?.status || 'COMPLETED',
+          customerName: parsed.order?.customer_name || parsed.order?.customerName || '',
+          itemName: parsed.order?.item_name || parsed.order?.itemName || '',
+          jsonFilename: jsonFile,
+          jsonUrl: `/api/logs/${encodeURIComponent(jsonFile)}`,
+          mp3Filename: hasMp3 ? mp3Filename : null,
+          mp3Url: hasMp3 ? `/api/logs/${encodeURIComponent(mp3Filename)}` : null,
+          hasAudio: hasMp3,
+          transcriptCount: Array.isArray(parsed.transcript) ? parsed.transcript.length : 0,
+        });
+      } catch {
+        // Skip malformed log files
+      }
+    }
+
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+    res.json({ logs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to list call logs' });
+  }
+});
+
+app.get('/api/logs/:filename', async (req, res) => {
+  try {
+    const requested = req.params.filename || '';
+    const safeFilename = path.basename(requested);
+    if (
+      !safeFilename ||
+      safeFilename !== requested ||
+      (!safeFilename.endsWith('.json') && !safeFilename.endsWith('.mp3'))
+    ) {
+      return res.status(400).json({ error: 'Invalid log filename' });
+    }
+
+    const filePath = path.join(getCallLogsDir(), safeFilename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Call log file not found' });
+    }
+
+    if (safeFilename.endsWith('.json')) {
+      const jsonContent = await fsPromises.readFile(filePath, 'utf-8');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.send(jsonContent);
+    } else {
+      const audioBuffer = await fsPromises.readFile(filePath);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Length', String(audioBuffer.byteLength));
+      return res.send(audioBuffer);
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to serve call log file' });
+  }
 });
 
 app.get('/api/lan-ip', (req, res) => {
@@ -766,6 +898,9 @@ function initiateCall(payload: OrderPayload, vConfig?: VoiceConfig) {
     engine: 'elevenagents',
     useAgentDefaults: true,
   };
+  currentConversationId = null;
+  currentTranscript = [];
+  activeCallLogPath = null;
 
   setCallState('ringing');
 
@@ -812,6 +947,7 @@ async function handleCallAnswered() {
       currentConfig,
       {
         onTranscript: (turn: TranscriptTurn) => {
+          recordTranscriptTurn(turn);
           const msg: WSMessage = { type: 'TRANSCRIPT_UPDATE', data: { turn } };
           broadcastToAdmins(msg);
           sendToPhone(msg);
@@ -866,7 +1002,7 @@ async function dispatchOrderMutation(
   desc: ProviderDescriptor,
   order: OrderPayload,
   decision: FinalizeOrderDecision
-) {
+): Promise<{ success: boolean; externalStatus: string; rawResponse?: unknown }> {
   console.log(
     `[${desc.displayName} Live Mutation] Applying decision "${decision.status}" to order #${order.order_id} via @akadli/core...`
   );
@@ -908,16 +1044,18 @@ async function dispatchOrderMutation(
       reasonOrNotes: decision.reason_or_notes || '',
     };
 
+    const mutationResult = {
+      success: toolResult.success,
+      externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
+      rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
+    };
+
     const mutationMsg: WSMessage<ShopifyMutationData> = {
       type: desc.mutationResultType,
       data: {
         orderId: order.order_id,
         decision: standardizedDecision,
-        mutationResult: {
-          success: toolResult.success,
-          externalStatus: toolResult.externalStatus || (toolResult.success ? 'UPDATED' : 'ERROR'),
-          rawResponse: toolResult.rawResponse || { error: toolResult.error || toolResult.message },
-        },
+        mutationResult,
         liveStore: desc.getLiveStoreLabel(),
         ...(desc.key !== 'shopify' ? { provider: desc.key } : {}),
         timestamp: Date.now(),
@@ -926,6 +1064,7 @@ async function dispatchOrderMutation(
 
     broadcastToAdmins(mutationMsg);
     sendToPhone(mutationMsg);
+    return mutationResult;
   } catch (err: any) {
     console.error(`[${desc.displayName} Mutation Error]:`, err);
     const fallbackWilaya = decision.final_wilaya ? (normalizeWilaya(decision.final_wilaya).code as WilayaCode) : undefined;
@@ -939,26 +1078,178 @@ async function dispatchOrderMutation(
       reasonOrNotes: decision.reason_or_notes || '',
     };
 
+    const mutationResult = {
+      success: false,
+      externalStatus: 'MUTATION_EXCEPTION',
+      rawResponse: { error: err.message },
+    };
+
     const failureMsg: WSMessage<ShopifyMutationData> = {
       type: desc.mutationResultType,
       data: {
         orderId: order.order_id,
         decision: standardizedDecision,
-        mutationResult: {
-          success: false,
-          externalStatus: 'MUTATION_EXCEPTION',
-          rawResponse: { error: err.message },
-        },
+        mutationResult,
         liveStore: desc.getLiveStoreLabel(),
         ...(desc.key !== 'shopify' ? { provider: desc.key } : {}),
         timestamp: Date.now(),
       },
     };
     broadcastToAdmins(failureMsg);
+    return mutationResult;
   }
 }
 
-async function handleOrderFinalized(decision: FinalizeOrderDecision) {
+async function archiveCallTranscriptAndAudio(params: {
+  orderId: string;
+  provider: string;
+  timestamp: number;
+  conversationId: string | null;
+  order: OrderPayload | null;
+  decision: FinalizeOrderDecision;
+  mutationResult: { success: boolean; externalStatus: string; rawResponse?: unknown } | null;
+  transcript: CallLogTranscriptItem[];
+}) {
+  if (!config.saveCallLogs) {
+    return;
+  }
+
+  try {
+    const logsDir = getCallLogsDir();
+    await fsPromises.mkdir(logsDir, { recursive: true });
+
+    const safeOrderId = String(params.orderId || 'order').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const baseName = `${safeOrderId}-${params.timestamp}`;
+    const jsonFilename = `${baseName}.json`;
+    const mp3Filename = `${baseName}.mp3`;
+    const jsonPath = path.join(logsDir, jsonFilename);
+    const mp3Path = path.join(logsDir, mp3Filename);
+
+    activeCallLogPath = jsonPath;
+
+    const jsonPayload = {
+      orderId: params.orderId,
+      provider: params.provider,
+      timestamp: params.timestamp,
+      conversationId: params.conversationId,
+      order: params.order,
+      decision: params.decision,
+      mutationResult: params.mutationResult,
+      transcript: params.transcript,
+    };
+
+    await fsPromises.writeFile(jsonPath, JSON.stringify(jsonPayload, null, 2), 'utf-8');
+    console.log(`[Call Logs] Saved STT transcript JSON to ${jsonPath}`);
+
+    const willFetchAudio = Boolean(params.conversationId && config.elevenlabsApiKey);
+    const initialLogEntry: CallLogEntry = {
+      id: baseName,
+      orderId: params.orderId,
+      provider: params.provider,
+      timestamp: params.timestamp,
+      conversationId: params.conversationId,
+      status: params.decision.status,
+      customerName: params.order?.customer_name || '',
+      itemName: params.order?.item_name || '',
+      jsonFilename,
+      jsonUrl: `/api/logs/${encodeURIComponent(jsonFilename)}`,
+      mp3Filename: null,
+      mp3Url: null,
+      hasAudio: false,
+      audioPending: willFetchAudio,
+      transcriptCount: params.transcript.length,
+    };
+
+    broadcastToAdmins({
+      type: 'CALL_LOG_SAVED',
+      data: { log: initialLogEntry },
+    });
+
+    if (params.conversationId && config.elevenlabsApiKey) {
+      const convId = params.conversationId;
+      const apiKey = config.elevenlabsApiKey;
+
+      setTimeout(async () => {
+        try {
+          let audioBytes: Uint8Array;
+          try {
+            audioBytes = await fetchElevenLabsConversationAudio(convId, apiKey);
+          } catch {
+            // Wait an extra 3s if the agent was still finishing the closing statement
+            await new Promise((r) => setTimeout(r, 3000));
+            audioBytes = await fetchElevenLabsConversationAudio(convId, apiKey);
+          }
+
+          await fsPromises.writeFile(mp3Path, audioBytes);
+          console.log(
+            `[Call Logs] Saved ElevenLabs MP3 audio (${audioBytes.byteLength} bytes) to ${mp3Path}`
+          );
+
+          // If local live transcript was empty, optionally backfill from ElevenLabs conversation API
+          if (currentTranscript.length === 0) {
+            try {
+              const remoteTranscript = await fetchElevenLabsConversationTranscript(convId, apiKey);
+              if (remoteTranscript.transcript.length > 0) {
+                const rawJson = await fsPromises.readFile(jsonPath, 'utf-8');
+                const parsedJson = JSON.parse(rawJson);
+                parsedJson.transcript = remoteTranscript.transcript.map((t) => ({
+                  role: t.role,
+                  text: t.message,
+                  timestamp: params.timestamp + (t.timeInCallSecs ?? 0) * 1000,
+                }));
+                await fsPromises.writeFile(
+                  jsonPath,
+                  JSON.stringify(parsedJson, null, 2),
+                  'utf-8'
+                );
+              }
+            } catch {
+              // Keep local transcript if remote transcript fetch fails
+            }
+          }
+
+          const updatedEntry: CallLogEntry = {
+            ...initialLogEntry,
+            mp3Filename,
+            mp3Url: `/api/logs/${encodeURIComponent(mp3Filename)}`,
+            hasAudio: true,
+            audioPending: false,
+            transcriptCount: Math.max(initialLogEntry.transcriptCount, currentTranscript.length),
+          };
+
+          broadcastToAdmins({
+            type: 'CALL_LOG_SAVED',
+            data: { log: updatedEntry },
+          });
+        } catch (audioErr: any) {
+          console.warn(
+            `[Call Logs] Could not archive ElevenLabs MP3 audio for conversation ${convId}:`,
+            audioErr.message || audioErr
+          );
+          broadcastToAdmins({
+            type: 'CALL_LOG_SAVED',
+            data: {
+              log: {
+                ...initialLogEntry,
+                audioPending: false,
+              },
+            },
+          });
+        }
+      }, 2000);
+    }
+  } catch (err: any) {
+    console.error('[Call Logs] Failed to write call log:', err);
+  }
+}
+
+async function handleOrderFinalized(
+  decision: FinalizeOrderDecision,
+  conversationId?: string | null
+) {
+  if (conversationId && conversationId.trim()) {
+    currentConversationId = conversationId.trim();
+  }
   setCallState('finalizing');
 
   const finalizedMsg: WSMessage = {
@@ -966,6 +1257,7 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
     data: {
       decision,
       originalOrder: currentOrder,
+      conversationId: currentConversationId,
     },
   };
 
@@ -973,10 +1265,26 @@ async function handleOrderFinalized(decision: FinalizeOrderDecision) {
   sendToPhone(finalizedMsg);
 
   // Live Outbound Order Mutations powered by @akadli/core
+  let mutationResult: { success: boolean; externalStatus: string; rawResponse?: unknown } | null =
+    null;
   const matchedProvider = providerRegistry.find((p) => p.isTargetOrder(currentOrder));
   if (matchedProvider && currentOrder) {
-    await dispatchOrderMutation(matchedProvider, currentOrder, decision);
+    mutationResult = await dispatchOrderMutation(matchedProvider, currentOrder, decision);
   }
+
+  // Save .json STT transcript and background .mp3 audio recording if enabled
+  const orderId = currentOrder?.order_id || decision.order_id || 'unknown';
+  const providerName = matchedProvider?.key || currentOrder?.source || 'manual';
+  await archiveCallTranscriptAndAudio({
+    orderId,
+    provider: providerName,
+    timestamp: Date.now(),
+    conversationId: currentConversationId,
+    order: currentOrder,
+    decision,
+    mutationResult,
+    transcript: [...currentTranscript],
+  });
 
   // Fallback auto hangup after 8 seconds (allows agent to generate and complete goodbye statement)
   setTimeout(() => {
@@ -1075,13 +1383,14 @@ wss.on('connection', (ws: WebSocket, req) => {
 
         case 'TRANSCRIPT_UPDATE': {
           // Client tool / speech relayed from Mode A
+          recordTranscriptTurn(msg.data?.turn, msg.data?.conversationId);
           broadcastToAdmins(msg);
           break;
         }
 
         case 'ORDER_FINALIZED': {
           if (msg.data?.decision) {
-            handleOrderFinalized(msg.data.decision);
+            handleOrderFinalized(msg.data.decision, msg.data.conversationId);
           }
           break;
         }

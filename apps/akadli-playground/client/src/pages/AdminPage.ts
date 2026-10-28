@@ -1,4 +1,5 @@
 import {
+  CallLogEntry,
   CallState,
   FinalizeOrderDecision,
   OrderPayload,
@@ -78,6 +79,8 @@ export class AdminPage {
   private tassyirConfigured = false;
   private tassyirApiBaseUrl: string | null = null;
   private tassyirMutationResult: ShopifyMutationData | null = null;
+  private activeCallLog: CallLogEntry | null = null;
+  private callLogs: CallLogEntry[] = [];
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -86,8 +89,19 @@ export class AdminPage {
 
   public async mount() {
     this.render();
-    await this.fetchLanInfo();
+    await Promise.all([this.fetchLanInfo(), this.fetchCallLogs()]);
     this.initWebSocket();
+  }
+
+  private async fetchCallLogs() {
+    try {
+      const res = await fetch('/api/logs');
+      if (res.ok) {
+        const data = await res.json();
+        this.callLogs = Array.isArray(data.logs) ? data.logs : [];
+        this.renderRecentCallLogs();
+      }
+    } catch (e) {}
   }
 
   private async fetchLanInfo() {
@@ -171,6 +185,7 @@ export class AdminPage {
         this.currentCallState = 'ringing';
         this.transcripts = [];
         this.finalizedDecision = null;
+        this.activeCallLog = null;
         this.shopifyMutationResult = null;
         this.youcanMutationResult = null;
         this.woocommerceMutationResult = null;
@@ -207,6 +222,22 @@ export class AdminPage {
         this.stopTimer();
         this.updateStatusBadge();
         this.renderDecisionSummary();
+        break;
+      }
+
+      case 'CALL_LOG_SAVED': {
+        if (msg.data?.log) {
+          const savedLog: CallLogEntry = msg.data.log;
+          this.activeCallLog = savedLog;
+          const existingIdx = this.callLogs.findIndex((l) => l.id === savedLog.id);
+          if (existingIdx >= 0) {
+            this.callLogs[existingIdx] = savedLog;
+          } else {
+            this.callLogs.unshift(savedLog);
+          }
+          this.renderDecisionSummary();
+          this.renderRecentCallLogs();
+        }
         break;
       }
 
@@ -626,6 +657,23 @@ export class AdminPage {
               </div>
             </div>
 
+            <!-- Recent Call Logs & Audio Archive Card -->
+            <div id="recent-logs-card" class="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800/80 space-y-2.5">
+              <div class="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-zinc-200">Recent Call Logs & Audio</span>
+                  <span id="recent-logs-count" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-400">0</span>
+                </div>
+                <button id="refresh-logs-btn" class="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition" title="Refresh archived call logs">
+                  ${iconRefresh('w-3 h-3')}
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div id="recent-logs-list" class="space-y-1.5 max-h-48 overflow-y-auto pr-1 text-xs text-zinc-500 italic">
+                No archived call logs yet.
+              </div>
+            </div>
+
           </div>
 
         </main>
@@ -848,6 +896,10 @@ export class AdminPage {
 
     this.container.querySelector('#simulate-tassyir-stopdesk-btn')?.addEventListener('click', () => {
       this.handleSimulateTassyirWebhook('stopdesk');
+    });
+
+    this.container.querySelector('#refresh-logs-btn')?.addEventListener('click', () => {
+      this.fetchCallLogs();
     });
   }
 
@@ -1266,6 +1318,8 @@ export class AdminPage {
         ${gsheetsMutationHtml}
         ${tassyirMutationHtml}
 
+        ${this.renderCallTranscriptAndAudioSection()}
+
         <details class="cursor-pointer pt-1">
           <summary class="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono select-none">Raw JSON Contract</summary>
           <pre class="mt-1.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 overflow-x-auto">${JSON.stringify(
@@ -1276,6 +1330,163 @@ export class AdminPage {
         </details>
       </div>
     `;
+  }
+
+  private renderCallTranscriptAndAudioSection(): string {
+    const log = this.activeCallLog;
+    const jsonUrl = log?.jsonUrl || '';
+    const jsonFilename = log?.jsonFilename || `${this.order.order_id || 'call'}-transcript.json`;
+    const hasAudio = Boolean(log?.hasAudio && log?.mp3Url);
+    const audioPending = Boolean(log?.audioPending);
+
+    let audioPlayerHtml = '';
+    if (hasAudio && log?.mp3Url) {
+      audioPlayerHtml = `
+        <div class="space-y-1.5">
+          <audio controls preload="metadata" src="${log.mp3Url}" class="w-full h-9 rounded-md"></audio>
+          <div class="flex items-center justify-between text-[10px] text-zinc-500">
+            <span class="font-mono">${log.mp3Filename || 'recording.mp3'}</span>
+            <a href="${log.mp3Url}" download="${log.mp3Filename || 'call-audio.mp3'}" class="text-emerald-400 hover:text-emerald-300 underline font-medium">
+              Download MP3
+            </a>
+          </div>
+        </div>
+      `;
+    } else if (audioPending) {
+      audioPlayerHtml = `
+        <div class="text-[11px] text-amber-400/90 font-mono flex items-center gap-2 py-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+          <span>Archiving MP3 audio recording from ElevenLabs...</span>
+        </div>
+      `;
+    } else {
+      audioPlayerHtml = `
+        <div class="text-[11px] text-zinc-500 italic py-0.5">
+          MP3 audio recording unavailable (no live ElevenLabs conversation audio for this session).
+        </div>
+      `;
+    }
+
+    const transcriptActionsHtml = jsonUrl
+      ? `
+        <div class="flex items-center gap-2 pt-1">
+          <a href="${jsonUrl}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-[11px] font-medium inline-flex items-center gap-1.5 transition">
+            <span>View .json STT Transcript</span>
+            ${iconExternalLink('w-3 h-3')}
+          </a>
+          <a href="${jsonUrl}" download="${jsonFilename}" class="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-mono inline-flex items-center gap-1.5 transition">
+            <span>Download .json</span>
+          </a>
+        </div>
+      `
+      : '';
+
+    return `
+      <div class="mt-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-zinc-200">Call Transcript & Audio</span>
+          ${
+            log?.conversationId
+              ? `<span class="text-[10px] font-mono text-zinc-500" title="ElevenLabs Conversation ID">${log.conversationId}</span>`
+              : `<span class="text-[10px] font-mono text-zinc-500">${this.transcripts.length} STT turns</span>`
+          }
+        </div>
+        ${audioPlayerHtml}
+        ${transcriptActionsHtml}
+      </div>
+    `;
+  }
+
+  private renderRecentCallLogs() {
+    const listEl = this.container.querySelector('#recent-logs-list');
+    const countEl = this.container.querySelector('#recent-logs-count');
+    if (countEl) {
+      countEl.textContent = String(this.callLogs.length);
+    }
+    if (!listEl) return;
+
+    if (this.callLogs.length === 0) {
+      listEl.innerHTML = `<div class="text-xs text-zinc-500 italic py-1">No archived call logs yet.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = this.callLogs
+      .slice(0, 15)
+      .map((log) => {
+        const timeStr = new Date(log.timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        const isSelected = this.activeCallLog?.id === log.id;
+        let statusColor = 'text-zinc-400 border-zinc-800 bg-zinc-900';
+        if (log.status === 'CONFIRMED') statusColor = 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10';
+        if (log.status === 'MODIFIED') statusColor = 'text-amber-400 border-amber-500/20 bg-amber-500/10';
+        if (log.status === 'REFUSED') statusColor = 'text-rose-400 border-rose-500/20 bg-rose-500/10';
+
+        return `
+          <div data-log-id="${log.id}" class="call-log-item p-2 rounded-lg border ${
+            isSelected ? 'border-zinc-600 bg-zinc-900' : 'border-zinc-800/80 bg-zinc-950/80 hover:bg-zinc-900/60'
+          } flex items-center justify-between gap-2 cursor-pointer transition not-italic">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${statusColor}">${log.status}</span>
+              <span class="text-xs font-medium text-zinc-200 truncate">#${log.orderId}</span>
+              <span class="text-[10px] font-mono text-zinc-500 uppercase">${log.provider}</span>
+              ${
+                log.hasAudio
+                  ? '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">MP3</span>'
+                  : ''
+              }
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-[10px] font-mono text-zinc-500">${timeStr}</span>
+              <a href="${log.jsonUrl}" download="${log.jsonFilename}" onclick="event.stopPropagation()" class="text-[10px] font-mono text-zinc-400 hover:text-white px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">
+                .json
+              </a>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    listEl.querySelectorAll('.call-log-item').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const logId = el.getAttribute('data-log-id');
+        const found = this.callLogs.find((l) => l.id === logId);
+        if (!found) return;
+        await this.loadArchivedCallLog(found);
+      });
+    });
+  }
+
+  private async loadArchivedCallLog(log: CallLogEntry) {
+    try {
+      const res = await fetch(log.jsonUrl);
+      if (!res.ok) return;
+      const data = await res.json();
+      this.activeCallLog = log;
+      if (data.decision) {
+        this.finalizedDecision = data.decision;
+      }
+      if (data.order) {
+        this.order = data.order;
+        this.updateFormFieldsFromOrder();
+        this.updateOrderSyncBadge();
+      }
+      if (Array.isArray(data.transcript)) {
+        this.transcripts = data.transcript.map((t: any, idx: number) => ({
+          id: `log-${idx}`,
+          speaker: t.role === 'user' ? 'user' : 'agent',
+          role: t.role === 'user' ? 'user' : 'agent',
+          text: t.text || t.message || '',
+          timestamp: t.timestamp || log.timestamp,
+          isFinal: true,
+        }));
+        this.renderTranscripts();
+      }
+      this.renderDecisionSummary();
+      this.renderRecentCallLogs();
+    } catch (e) {}
   }
 
   private updateShopifyStatusUi() {

@@ -116,10 +116,35 @@ export type CallState = 'standby' | 'ringing' | 'active' | 'finalizing' | 'ended
 export interface TranscriptTurn {
   id: string;
   speaker: 'agent' | 'user' | 'system';
+  role?: 'agent' | 'user';
   text: string;
   timestamp: number;
   latencyMs?: number;
   isFinal?: boolean;
+}
+
+export interface CallLogTranscriptItem {
+  role: 'user' | 'agent';
+  text: string;
+  timestamp: number;
+}
+
+export interface CallLogEntry {
+  id: string;
+  orderId: string;
+  provider: string;
+  timestamp: number;
+  conversationId: string | null;
+  status: string;
+  customerName?: string;
+  itemName?: string;
+  jsonFilename: string;
+  jsonUrl: string;
+  mp3Filename: string | null;
+  mp3Url: string | null;
+  hasAudio: boolean;
+  audioPending?: boolean;
+  transcriptCount: number;
 }
 
 export interface PhoneClientStatus {
@@ -142,6 +167,7 @@ export type WSMessageType =
   | 'AUDIO_CHUNK'
   | 'TRANSCRIPT_UPDATE'
   | 'ORDER_FINALIZED'
+  | 'CALL_LOG_SAVED'
   | 'SHOPIFY_WEBHOOK_RECEIVED'
   | 'SHOPIFY_MUTATION_RESULT'
   | 'YOUCAN_WEBHOOK_RECEIVED'

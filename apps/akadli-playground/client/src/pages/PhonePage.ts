@@ -39,6 +39,7 @@ export class PhonePage {
   private lastAnswerTimestamp = 0;
   private hasFinalizedOrder = false;
   private hasAgentSpokenGoodbye = false;
+  private activeConversationId: string | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -94,6 +95,7 @@ export class PhonePage {
         this.isAnswering = false;
         this.isStartingSession = false;
         this.activeSessionToken = null;
+        this.activeConversationId = null;
         this.currentOrder = msg.data.payload;
         this.currentConfig = msg.data.config;
         this.finalizedDecision = null;
@@ -181,6 +183,7 @@ export class PhonePage {
     this.isAnswering = true;
     this.hasFinalizedOrder = false;
     this.hasAgentSpokenGoodbye = false;
+    this.activeConversationId = null;
     const sessionToken = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.activeSessionToken = sessionToken;
 
@@ -241,10 +244,14 @@ export class PhonePage {
             }
           }
 
+          const conversationId = this.getConversationId();
           this.ws?.send(
             JSON.stringify({
               type: 'ORDER_FINALIZED',
-              data: { decision: parameters },
+              data: {
+                decision: parameters,
+                conversationId,
+              },
             })
           );
           return 'Order recorded successfully in system.';
@@ -274,19 +281,29 @@ export class PhonePage {
         },
       };
 
+      sessionOptions.onConnect = (props: any) => {
+        const convId = typeof props === 'string' ? props : props?.conversationId;
+        if (convId) {
+          this.activeConversationId = convId;
+        }
+      };
+
       sessionOptions.onMessage = (message: any) => {
         const isAgent = message.source === 'ai' || message.role === 'agent';
         if (this.hasFinalizedOrder && isAgent) {
           this.hasAgentSpokenGoodbye = true;
         }
 
+        const conversationId = this.getConversationId();
         this.ws?.send(
           JSON.stringify({
             type: 'TRANSCRIPT_UPDATE',
             data: {
+              conversationId,
               turn: {
                 id: `eleven-${Date.now()}`,
                 speaker: isAgent ? 'agent' : 'user',
+                role: isAgent ? 'agent' : 'user',
                 text: message.message,
                 timestamp: Date.now(),
                 isFinal: true,
@@ -338,6 +355,13 @@ export class PhonePage {
       }
 
       this.elevenConversation = conversation;
+      const convId =
+        typeof conversation?.getId === 'function'
+          ? conversation.getId()
+          : (conversation as any)?.conversationId;
+      if (convId) {
+        this.activeConversationId = convId;
+      }
     } catch (err: any) {
       console.error('[Phone] Session start error:', err);
       this.ws?.send(
@@ -350,6 +374,21 @@ export class PhonePage {
       this.isStartingSession = false;
       this.isAnswering = false;
     }
+  }
+
+  private getConversationId(): string | undefined {
+    if (this.activeConversationId) {
+      return this.activeConversationId;
+    }
+    const convId =
+      typeof this.elevenConversation?.getId === 'function'
+        ? this.elevenConversation.getId()
+        : this.elevenConversation?.conversationId;
+    if (convId) {
+      this.activeConversationId = convId;
+      return convId;
+    }
+    return undefined;
   }
 
   private startCallTimer() {
